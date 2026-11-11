@@ -488,6 +488,25 @@ class MoveMathTest(unittest.TestCase):
         finally:
             build.CONSENSUS.clear()
 
+    def test_mistyped_class_is_one_position_and_real_classes_switch(self):
+        build.CONSENSUS.update({("2026Q2", "68389X105"): 146.55, ("2026Q2", "68389X204"): 44.95,
+                                ("2026Q3", "68389X105"): 137.3, ("2026Q3", "68389X204"): 44.24,
+                                ("2026Q2", "02079K305"): 357.37, ("2026Q2", "02079K107"): 353.33,
+                                ("2026Q3", "02079K305"): 344.08, ("2026Q3", "02079K107"): 340.74})
+        try:
+            # Mizuho Securities USA: Q2/A 68389X204 132,845 sh $19.5M ($146.8, ORCL common's price); Q3 68389X105
+            # 165,927 sh $21.0M. One Oracle position, added ~33K shares, not NEW plus an exit.
+            r = build.with_changes({"quarter": "2026Q3", "holdings": [self.row("68389X105", "ORCL", 165927, 21_000_000)]},
+                                   {"quarter": "2026Q2", "holdings": [self.row("68389X204", "ORCL", 132845, 19_500_000)]})
+            self.assertEqual([(x["change"], x["share_change"], x["prev_cusip"], x["cusip_mismatch"]["mistyped"],
+                               x.get("unreliable")) for x in r], [("added", 33082, "68389X204", "68389X204", None)])
+            # GOOGL -> GOOG, each priced at its own median: exit plus new, both class_switch.
+            r = build.with_changes({"quarter": "2026Q3", "holdings": [self.row("02079K107", "GOOG", 1000, 340_740)]},
+                                   {"quarter": "2026Q2", "holdings": [self.row("02079K305", "GOOGL", 1000, 357_370)]})
+            self.assertEqual(sorted((x["change"], x.get("class_switch")) for x in r), [("exited", True), ("new", True)])
+        finally:
+            build.CONSENSUS.clear()
+
     def test_held_line_names_its_reason(self):
         # Aware Super XOM 2026Q3 (0002012816-26-000017): new 42,807 sh for $79,377,569 ($1,854, 11.4x the median).
         build.CONSENSUS.update({("2026Q3", "30233Q108"): 162.75})

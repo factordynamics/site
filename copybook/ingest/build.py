@@ -659,7 +659,7 @@ def mark_refiled(trail: list[dict], refiled: list[dict]) -> list[dict]:
 CHANGE_FIELDS = ("prev_shares", "prev_value", "prev_weight", "change", "share_change", "value_delta", "delta_pct_of_book",
                  "value_delta_basis")
 # Set by with_changes only when they apply; a row read back from an earlier build must not keep them.
-STALE = ("split", "prev_shares_as_filed", "unreliable", "value_change", "suspect_units", "suspect_units_basis", "suspect_reason", "row_type", "prev_cusip", "suspect_duplicate",
+STALE = ("split", "prev_shares_as_filed", "unreliable", "cusip_mismatch", "class_switch", "cusip_as_filed", "value_change", "suspect_units", "suspect_units_basis", "suspect_reason", "row_type", "prev_cusip", "suspect_duplicate",
          "prev_principal_amount")
 MOVE_ROWS = 10  # per bucket in {slug}.json `moves`; alerts carry the top 5
 CHANGE_KINDS = ("new", "added", "trimmed", "exited", "unchanged", "disclosed_later")
@@ -1058,6 +1058,26 @@ def hold(r: dict, quarter: str | None) -> dict:
     return r
 
 
+def line_key(h: dict) -> tuple:
+    return (h["cusip"], h["put_call"] or "")
+
+
+def _px(h: dict) -> float | None:
+    return h["value"] / h["shares"] if (h.get("shares") or 0) > 0 and (h.get("value") or 0) > 0 else None
+
+
+def mistyped(h: dict, quarter: str | None, other: str) -> bool:
+    """The line prices at the other CUSIP's cross-filer median (within 1.5x) and not at its own (or its own has none)."""
+    px, own, oth = _px(h), consensus().get((quarter or "", h["cusip"])), consensus().get((quarter or "", other))
+    near = lambda m: bool(px and m and abs(math.log(px / m)) < math.log(1.5))
+    return near(oth) and not near(own)
+
+
+def priced_at_own(h: dict, quarter: str | None) -> bool:
+    px, own = _px(h), consensus().get((quarter or "", h["cusip"]))
+    return bool(px and own and abs(math.log(px / own)) < math.log(1.5))
+
+
 def with_changes(latest: dict, prev: dict | None) -> list[dict]:
     """Holdings with prior-quarter fields, plus exited positions as value-0 rows.
 
@@ -1105,6 +1125,27 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
         pk = next(((o, k[1]) for o in olds.get(h["cusip"], ()) if (o, k[1]) in gone and (o, k[1]) not in renamed.values()), None)
         if pk:  # a known reissue (cusip_links.json): SEC-confirmed, units checked; a split on it applies below
             renamed[k] = pk
+    # One filer's exit and new line under one issuer prefix (no reissue link): a mistyped class is one position
+    # (Mizuho Securities USA: Q2 68389X204 132,845 sh at $146.8, ORCL common's price, not that CUSIP's $44.95; Q3
+    # 68389X105 165,927 sh): cusip_mismatch, the change on shares. Two real classes, each priced at its own median
+    # (GOOG/GOOGL): exit plus new kept, both class_switch, so alerts don't headline them.
+    mismatch: dict[tuple, dict] = {}
+    switch: set[tuple] = set()
+    fresh = [k for k, h in ((line_key(h), h) for h in latest["holdings"]) if k not in before and k not in renamed and k not in dup
+             and h.get("shares_type") != "PRN"]
+    left = [pk for pk, x in gone.items() if pk not in renamed.values() and pk not in dup and x.get("shares_type") != "PRN"]
+    by_new = {h_k: [g for g in left if g[0][:6] == h_k[0][:6] and g[1] == h_k[1]] for h_k in fresh}
+    for k, cands in by_new.items():
+        if len(cands) != 1 or sum(1 for f in fresh if f[0][:6] == k[0][:6] and f[1] == k[1]) != 1:
+            continue
+        pk = cands[0]
+        h_, p_ = next(x for x in latest["holdings"] if line_key(x) == k), gone[pk]
+        typo_new, typo_old = mistyped(h_, q_to, pk[0]), mistyped(p_, q_from, k[0])
+        if typo_new or typo_old:
+            renamed[k] = pk
+            mismatch[k] = {"cusip": k[0], "prev_cusip": pk[0], "mistyped": k[0] if typo_new else pk[0]}
+        elif priced_at_own(h_, q_to) and priced_at_own(p_, q_from):
+            switch |= {k, pk}
 
     def ratio(h):
         if not (q_from and q_to) or h.get("shares_type") == "PRN":
@@ -1135,6 +1176,8 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
     for h in latest["holdings"]:
         h = {f: v for f, v in h.items() if f not in STALE}
         k = (h["cusip"], h["put_call"] or "")
+        if k in switch:
+            h = h | {"class_switch": True}
         if k in dup:
             rows.append(h | {"row_type": "holding", "suspect_duplicate": True} | {f: None for f in CHANGE_FIELDS}
                         | {"value_delta": 0, "delta_pct_of_book": 0.0} | units(h, None, 1.0, 1.0, q_to, None))
@@ -1154,6 +1197,12 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
                 p = None
         if p is not None and p["cusip"] != h["cusip"]:
             h = h | {"prev_cusip": p["cusip"]}
+        if k in mismatch:  # the mistyped line is read as the other CUSIP, so the unit checks price it against the right median
+            h = h | {"cusip_mismatch": mismatch[k]}
+            if mismatch[k]["mistyped"] == h["cusip"]:
+                h = h | {"cusip": p["cusip"], "cusip_as_filed": h["cusip"]}
+            else:
+                p = p | {"cusip": h["cusip"]}
         prn = h.get("shares_type") == "PRN"
         r = k = ratio(h)
         # Per filer: a prior position already reported in post-split shares (its value per share is at
@@ -1225,6 +1274,7 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
                 "pct_of_book": 0.0 if is_equity(p) else None,
                 **{k: p[k] for k in ("display_name", "sector", "shares_type") if k in p},
                 **extra(p, "exited", -p["value"], -amount(p) * r, r, prn),
+                **({"class_switch": True} if (p["cusip"], p["put_call"] or "") in switch else {}),
             }
         )
     return [hold(r, q_to) for r in rows]
@@ -1640,6 +1690,7 @@ def shares_out(x):
 V1_EXTRA = ("pct_of_book", "notional_pct_of_book", "delta_pct_of_book", "display_name", "late_disclosure", "parts",
             "value_delta_basis", "unreliable", "value_change", "price_outlier", "suspect_units", "suspect_reason",
             "shares_basis", "shares_as_filed", "option_held", "held_lines", "mixed_scale", "value_rescale",
+            "cusip_mismatch", "class_switch", "cusip_as_filed",
             "split", "prev_shares_as_filed", "suspect_duplicate", "prev_reason", "discretion", "other_managers", "vote_sole", "vote_shared", "vote_none")
 
 
