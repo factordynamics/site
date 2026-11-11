@@ -3002,3 +3002,13 @@ p a,
     min-height: 32px;
   }
 }
+
+/* Home: a 13F for an older quarter, filed late, next to the investor's name. */
+.tag.late {
+  display: table;
+  margin-top: 3px;
+  color: var(--dim);
+  background: var(--raise);
+  font-weight: 500;
+  vertical-align: 1px;
+}

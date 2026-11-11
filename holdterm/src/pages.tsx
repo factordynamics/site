@@ -438,8 +438,18 @@ function HomeBody() {
             href={(m) => fundPath(m.slug)}
             cols={[
               { key: 'f', label: 'Filed', render: (m) => <span className="dim num">{date(m.filing_date)}</span>, width: '84px' },
-              { key: 'm', label: 'Investor', link: true, render: (m) => <Firm name={m.firm} strong /> },
-              { key: 'q', label: 'Quarter', hideSm: true, render: (m) => <span className={m.quarter === s.q ? 'tag acc' : 'dim'}>{quarterLabel(m.quarter)}</span> },
+              {
+                key: 'm',
+                label: 'Investor',
+                link: true,
+                // Every row is the current quarter's 13F unless marked; a late filing for an older quarter says so.
+                render: (m) => (
+                  <>
+                    <Firm name={m.firm} strong />
+                    {m.quarter !== s.q && <span className="tag late">For {quarterLabel(m.quarter)}</span>}
+                  </>
+                ),
+              },
               { key: 'v', label: 'Portfolio', num: true, hideSm: true, width: '76px', render: (m) => usd(bySlug.get(m.slug)?.long_value ?? m.total_value) },
               {
                 key: 'd',
@@ -671,6 +681,12 @@ export function Fund({ slug }: { slug: string }) {
   const hist = [...(h.data?.history ?? [])].filter((r) => r.total_value > 0).reverse()
   const events = ev.data ?? []
   const stale = ix.data ? isStale(book, ix.data.managers.filter((m) => m.ok)) : false
+  const valuePanel = (
+    <Panel title="Portfolio value by quarter" right={<span className="dim hide-sm">Value of US-listed stocks in each 13F</span>}>
+      {book.options_value > 0 && hist.some((r) => r.equity_value == null && r.long_value == null) && <div className="dim small">Older quarters as filed, including options.</div>}
+      {hist.length > 1 ? <ValueHistory title={`${book.firm} portfolio value by quarter`} data={hist.map((r) => ({ label: quarterLabel(r.quarter).replace(' 20', " '"), value: r.equity_value ?? r.long_value ?? r.total_value }))} /> : <div className="dim empty">Only one quarter on file so far.</div>}
+    </Panel>
+  )
   return (
     <div className="page">
       <Crumbs parent={['/funds', 'Investors']} here={book.firm} />
@@ -727,6 +743,7 @@ export function Fund({ slug }: { slug: string }) {
         ]}
         label={`${book.firm} portfolio`}
       />
+      {tab === 'filings' && valuePanel}
       <Panel title={FUND_TAB[tab]} right={tab === 'holdings' ? <span className="dim hide-sm">Price in filing = reported value ÷ shares</span> : tab === 'options' ? <span className="dim hide-sm">Value of the underlying shares; not counted in the portfolio</span> : tab === 'notes' ? <span className="dim hide-sm">As filed; not counted in the stock portfolio</span> : undefined}>
         {tab === 'holdings' && <HoldingsGrid rows={live} own={(x) => ownHolding(book, x)} />}
         {tab === 'buys' && <MovesGrid rows={buys} />}
@@ -792,11 +809,8 @@ export function Fund({ slug }: { slug: string }) {
         )}
         {tab === 'events' && <Grid rows={events} cols={eventCols(firms, false)} empty="No 5% stake (13D or 13G) or insider trade (Form 4) filings since its latest 13F." />}
       </Panel>
-      <div className="duo wide">
-        <Panel title="Portfolio value by quarter" right={<span className="dim hide-sm">Value of US-listed stocks in each 13F</span>}>
-          {book.options_value > 0 && hist.some((r) => r.equity_value == null && r.long_value == null) && <div className="dim small">Older quarters as filed, including options.</div>}
-          {hist.length > 1 ? <ValueHistory title={`${book.firm} portfolio value by quarter`} data={hist.map((r) => ({ label: quarterLabel(r.quarter).replace(' 20', " '"), value: r.equity_value ?? r.long_value ?? r.total_value }))} /> : <div className="dim empty">Only one quarter on file so far.</div>}
-        </Panel>
+      <div className={tab === 'filings' ? '' : 'duo wide'}>
+        {tab !== 'filings' && valuePanel}
         <Panel title="Sectors">
           <SectorRows items={live} />
         </Panel>
