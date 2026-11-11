@@ -153,10 +153,12 @@ async function handleWebhook(req: Request, env: Env): Promise<Response> {
   // newsletter, Creo) are logged and acknowledged, so Stripe doesn't retry, with no member, plan change or email.
   // A new Fund subscription: its invoices carry the order terms (footer), from the next one on. Never fails the hook.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const fundTerms = async (sub: any) => {
-    if (planOf(sub) !== 'fund' || typeof sub.customer !== 'string') return;
-    const { ensureFundTerms } = await import('./revenue');
-    console.log(`fund terms: ${await ensureFundTerms(env, sub.customer).catch((e) => `failed ${String(e).slice(0, 120)}`)}`);
+  // Every Copybook customer's invoice defaults: footer (Fund terms, tax line), founding price, checkout's Company and PO.
+  const invoiceTerms = async (sub: any, fields: { key: string; text?: { value?: string | null } }[] = []) => {
+    if (typeof sub.customer !== 'string') return;
+    const { ensureInvoiceTerms } = await import('./revenue');
+    const field = (k: string) => fields.find((f) => f.key === k)?.text?.value ?? null;
+    console.log(`invoice terms: ${await ensureInvoiceTerms(env, sub, planOf(sub), { company: field('company'), po: field('po') }).then((r) => r.result).catch((e) => `failed ${String(e).slice(0, 120)}`)}`);
   };
   const ignore = (what: string) => (console.log(`webhook: ${event.type} ${obj.id ?? ''} ignored (${what} not a Copybook price)`), json({ ok: true, ignored: true }, 200, {}));
   switch (event.type) {
@@ -165,7 +167,7 @@ async function handleWebhook(req: Request, env: Env): Promise<Response> {
         const sub = await stripe(env, 'GET', `subscriptions/${obj.subscription}`);
         if (!isOurSubscription(sub)) return ignore('subscription');
         await syncSubscription(env, sub, obj.customer_details?.email);
-        await fundTerms(sub);
+        await invoiceTerms(sub, obj.custom_fields ?? []);
       }
       break;
     case 'customer.subscription.created':
@@ -173,7 +175,7 @@ async function handleWebhook(req: Request, env: Env): Promise<Response> {
     case 'customer.subscription.deleted':
       if (!isOurSubscription(obj)) return ignore('subscription');
       await syncSubscription(env, obj);
-      if (event.type === 'customer.subscription.created') await fundTerms(obj);
+      if (event.type === 'customer.subscription.created') await invoiceTerms(obj);
       break;
     case 'invoice.paid':
     case 'invoice.payment_failed':

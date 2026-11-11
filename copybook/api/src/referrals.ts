@@ -6,9 +6,26 @@
  * with an amount above zero), once per referred customer.
  */
 import { FOOTER, sendMail } from './email';
+import { FOUNDING_UNTIL } from './revenue';
 import { isActive, type Env, type Member } from './env';
 import { claim, getMember, memberByEmail } from './members';
 import { stripe } from './stripe';
+
+/** Pro and Fund checkout: billing address and tax ID, the company (required for Fund) and an optional PO number. */
+export const CHECKOUT_BUYER = (plan: string): Record<string, string> => ({
+  billing_address_collection: 'required',
+  'tax_id_collection[enabled]': 'true',
+  'custom_fields[0][key]': 'company',
+  'custom_fields[0][label][type]': 'custom',
+  'custom_fields[0][label][custom]': 'Company name',
+  'custom_fields[0][type]': 'text',
+  'custom_fields[0][optional]': plan === 'fund' ? 'false' : 'true',
+  'custom_fields[1][key]': 'po',
+  'custom_fields[1][label][type]': 'custom',
+  'custom_fields[1][label][custom]': 'PO number (optional)',
+  'custom_fields[1][type]': 'text',
+  'custom_fields[1][optional]': 'true',
+});
 
 const MONTH: Record<string, number> = { copy: 900, pro: 3900, fund: 19900 };
 const NAME: Record<string, string> = { copy: 'Copy', pro: 'Copy Pro', fund: 'Copy Fund' };
@@ -101,6 +118,9 @@ export async function createCheckout(env: Env, b: Record<string, unknown>): Prom
     'metadata[copybook]': ref ? 'referral' : 'checkout',
     // The seller on the card statement is the account's name: say whose product it is.
     'custom_text[submit][message]': 'Copybook is made by Factor Dynamics.',
+    ...(Date.now() < FOUNDING_UNTIL ? { 'custom_text[after_submit][message]': 'Founding price, kept while subscribed.', 'subscription_data[metadata][founding]': 'true' } : {}),
+    // Pro and Fund: what a company's accounts team needs on the invoice.
+    ...(plan === 'copy' ? {} : CHECKOUT_BUYER(plan)),
   });
   // The first charge, after the trial, with the referral month off: what the pricing page shows next to the button.
   const list = Number(price.unit_amount ?? 0);

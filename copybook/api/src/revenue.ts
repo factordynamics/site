@@ -153,12 +153,40 @@ export const fundTerms = (env: Env) =>
   `The service period is shown on the line item. Renews each year at that price until cancelled. Cancel any time from Manage billing; access runs to the end of the paid year, and partial years aren't refunded. If we discontinue the plan during a prepaid period, we refund the unused part pro rata. ` +
   `Invoices are payable within 30 days. Terms in force on the invoice date: ${env.SITE_URL}terms/`;
 
-/** A Fund customer's invoice footer: the order terms, set once (a Fund checkout or net-30 order). */
-export async function ensureFundTerms(env: Env, customer: string): Promise<'set' | 'already'> {
+/** Every Copybook invoice's footer ends with this (Stripe Tax is off). */
+export const TAX_LINE = 'Prices exclude applicable taxes. Copybook does not currently collect sales tax.';
+/** Subscriptions started before this keep their price while subscribed: their invoices say so. */
+export const FOUNDING_UNTIL = Date.parse('2026-12-31T00:00:00-05:00');
+export const FOUNDING_FIELD = { name: 'Price', value: 'Founding price, kept while subscribed' };
+const footerFor = (env: Env, plan: string | null) => (plan === 'fund' ? `${fundTerms(env)} ${TAX_LINE}` : TAX_LINE);
+
+/**
+ * A Copybook customer's invoice defaults (Stripe's customer settings, on every later invoice): the footer (a Fund
+ * customer's order terms, then the tax line), and the custom fields: "Price: Founding price, kept while subscribed"
+ * when the subscription (metadata founding=true) started before Dec 31, and the Company and PO the buyer gave at
+ * checkout. The subscription is tagged founding=true here. `sub`: the Stripe subscription; `extra`: checkout's fields.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function ensureInvoiceTerms(env: Env, sub: any, plan: string | null, extra: { company?: string | null; po?: string | null } = {}): Promise<{ result: string; footer: string; fields: { name: string; value: string }[] }> {
+  const customer = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id;
+  if (!customer) return { result: 'no customer', footer: '', fields: [] };
+  const founding = sub.metadata?.founding === 'true' || Number(sub.created ?? sub.start_date ?? 0) * 1000 < FOUNDING_UNTIL;
+  if (founding && sub.metadata?.founding !== 'true' && sub.id) await stripe(env, 'POST', `subscriptions/${sub.id}`, { 'metadata[founding]': 'true' });
   const c = await stripe(env, 'GET', `customers/${customer}`);
-  if (c.invoice_settings?.footer === fundTerms(env)) return 'already';
-  await stripe(env, 'POST', `customers/${customer}`, { 'invoice_settings[footer]': fundTerms(env) });
-  return 'set';
+  const had = (c.invoice_settings?.custom_fields ?? []) as { name: string; value: string }[];
+  const want = [
+    ...(founding ? [FOUNDING_FIELD] : []),
+    { name: 'Company', value: extra.company?.trim().slice(0, 140) || had.find((f) => f.name === 'Company')?.value || '' },
+    { name: 'PO', value: extra.po?.trim().slice(0, 140) || had.find((f) => f.name === 'PO')?.value || '' },
+    ...had.filter((f) => !['Price', 'Company', 'PO'].includes(f.name)),
+  ].filter((f) => f.value).slice(0, 4);
+  const footer = footerFor(env, plan);
+  if (c.invoice_settings?.footer === footer && JSON.stringify(had.map((f) => [f.name, f.value])) === JSON.stringify(want.map((f) => [f.name, f.value]))) return { result: 'already', footer, fields: want };
+  await stripe(env, 'POST', `customers/${customer}`, {
+    'invoice_settings[footer]': footer,
+    ...(want.length ? Object.fromEntries(want.flatMap((f, i) => [[`invoice_settings[custom_fields][${i}][name]`, f.name], [`invoice_settings[custom_fields][${i}][value]`, f.value]])) : { 'invoice_settings[custom_fields]': '' }),
+  });
+  return { result: 'set', footer, fields: want };
 }
 
 /**
@@ -168,15 +196,16 @@ export async function ensureFundTerms(env: Env, customer: string): Promise<'set'
 /** A net-30 yearly Fund order, invoiced now; `po`: the customer's purchase order, printed on the invoice as "PO". */
 export async function fundInvoice(env: Env, email: string, name?: string, po?: string) {
   const found = (await stripe(env, 'GET', 'customers', { email, limit: 1 })).data?.[0];
-  const customer: string = found?.id ?? (await stripe(env, 'POST', 'customers', { email, name, 'invoice_settings[footer]': fundTerms(env) })).id;
-  if (found) await ensureFundTerms(env, customer);
+  const customer: string = found?.id ?? (await stripe(env, 'POST', 'customers', { email, name, 'invoice_settings[footer]': footerFor(env, 'fund') })).id;
   const price = (await stripe(env, 'GET', 'prices', { 'lookup_keys[]': 'fund_yearly', active: true })).data?.[0];
   if (!price) throw new Error('no active fund_yearly price');
-  const sub = await stripe(env, 'POST', 'subscriptions', { customer, 'items[0][price]': price.id, collection_method: 'send_invoice', days_until_due: 30, description: fundTerms(env), 'metadata[copybook]': 'fund' });
+  const founding = Date.now() < FOUNDING_UNTIL;
+  const sub = await stripe(env, 'POST', 'subscriptions', { customer, 'items[0][price]': price.id, collection_method: 'send_invoice', days_until_due: 30, description: fundTerms(env), 'metadata[copybook]': 'fund', ...(founding ? { 'metadata[founding]': 'true' } : {}) });
+  const terms = await ensureInvoiceTerms(env, sub, 'fund', { company: name, po });
   let inv = await stripe(env, 'GET', `invoices/${sub.latest_invoice}`);
-  // A draft takes the terms as its memo too (a finalized one already has them in the footer); then it goes out now.
+  // A draft takes the terms as its memo, and the customer's footer and fields (set after it was drafted); then it goes out now.
   if (inv.status === 'draft') {
-    await stripe(env, 'POST', `invoices/${inv.id}`, { description: fundTerms(env), ...(po ? { 'custom_fields[0][name]': 'PO', 'custom_fields[0][value]': po } : {}) });
+    await stripe(env, 'POST', `invoices/${inv.id}`, { description: fundTerms(env), footer: terms.footer, ...Object.fromEntries(terms.fields.flatMap((f, i) => [[`custom_fields[${i}][name]`, f.name], [`custom_fields[${i}][value]`, f.value]])) });
     inv = await stripe(env, 'POST', `invoices/${inv.id}/finalize`);
   }
   inv = await stripe(env, 'POST', `invoices/${inv.id}/send`);

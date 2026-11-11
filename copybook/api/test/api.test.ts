@@ -1326,7 +1326,7 @@ describe('copybook api', () => {
       if (path === 'customers' && init?.method !== 'POST') return Response.json({ data: [] });
       if (path === 'customers') return Response.json({ id: 'cus_fund' });
       if (path === 'prices') return Response.json({ data: [{ id: 'price_fund_yearly' }] });
-      if (path === 'subscriptions') return Response.json({ id: 'sub_fund', latest_invoice: 'in_fund' });
+      if (path === 'subscriptions') return Response.json({ id: 'sub_fund', customer: 'cus_fund', created: Math.floor(Date.now() / 1000), metadata: { founding: 'true' }, latest_invoice: 'in_fund' });
       if (path === 'invoices/in_fund' && init?.method !== 'POST') return Response.json({ id: 'in_fund', status: 'draft' });
       if (path === 'invoices/in_fund/send') return Response.json({ id: 'in_fund', status: 'open', number: 'CB-0001', due_date: 1765497600, hosted_invoice_url: 'https://invoice.stripe.com/i/x' });
       return Response.json({ id: 'in_fund', status: 'open' });
@@ -1342,9 +1342,12 @@ describe('copybook api', () => {
     for (const s of ['Copy Fund, up to 10 seats', 'Founding price $1,990 a year for up to 10 seats, whatever number are used, locked for as long as this subscription stays active', 'Terms in force on the invoice date', 'Renews each year at that price until cancelled', 'Cancel any time from Manage billing', 'If we discontinue the plan during a prepaid period, we refund the unused part pro rata.', 'payable within 30 days', `${SITE}terms/`]) expect(footer).toContain(s);
     expect(posted('customers').get('email')).toBe('pm@fund.test');
     expect(Object.fromEntries(['customer', 'items[0][price]', 'collection_method', 'days_until_due', 'metadata[copybook]'].map((k) => [k, posted('subscriptions').get(k)]))).toEqual({ customer: 'cus_fund', 'items[0][price]': 'price_fund_yearly', collection_method: 'send_invoice', days_until_due: '30', 'metadata[copybook]': 'fund' });
-    expect(posted('invoices/in_fund').get('description')).toBe(footer);
-    // The customer's PO prints on the invoice.
-    expect([posted('invoices/in_fund').get('custom_fields[0][name]'), posted('invoices/in_fund').get('custom_fields[0][value]')]).toEqual(['PO', 'PO-7781']);
+    // The memo is the order terms; the footer adds the tax position (Stripe Tax is off).
+    expect(footer).toBe(`${posted('invoices/in_fund').get('description')} Prices exclude applicable taxes. Copybook does not currently collect sales tax.`);
+    expect(posted('invoices/in_fund').get('footer')).toBe(footer);
+    // The founding price, the company and the customer's PO print on the invoice (and on the customer's later ones).
+    expect([0, 1, 2].map((i) => [posted('invoices/in_fund').get(`custom_fields[${i}][name]`), posted('invoices/in_fund').get(`custom_fields[${i}][value]`)])).toEqual([['Price', 'Founding price, kept while subscribed'], ['Company', 'Example Capital'], ['PO', 'PO-7781']]);
+    expect(posted('subscriptions').get('metadata[founding]')).toBe('true');
     expect(calls.map((c) => `${c.method} ${c.path}`).slice(-3)).toEqual(['POST invoices/in_fund', 'POST invoices/in_fund/finalize', 'POST invoices/in_fund/send']);
     vi.stubGlobal('fetch', orig);
   });
