@@ -3850,6 +3850,11 @@ describe('copybook api', () => {
     expect(viaTunnel.channels.feed.json_url).toBe(feedUrls.json_url);
     const hook = await (await req(pro, 'PUT', '/channels', { webhook: 'https://hooks.example.com/cb' })).json();
     const secret = hook.channels.webhook.secret as string;
+    // A webhook pins the summed share-class moves until Feb 22, 2027 (the lead, Nov 11); the pin survives a URL change.
+    expect((await req(pro, 'PUT', '/channels', { webhook_schema_version: '2026-11-23' })).status).toBe(400);
+    expect((await (await req(pro, 'PUT', '/channels', { webhook_schema_version: '2026-11-09' })).json()).channels.webhook.schema_version).toBe('2026-11-09');
+    expect((await (await req(pro, 'PUT', '/channels', { webhook: 'https://hooks.example.com/cb' })).json()).channels.webhook.schema_version).toBe('2026-11-09');
+    expect((await (await req(pro, 'PUT', '/channels', { webhook_schema_version: null })).json()).channels.webhook.schema_version).toBeNull();
     expect(secret).toMatch(/^whsec_/);
     await putFollows('cus_chan', { investors: ['warren-buffett'] });
     await putFollows('cus_hook', { investors: ['warren-buffett'] });
@@ -4610,6 +4615,13 @@ describe('copybook api', () => {
     expect([brkRow.classes, brkRow.shares_unit, brkChange.classes, brkChange.shares_unit]).toEqual([brkClasses, 'mixed', brkClasses, 'mixed']);
     // A blend of classes has no CUSIP of its own and no shares in mixed units; its change is ingest's, not the $ sum's sign.
     for (const r of [brkRow, brkChange]) expect([r.cusip, r.issuer_cusip6, r.shares, r.prev_shares, r.share_change, r.change, r.net_direction]).toEqual([null, '084670', null, null, null, 'mixed', 'buy']);
+    // A client pinned to the summed rows (2026-11-09) is told when the pin ends; an unpinned one isn't.
+    const hdrs = async (path: string, pin?: string) => (await handleRequest(new Request(`https://api.test${path}`, { headers: { authorization: `Bearer ${key}`, ...(pin ? { 'copybook-schema-version': pin } : {}) } }), env)).headers;
+    for (const path of ['/v1/stocks/084670702/holders', '/v1/changes/2026Q3?cusip=084670702']) {
+      const pinned = await hdrs(path, '2026-11-09');
+      expect([pinned.get('deprecation'), pinned.get('sunset'), /changelog\?id=2026-11-23-per-class-rows>; rel="deprecation"/.test(pinned.get('link') ?? '')]).toEqual(['true', 'Mon, 22 Feb 2027 00:00:00 GMT', true]);
+      expect((await hdrs(path)).get('sunset')).toBeNull();
+    }
     expect('classes' in (await v1('/v1/stocks/NVDA/holders')).body.data.holders[0]).toBe(false);
     const nch = (await v1('/v1/changes/2026Q3?ticker=NVDA')).body.data.filter((r: { put_call: string | null }) => !r.put_call);
     // A holder index from before hl/ schema 3 has no held marking: GuardCap's BKNG (646,216 -> 1,304 sh, $121.6M -> $6.7M)

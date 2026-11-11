@@ -16,7 +16,8 @@ export interface Channels {
   discord?: string;
   slack?: string;
   telegram?: { bot_token: string; chat_id: string };
-  webhook?: { url: string; secret: string; created: string };
+  /** schema_version: a pin to the summed share-class moves (SUMMED_PIN, until Feb 22, 2027); absent: the current shape. */
+  webhook?: { url: string; secret: string; created: string; schema_version?: string };
   feed_token?: string;
   /** Also email alerts while a chat or webhook destination works (default: chat replaces email). */
   keep_email?: boolean;
@@ -125,7 +126,7 @@ export function channelsView(m: Member, c: Channels, apiBase: string, failing: C
     discord: c.discord ? mask(c.discord) : null,
     slack: c.slack ? mask(c.slack) : null,
     telegram: c.telegram ? { chat_id: c.telegram.chat_id } : null,
-    webhook: c.webhook ? { url: c.webhook.url, secret: c.webhook.secret, created: c.webhook.created } : null,
+    webhook: c.webhook ? { url: c.webhook.url, secret: c.webhook.secret, created: c.webhook.created, schema_version: c.webhook.schema_version ?? null } : null,
     webhook_available: isPro(m),
     feed: c.feed_token ? feedUrls(c.feed_token, apiBase) : null,
     keep_email: c.keep_email ?? false,
@@ -211,8 +212,16 @@ export async function updateChannels(env: Env, m: Member, b: Record<string, unkn
     else if (typeof b.webhook === 'string' && httpsPublic(b.webhook.trim())) {
       const url = b.webhook.trim();
       // A new URL keeps the secret; ask for a new one with rotate_secret.
-      c.webhook = { url, secret: c.webhook?.secret && !b.rotate_secret ? c.webhook.secret : `whsec_${randomToken(24)}`, created: c.webhook?.created ?? new Date().toISOString() };
+      c.webhook = { url, secret: c.webhook?.secret && !b.rotate_secret ? c.webhook.secret : `whsec_${randomToken(24)}`, created: c.webhook?.created ?? new Date().toISOString(), ...(c.webhook?.schema_version ? { schema_version: c.webhook.schema_version } : {}) };
     } else return bad('webhook: a public https URL');
+  }
+  // A webhook pinned to the summed share-class moves (the lead, Nov 11): until Feb 22, 2027; null unpins.
+  if (b.webhook_schema_version !== undefined) {
+    const { SUMMED_PIN } = await import('./v1');
+    if (!c.webhook) return bad('webhook_schema_version: save a webhook first');
+    if (b.webhook_schema_version === null) delete c.webhook.schema_version;
+    else if (b.webhook_schema_version === SUMMED_PIN.version && Date.now() < SUMMED_PIN.until) c.webhook.schema_version = SUMMED_PIN.version;
+    else return bad(`webhook_schema_version: ${SUMMED_PIN.version} (until Feb 22, 2027) or null`);
   }
   if (b.keep_email !== undefined) {
     if (typeof b.keep_email !== 'boolean') return bad('keep_email: true or false');
