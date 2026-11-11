@@ -64,6 +64,12 @@ export function VerifyNotice() {
     window.addEventListener('copybook:verify', on)
     return () => window.removeEventListener('copybook:verify', on)
   }, [])
+  // Never pinned (trader, Nov 11): it covered the content under it; what waits on the link says so where it is.
+  useEffect(() => {
+    if (!msg) return
+    const t = setTimeout(() => setMsg(null), 5000)
+    return () => clearTimeout(t)
+  }, [msg])
   if (!msg) return null
   return (
     <div role="alert" className="fixed inset-x-0 bottom-4 z-50 flex justify-center px-4">

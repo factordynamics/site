@@ -24,7 +24,7 @@ import { addCard, switchYearly, ApiError, call, errText, pendingEmail, needsVeri
 import { copyCheckout } from '../lib/attribution'
 
 const ADD_CARD = 'copybook-add-card'
-type State = { kind: 'loading' } | { kind: 'in'; member: Member; welcome: boolean; focus?: boolean; upgraded?: string; kept?: string; resumed?: boolean; stale?: boolean } | { kind: 'out'; error?: string } | { kind: 'used'; error: string } | { kind: 'off' } | { kind: 'down' }
+type State = { kind: 'loading' } | { kind: 'in'; member: Member; welcome: boolean; back?: boolean; focus?: boolean; upgraded?: string; kept?: string; resumed?: boolean; stale?: boolean } | { kind: 'out'; error?: string } | { kind: 'used'; error: string } | { kind: 'off' } | { kind: 'down' }
 
 export function Account() {
   const [params] = useSearchParams()
@@ -52,12 +52,14 @@ export function Account() {
       try {
         let member: Member
         let started: Member | null = null
-        if (sid?.startsWith('cs_')) started = await startSession({ checkout_session: sid })
-        else if (login) started = await startSession({ login })
+        // A repeat checkout (existing_account): payments emails a sign-in link, so it's "Welcome back", never the first welcome.
+        let back = false
+        if (sid?.startsWith('cs_')) ({ member: started, existing: back } = await startSession({ checkout_session: sid }))
+        else if (login) started = (await startSession({ login })).member
         // A checkout for an address that already had an account: keep this browser's session, or ask for the emailed link.
         if (sid && !started && !getToken()) {
           nav('/account/', { replace: true })
-          return setState({ kind: 'out', error: 'Your subscription is active. Sign in with the link we emailed you.' })
+          return setState({ kind: 'out', error: back ? 'Welcome back. We emailed you a sign-in link.' : 'Your subscription is active. Sign in with the link we emailed you.' })
         }
         if (sid || login) member = await fetchMe().catch(() => started as Member)
         else if (getToken()) {
@@ -78,7 +80,7 @@ export function Account() {
         }
         resetFollows()
         // The Pro quickstart takes focus after a Pro checkout; a Fund checkout starts at the Fund setup list.
-        setState({ kind: 'in', member, welcome, upgraded, kept, resumed, focus: pro || (welcome && member.plan === 'pro') || (upgraded === 'pro' && member.plan === 'pro') })
+        setState({ kind: 'in', member, welcome: welcome && !back, back, upgraded, kept, resumed, focus: pro || (welcome && member.plan === 'pro') || (upgraded === 'pro' && member.plan === 'pro') })
       } catch (e) {
         // The API is over its limit or down: say so, and keep the link in the address bar so a reload retries it.
         // A failing API keeps the last-known account on screen (the status banner says why).
@@ -120,7 +122,7 @@ export function Account() {
         </section>
       )}
       {state.kind === 'in' && <Updating show={Boolean(state.stale)} className="mb-4" />}
-      {state.kind === 'in' && <SignedIn member={state.member} welcome={state.welcome} upgraded={state.upgraded} kept={state.kept} resumed={state.resumed} focus={state.focus} onOut={() => setState({ kind: 'out' })} onChange={(member) => setState((s) => ({ kind: 'in', member, welcome: false, resumed: s.kind === 'in' && Boolean(s.member.paused_until) && !member.paused_until }))} />}
+      {state.kind === 'in' && <SignedIn member={state.member} welcome={state.welcome} back={state.back} upgraded={state.upgraded} kept={state.kept} resumed={state.resumed} focus={state.focus} onOut={() => setState({ kind: 'out' })} onChange={(member) => setState((s) => ({ kind: 'in', member, welcome: false, resumed: s.kind === 'in' && Boolean(s.member.paused_until) && !member.paused_until }))} />}
       {state.kind === 'out' && <SignedOut error={state.error} />}
       {state.kind === 'used' && <TrialUsed error={state.error} />}
       {state.kind === 'off' && <NotOpen />}
@@ -129,7 +131,7 @@ export function Account() {
   )
 }
 
-function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = false, onOut, onChange }: { member: Member; welcome: boolean; upgraded?: string; kept?: string; resumed?: boolean; focus?: boolean; onOut: () => void; onChange: (m: Member) => void }) {
+function SignedIn({ member, welcome, back = false, upgraded, kept, resumed = false, focus = false, onOut, onChange }: { member: Member; welcome: boolean; back?: boolean; upgraded?: string; kept?: string; resumed?: boolean; focus?: boolean; onOut: () => void; onChange: (m: Member) => void }) {
   const [busy, setBusy] = useState(false)
   // The billing portal opens in this tab; when neither the API's portal session nor the fallback link can open, say so.
   const [portalErr, setPortalErr] = useState('')
@@ -193,6 +195,14 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
               Real-time alerts are back on
               {end ? ` · next charge ${end.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'America/New_York' })} ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' })}` : ''}.
             </p>
+          </>
+        ) : back ? (
+          <>
+            <span className="inline-flex size-11 items-center justify-center rounded-full bg-up text-white">
+              <Check />
+            </span>
+            <h1 className="mt-5 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em]">Welcome back.</h1>
+            <p className="mt-3 text-[17px] text-ink-2">We emailed you a sign-in link.</p>
           </>
         ) : welcome ? (
           <>

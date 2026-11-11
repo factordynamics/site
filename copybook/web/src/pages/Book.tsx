@@ -12,7 +12,7 @@ import { ApiStatus, Updating } from '../components/ApiStatus'
 import { ApiError, apiDown, getToken, lastMe, needsVerify, pendingEmail, needsReauth, isFree, isPro, lastEvents, loadEvents, useMember, type IssuerFeed, type Member } from '../lib/account'
 import { getJSON, live, quarterLabel, dateLabel, displayName, money, pct, sharesFmt, useAsync, useTitle, type Manager } from '../lib/data'
 import { addStocks, importBook, useFollows } from '../lib/follows'
-import { ConfirmEmail } from '../components/ConfirmEmail'
+import { ConfirmEmail, ResendLink } from '../components/ConfirmEmail'
 import { accNo, cap, issuerLatest, pctChange, whenLabel, type Latest } from '../lib/insiders'
 import { loadFilerHolders, loadStock, resolveTicker, stockPath, type Stock, type StockHolder } from '../lib/stocks'
 
@@ -937,6 +937,10 @@ function EventsCell({ r, w, onRetry }: { r: { ticker: string; insider?: Latest |
       <span className="mt-0.5 flex items-center gap-1.5 text-[11.5px] text-ink-3">
         <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ink-3" aria-hidden /> Checking company insiders…
       </span>
+    ) : r.pending === 'failed' && pendingEmail(lastMe()) ? (
+      <span className="mt-0.5 block max-w-[11rem] text-[11.5px] text-[#7a4b06]">
+        Confirm your email to see this · <ResendLink email={pendingEmail(lastMe())!} />
+      </span>
     ) : r.pending === 'failed' ? (
       <span className="mt-0.5 block max-w-[11rem] text-[11.5px] text-ink-3">
         Company insiders didn’t load.{' '}
@@ -1009,22 +1013,17 @@ function Import({ link = true }: { link?: boolean }) {
     const fresh = known.filter((t) => !have.has(t))
     let skipped: string[] = []
     if (fresh.length) {
-      // Before the emailed link is opened the API refuses its importer (403 verify_email) but saves follows, so owned
-      // names save one by one as stock Follow does (trader, Nov 11); nothing is delivered until the email is confirmed.
-      const viaFollows = owned && Boolean(pendingEmail(lastMe()))
-      if (owned && !viaFollows) {
+      if (owned) {
         // Owned names go through the API's importer, which keeps them apart from a linked 13F.
         const r = await importBook({ text: fresh.join(' '), mode: 'merge' }).catch((e) => (e instanceof ApiError ? e : null))
+        // An API from before it accepted pastes ahead of the emailed link (403 verify_email): save them one by one, as
+        // stock Follow does; nothing is delivered until the email is confirmed.
         if (r instanceof ApiError && needsVerify(r)) {
           const failed = await addStocks(fresh, true).catch(() => null)
           if (failed === null) return setState({ msg: 'That didn’t save. Please try again.', ok: false })
           skipped = failed
         } else if (!r || r instanceof ApiError) return setState({ msg: r?.detail ?? 'That didn’t save. Please try again.', ok: false })
         else skipped = (r.skipped ?? []).filter((x) => x.trim())
-      } else if (viaFollows) {
-        const failed = await addStocks(fresh, true).catch(() => null)
-        if (failed === null) return setState({ msg: 'That didn’t save. Please try again.', ok: false })
-        skipped = failed
       } else {
         const failed = await addStocks(fresh, false).catch(() => null)
         if (failed === null) return setState({ msg: 'That didn’t save. Please try again.', ok: false })

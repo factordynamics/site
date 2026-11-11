@@ -7,7 +7,8 @@ import { CsvButton } from '../components/CsvButton'
 import { FollowButton } from '../components/FollowButton'
 import { Share } from '../components/Share'
 import { PositionLine, rollUp, type Position } from '../components/FundNotes'
-import { downloadFile, getToken, isPro, loadEvents, loadHolders, useMember, type ApiHolder } from '../lib/account'
+import { downloadFile, getToken, isPro, lastMe, loadEvents, loadHolders, needsVerify, pendingEmail, useMember, type ApiHolder } from '../lib/account'
+import { ResendLink } from '../components/ConfirmEmail'
 import { FridayBox } from '../components/FridayBox'
 import { issuerLatest, whenLabel } from '../lib/insiders'
 import { Arrow, Badge, Button, edgeFade, Lock, Monogram, NotCounted, Panel, Skeleton, Stat } from '../components/ui'
@@ -354,6 +355,14 @@ export function StockPage() {
         </Panel>
       )}
 
+      {/* The issuer feed waits on the emailed link: say so where it would be, never a pinned toast (trader, Nov 11). */}
+      {paid && d && !feed && needsVerify(ev.error) && pendingEmail(lastMe()) && (
+        <Panel className="mt-4" title="Company insiders">
+          <p className="text-[14px] text-[#7a4b06]">
+            Confirm your email to see this · <ResendLink email={pendingEmail(lastMe())!} />
+          </p>
+        </Panel>
+      )}
       {paid && d && feed && (
         <Panel className="mt-4" title="Company insiders" sub={`Open-market Form 4 trades from $100K${from ? ` since ${new Date(Date.parse(`${from}T12:00:00Z`) - 86_400_000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}` : ' in recent filings'}, largest first`}>
           {insiders.length ? (

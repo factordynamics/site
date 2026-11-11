@@ -303,15 +303,15 @@ export function adoptSession(token: string) {
   forgetMe()
 }
 
-/** Null when the checkout's address already had an account (code existing_account): no token comes back, so
- *  the browser keeps the session it has, and the member signs in with the emailed link. */
-export async function startSession(body: { checkout_session: string } | { login: string }) {
+/** `member` is null when the checkout's address already had an account (`existing`, code existing_account): no token
+ *  comes back, so the browser keeps the session it has, and the member signs in with the emailed link. */
+export async function startSession(body: { checkout_session: string } | { login: string }): Promise<{ member: Member | null; existing: boolean }> {
   const r = await call<{ token?: string; member: Member | null; code?: string; session?: string; error?: string }>('/session', { body })
   // A repeat trial: payments cancelled the new $0 subscription at completion (one free trial per person).
   if (r.code === 'trial_used') throw new ApiError(409, { code: r.code, error: r.error })
-  if (!r.token) return null
+  if (!r.token) return { member: null, existing: r.code === 'existing_account' }
   setToken(r.token, r.session === 'provisional' ? (r.member?.email ?? null) : null)
-  return r.member
+  return { member: r.member, existing: false }
 }
 
 export const PLAN_NAME: Record<string, string> = { copy: 'Copy', pro: 'Copy Pro', fund: 'Copy Fund' }
@@ -334,6 +334,8 @@ export const fetchMe = () =>
       } catch {
         // Storage blocked: no cache, every page asks.
       }
+      // Every mounted header and button takes the fresh member at once (a checkout landing on the same path).
+      window.dispatchEvent(new CustomEvent('copybook:me', { detail: r.member }))
       return r.member
     })
     .finally(() => (meInFlight = null)))
@@ -527,10 +529,13 @@ export function useMemberState() {
     )
     // Back in the tab after the cache has expired: one fresh read.
     const onFocus = () => document.visibilityState === 'visible' && getToken() && !cachedMe() && fetchMe().then(setMember, () => null)
+    const onMe = (e: Event) => setMember((e as CustomEvent<Member>).detail)
     window.addEventListener('focus', onFocus)
+    window.addEventListener('copybook:me', onMe)
     document.addEventListener('visibilitychange', onFocus)
     return () => {
       window.removeEventListener('focus', onFocus)
+      window.removeEventListener('copybook:me', onMe)
       document.removeEventListener('visibilitychange', onFocus)
     }
   }, [])
