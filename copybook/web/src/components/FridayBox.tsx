@@ -10,7 +10,7 @@ import { Arrow, Button } from './ui'
 // field that follows `people`; `collapsed` names them with a Change link that adds `others`), "See last week's
 // email", then the Copy trial below a divider as the quieter button. Post A: the trial-first box showed 151 times
 // with 0 signups.
-export function FridayBox({ title, people, others, collapsed = false, kind = 'investor', trial, top, className = '' }: { title: string; people: { slug: string; name: string }[]; others?: { slug: string; name: string }[]; collapsed?: boolean; kind?: 'investor' | 'stock'; trial: string; top?: ReactNode; className?: string }) {
+export function FridayBox({ title, people, others, collapsed = false, kind = 'investor', trial, solid = false, top, className = '' }: { title: string; people: { slug: string; name: string }[]; others?: { slug: string; name: string }[]; collapsed?: boolean; kind?: 'investor' | 'stock'; trial: ReactNode; solid?: boolean; top?: ReactNode; className?: string }) {
   return (
     <div className={`rounded-xl bg-accent-soft px-4 py-3.5 text-[15px] leading-snug text-accent-2 ${className}`}>
       {top}
@@ -21,7 +21,7 @@ export function FridayBox({ title, people, others, collapsed = false, kind = 'in
       </Link>
       <div className="mt-4 border-t border-accent/20 pt-4">
         <p className="text-[14px] text-ink-2">{trial}</p>
-        <Button to={pricingTo()} variant="outline" onClick={() => track('trial_click')} className="mt-2.5 shrink-0">
+        <Button to={pricingTo()} variant={solid ? 'primary' : 'outline'} onClick={() => track('trial_click')} className="mt-2.5 shrink-0">
           Start {TRIAL_DAYS}-day free trial
         </Button>
         <p className="mt-1.5 text-[12.5px] text-ink-3">Card required, nothing charged before day {TRIAL_DAYS + 1}.</p>

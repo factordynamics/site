@@ -94,12 +94,11 @@ console.log(`filing cards: ${list.length}`)
   const list = bought
     ? (s.featured_flow?.bought ?? []).filter((r) => !r.etf && r.net_value > 0).slice(0, 3).map((r) => [r.ticker, cut(r.name, 30), `+${money(r.net_value)} · ${r.n_buyers} ${r.n_buyers === 1 ? 'buyer' : 'buyers'}`])
     : (s.expected ?? [])
-        // The names people share: the best-known superinvestors still to file, not simply the soonest.
+        // The soonest still to file (Thursday's before Monday's), the best-known first within a day.
         .filter((x) => !x.filed && x.expected_date && x.expected_date >= today)
-        .sort((a, b) => rank(a.slug) - rank(b.slug) || a.expected_date.localeCompare(b.expected_date) || a.time_et - b.time_et)
+        .sort((a, b) => a.expected_date.localeCompare(b.expected_date) || rank(a.slug) - rank(b.slug) || a.time_et - b.time_et)
         .slice(0, 3)
-        .sort((a, b) => a.expected_date.localeCompare(b.expected_date) || a.time_et - b.time_et)
-        .map((x) => [day(x.expected_date), cut(displayName(x.manager), 30), x.time_range ? `lately ${clock(x.time_range[0])}–${clock(x.time_range[1])} ET` : `around ${clock(x.time_et)} ET`])
+        .map((x) => [day(x.expected_date), cut(displayName(x.manager), 30), `usually around ${clock(x.time_et)} ET`])
   const q = qLabel(s.quarter)
   const rows = list
     .map(([a, b, c], i) => {

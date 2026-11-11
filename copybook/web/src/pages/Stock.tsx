@@ -403,7 +403,11 @@ export function StockPage() {
                     </span>
                     <span className="mt-0.5 block text-[12px] leading-snug text-ink-3">{h.note}</span>
                   </span>
-                  <span className="num shrink-0 pt-0.5 text-[13px] text-ink-3">{flagMove(h)}</span>
+                  {/* Muted and marked, so a held line never reads as an ordinary trim (trader, Nov 11). */}
+                  <span className="flex shrink-0 flex-col items-end gap-1 pt-0.5">
+                    <span className="num text-[13px] text-ink-3">{flagMove(h)}</span>
+                    <NotCountedPill />
+                  </span>
                 </li>
               ))}
             </ul>
@@ -600,6 +604,14 @@ function flagMove(h: StockHolder) {
   return 'not counted'
 }
 
+function NotCountedPill() {
+  return (
+    <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-[#fdf3e1] px-1.5 py-px text-[11px] font-medium text-[#8a5a0b]">
+      <span aria-hidden>⚠</span>not counted
+    </span>
+  )
+}
+
 function ChangeCell({ h }: { h: StockHolder }) {
   // "both": no change shown (NEW and EXITED keep their badges); "value": the share change; "shares": the change in
   // filed value, since the share counts don't reconcile. The row's note says which.
@@ -609,12 +621,16 @@ function ChangeCell({ h }: { h: StockHolder }) {
         Not counted
       </span>
     )
-  if (h.flag === 'shares' && (h.change === 'added' || h.change === 'trimmed' || h.change === 'unchanged')) {
-    const v = h.prev_value ? (h.value - h.prev_value) / h.prev_value : 0
+  // A flagged line's move is muted and marked, never green or red: it isn't counted in any total.
+  if (h.flag && (h.change === 'added' || h.change === 'trimmed' || h.change === 'unchanged')) {
+    const r = h.flag === 'shares' ? (h.prev_value ? (h.value - h.prev_value) / h.prev_value : 0) : h.prev_shares ? (h.shares - h.prev_shares) / h.prev_shares : 0
     return (
-      <span className={`num whitespace-nowrap text-[13px] font-medium ${v > 0 ? 'text-up' : v < 0 ? 'text-down' : 'text-ink-3'}`} title={h.note ?? undefined}>
-        {v > 0 ? '+' : v < 0 ? '−' : ''}
-        {pct(Math.abs(v), 0)}
+      <span className="flex flex-col items-end gap-1" title={h.note ?? undefined}>
+        <span className="num whitespace-nowrap text-[13px] text-ink-3">
+          {r > 0 ? '+' : r < 0 ? '−' : ''}
+          {pct(Math.abs(r), 0)}
+        </span>
+        <NotCountedPill />
       </span>
     )
   }

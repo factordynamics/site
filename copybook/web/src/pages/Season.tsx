@@ -3,18 +3,19 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { REF_NOTE, Share, shareUrl, useRefCode } from '../components/Share'
 import { Signup } from '../components/Signup'
 import { Arrow, AvatarStack, Badge, Button, Lock, Monogram, Panel, Skeleton } from '../components/ui'
-import { getToken, isPaying, useMember } from '../lib/account'
+import { getToken, isPaying, loadLatency, useMember } from '../lib/account'
 import { track, useTrackVisit } from '../lib/track'
 import { FridayBox } from '../components/FridayBox'
 import { FollowButton } from '../components/FollowButton'
 import { HedgeFlow } from '../components/HedgeFlow'
 import { EdgarClosed } from '../components/EdgarClosed'
 import { TRIAL_DAYS } from '../config'
-import { dateFmt, dateLabel, loadIndex, money, NUM, pricingTo, quarterLabel, useAsync, useTick, useTitle } from '../lib/data'
+import { dateFmt, dateLabel, displayName, loadIndex, money, NUM, pricingTo, quarterLabel, useAsync, useTick, useTitle } from '../lib/data'
 import { seasonTitle } from '../lib/titles.mjs'
+import { thirteenFStats } from '../lib/latencyStats.mjs'
 import { dayName, isEdgarDay } from '../lib/calendar.mjs'
 import { cap } from '../lib/insiders'
-import { edgarClosed, timeLeft, loadCardSet, loadExpected, loadRecap, loadSeason, nextUp, recapPath, seasonNow, stockPath, type Expected, type Season as SeasonData, type SeasonRow } from '../lib/stocks'
+import { edgarClosed, timeLeft, loadCardSet, loadExpected, loadSeason, nextUp, recapPath, seasonNow, stockPath, type Expected, type Season as SeasonData, type SeasonRow } from '../lib/stocks'
 
 // /season/: the 13F filing season as it happens. Built from d/season.json, which every Pages build
 // writes (every 20 minutes during the filing wave).
@@ -61,6 +62,19 @@ export function Season() {
   const soon = useAsync(loadExpected, [tick])
   const up = soon.data ? nextUp(soon.data.expected, new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' })) : null
   const next = up?.text ?? ''
+  // The trial line: the hero's speed claim behind the same gate (/speed/'s 13F median under 120 s), and the next
+  // marquee filer while it's still expected (it drops once loadExpected, overlaid with the live index, sees the filing).
+  const lat = useAsync(() => loadLatency().catch(() => null), [])
+  const med = lat.data ? thirteenFStats(lat.data) : null
+  const todayEt = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
+  const kahn = soon.data?.expected.find((x) => x.slug === 'irving-kahn' && x.expected_date && x.expected_date >= todayEt)
+  const trialLine = [
+    'Want each 13F the minute it’s filed?',
+    med?.median_seconds != null && med.median_seconds < 120 ? 'Median alert under 2 minutes after the SEC publishes the filing.' : 'Copy emails you each one with its moves, checked on EDGAR every minute.',
+    kahn && `${displayName(kahn.manager)} files ${weekday(kahn.expected_date!, todayEt)}.`,
+  ]
+    .filter(Boolean)
+    .join(' ')
   useTrackVisit()
   const cards = useAsync(loadCardSet, [])
   const idx = useAsync(loadIndex, [])
@@ -93,8 +107,6 @@ export function Season() {
   const shown = paid ? rows : rows.slice(0, FREE)
   const due = d ? new Date(d.deadline).getTime() : 0
   const passed = d && now > due
-  // After the deadline the post names the recap's top three.
-  const recap = useAsync(() => (d && passed ? loadRecap(d.quarter) : Promise.resolve(null)), [d?.quarter, passed])
 
   return (
     <div className="container-x pt-12 md:pt-16">
@@ -119,7 +131,8 @@ export function Season() {
               people={FAMOUS}
               others={up?.people ?? []}
               collapsed
-              trial="Want each 13F as it’s filed? Copy emails you each one with its moves, checked on EDGAR every minute."
+              trial={trialLine}
+              solid
             />
           )}
           {getToken() && !passed && next && (
@@ -147,7 +160,7 @@ export function Season() {
           <p className="mt-4 text-[17px] leading-relaxed text-ink-2">
             Every manager with $100M or more in 13F securities, mostly US-listed stocks, must file its {Q || 'quarter-end'} holdings with the SEC within 45 days. We check EDGAR every minute for the funds we track closely; this page refreshes about every 20 minutes.
           </p>
-          <Share className="mt-5" text={d ? postText(d, Boolean(passed), recap.data?.most_bought, now) : undefined} />
+          <Share className="mt-5" text={d ? postText(d, Boolean(passed), { tab, scope, rows }, now) : undefined} />
         </div>
         <div className="rounded-[var(--radius-card)] bg-night p-6 text-white shadow-[var(--shadow-card)]">
           <p className="text-[13px] text-white/60">{passed ? 'Deadline passed' : 'Filing deadline'}</p>
@@ -292,26 +305,26 @@ function usual(x: Expected) {
   if (x.pattern === 'none') return `No fixed day; last filed ${x.days_before === 0 ? 'on deadline day' : dayPhrase(x.days_before)}, ${when} (${at})`
   return `${x.pattern === 'usually' ? 'Usually' : 'Most often'} ${dayPhrase(x.days_before)}, ${when} (${at})`
 }
-// The Post on X text, with the live numbers: who filed, who's next, what they bought.
-function postText(d: SeasonData, passed: boolean, recapTop: { ticker: string | null }[] | undefined, now: number) {
+// The Post on X text, with the live numbers: who filed, who's next, and the top three of the list the reader is
+// looking at (same tab, funds and ETF filter), so the post and the page always name the same stocks.
+const POST_LABEL: Record<Tab, string> = { bought: 'Most bought', sold: 'Most sold', most_buyers: 'Bought by the most' }
+function postText(d: SeasonData, passed: boolean, list: { tab: Tab; scope: 'featured' | 'all'; rows: { ticker: string | null }[] }, now: number) {
   const q = `Q${d.quarter.slice(-1)}`
-  const tickers = (rows: { ticker: string | null }[] = []) =>
-    rows
-      .flatMap((r) => (r.ticker ? [`$${r.ticker}`] : []))
-      .slice(0, 3)
-      .join(', ')
+  const top = list.rows
+    .flatMap((r) => (r.ticker ? [`$${r.ticker}`] : []))
+    .slice(0, 3)
+    .join(', ')
+  const label = list.tab === 'most_buyers' ? `${POST_LABEL.most_buyers} ${list.scope === 'featured' ? 'superinvestors' : 'funds'}` : POST_LABEL[list.tab]
   const filed = `${d.featured.filed} of ${d.featured.total} superinvestors filed`
-  if (passed) {
-    const top = tickers(recapTop ?? d.featured_flow.bought.filter((r) => !r.etf))
-    return `${q} 13F season is closed: ${filed}.${top ? ` Most bought: ${top}.` : ''}`
-  }
+  if (passed) return `${q} 13F season is closed: ${filed}.${top ? ` ${label}: ${top}.` : ''}`
   const today = dateFmt({ timeZone: 'America/New_York' }, 'en-CA').format(new Date(now))
   const next = (d.expected ?? [])
     .filter((x) => !x.filed && !x.placeholder && x.pattern !== 'none' && x.expected_date && x.expected_date >= today)
     .sort((a, b) => Number(b.slug === 'warren-buffett') - Number(a.slug === 'warren-buffett') || a.expected_date!.localeCompare(b.expected_date!) || a.time_et - b.time_et)[0]
-  const top = tickers((d.featured.filed ? d.featured_flow : d.all_flow).bought.filter((r) => !r.etf))
-  return [`${q} 13F season: ${filed}`, next && `${next.manager} expected ${dayName(next.expected_date!, today)} ~${clock(next.time_et)} ET`, top && `Most bought so far: ${top}`].filter(Boolean).join(' · ')
+  return [`${q} 13F season: ${filed}`, next && `${next.manager} expected ${dayName(next.expected_date!, today)} ~${clock(next.time_et)} ET`, top && `${label} so far: ${top}`].filter(Boolean).join(' · ')
 }
+/** "today", or the weekday ("Thursday") for a date later this week. */
+const weekday = (iso: string, today: string) => (iso === today ? 'today' : new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' }))
 const clock = (m: number) => `${((Math.floor(m / 60) + 11) % 12) + 1}:${String(m % 60).padStart(2, '0')} ${m < 720 ? 'am' : 'pm'}`
 
 function ExpectedPanel({ list, cards, now }: { list: Expected[]; cards?: Set<string>; now: number }) {
