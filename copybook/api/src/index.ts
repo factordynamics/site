@@ -196,8 +196,13 @@ async function handleWebhook(req: Request, env: Env): Promise<Response> {
 
 
 interface LatencyRow {
-  /** The poller that sent it; rows logged before Nov 11 08:00 UTC carry the host of their send claim, or none. */
-  host?: 'cloudflare' | 'gene' | null;
+  /** The poller that sent it (`server` is ours); rows logged before Nov 11 08:00 UTC carry their send claim's, or none. */
+  host?: 'cloudflare' | 'server' | null;
+  /** When the poll first saw the filing; first alert email (13F; earlier than `sent` when the moves followed). */
+  detected_at?: string | null;
+  first_alert_at?: string | null;
+  /** An operator's test send. */
+  test?: boolean;
   slug: string;
   manager?: string;
   quarter?: string;
@@ -251,7 +256,38 @@ function spread(xs: number[]) {
  * acceptance to handing the alert to the mailer; chat, webhook and feed are acceptance to the
  * channel's first successful post (KV alerts:latency:ch).
  */
-export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDelivery[] = []) {
+/** What latency.json's alert rows add beyond the send log: misses, held rows. */
+export interface LatencyExtra {
+  /** The missed-filing detector's log: filings found unsent past their window. */
+  missed?: { accession: string; form: string; cik: string; accepted: string; detected_at: string; minutes_late: number }[];
+  /** Rows the gate held, with how each ended (reconciliation.held). */
+  held?: { accession: string; released_at: string | null; outcome: string | null }[];
+}
+/**
+ * 13Fs whose stock-match alerts never reached members watching their tickers: ingest renamed active to long_only on
+ * Nov 9 and routing kept only hedge_fund and active, until the Worker fix (05:36 UTC Nov 11) and gene's (06:36).
+ * Followers got these alerts; watchers didn't, and they weren't re-sent (lead, Nov 11). /status/ Data lists them.
+ */
+const LONG_ONLY_MISSED: [string, string, string][] = [
+  ['0001088875-26-000074', 'baillie-gifford-co', '2026-11-09T11:35:17Z'],
+  ['0001172661-26-004909', 'comgest-global-investors-s-a-s-4947', '2026-11-09T15:13:14Z'],
+  ['0002033334-26-000005', 'north-of-south-capital-llp-3334', '2026-11-09T16:33:50Z'],
+  ['0001140361-26-042753', 'acadian-asset-management-llc', '2026-11-09T19:45:16Z'],
+  ['0001532262-26-000006', 'greenbrier-partners-capital-management-llc-2262', '2026-11-09T21:13:08Z'],
+  ['0001556785-26-000022', 'vulcan-value-partners-llc-6785', '2026-11-10T14:10:42Z'],
+  ['0000315066-26-002964', 'fmr-llc', '2026-11-10T14:26:26Z'],
+  ['0001172661-26-004920', 'clarkston-capital-partners-llc-2855', '2026-11-10T16:54:10Z'],
+  ['0001325447-26-000037', 'matthew-mclennan', '2026-11-10T17:09:56Z'],
+  ['0001528593-26-000010', 'black-creek-investment-management-inc-8593', '2026-11-10T18:47:18Z'],
+  ['0001426327-26-000007', 'scheer-rowlett-associates-investment-management-ltd-6327', '2026-11-10T19:00:10Z'],
+  ['0001036325-26-000041', 'davis-selected-advisers', '2026-11-10T19:59:04Z'],
+  ['0001172661-26-004931', 'wilkinson-global-asset-management-llc-4000', '2026-11-10T21:10:34Z'],
+  ['0001171200-26-000023', 'jensen-investment-management-inc-6129', '2026-11-10T21:29:29Z'],
+  ['0001386060-26-000054', 'boston-partners', '2026-11-10T21:35:04Z'],
+  ['0001356513-26-000006', 'westwood-global-investments-llc-6513', '2026-11-10T21:50:43Z'],
+];
+
+export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDelivery[] = [], extra: LatencyExtra = {}) {
   const { season, from } = seasonOf(now);
   const fixAt = Date.parse(MOVES_FIX_AT);
   // Before the fix, a 13F whose moves came in a later follow-up (tables too big, or no prior book) is reported apart;
@@ -300,25 +336,72 @@ export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDeliver
     by_channel: { email: all, ...group(chRows, (c) => c.channel, (c) => c.seconds) },
     by_coverage: group(rows, (l) => l.coverage ?? 'curated', (l) => l.seconds),
     recent: rows.slice(0, 20).map((l) => ({ form: formOf(l), manager: l.manager ?? null, slug: l.slug, coverage: l.coverage ?? 'curated', accession: l.accession, accepted_at: l.accepted, delivered_at: l.sent, seconds: l.seconds, channel: 'email' })),
-    alerts: rows.map((l) => ({
-      host: l.host ?? null,
-      slug: l.slug,
-      manager: l.manager ?? null,
-      quarter: l.quarter ?? null,
-      form: formOf(l),
-      coverage: l.coverage ?? 'curated',
-      accession: l.accession,
-      accepted_at: l.accepted,
-      sent_at: l.sent,
-      gap_seconds: l.seconds,
-    })),
+    // One row per alert this season, replays and test sends included and flagged (the figures above exclude them),
+    // then the misses that never went out. Times are UTC to the second; null where they weren't recorded.
+    alerts: (() => {
+      const iso = (t: string | null | undefined) => (t ? t.replace(/\.\d{3}Z$/, 'Z') : null);
+      const one = new Map<string, LatencyRow>();
+      for (const l of log.filter((l) => Date.parse(l.sent) >= from && ((l.kind ?? '13f') !== '13f' || l.moves)).sort((a, b) => a.sent.localeCompare(b.sent))) if (!one.has(l.accession)) one.set(l.accession, l);
+      const team = new Map<string, string>();
+      for (const c of ch) if (c.channel !== 'feed' && (!team.has(c.accession) || c.delivered < team.get(c.accession)!)) team.set(c.accession, c.delivered);
+      const missed = new Map((extra.missed ?? []).map((m) => [m.accession, m]));
+      const held = new Map<string, { n: number; open: boolean; released: string | null }>();
+      for (const h of extra.held ?? []) {
+        const x = held.get(h.accession) ?? { n: 0, open: false, released: null };
+        x.n++;
+        if (!h.released_at) x.open = true;
+        else if (!x.released || h.released_at > x.released) x.released = h.released_at;
+        held.set(h.accession, x);
+      }
+      const sent = [...one.values()].sort((a, b) => b.sent.localeCompare(a.sent)).map((l) => {
+        const f13 = (l.kind ?? '13f') === '13f';
+        const m = missed.get(l.accession);
+        const hd = held.get(l.accession);
+        return {
+          host: l.host ?? null,
+          slug: l.slug,
+          manager: l.manager ?? null,
+          quarter: l.quarter ?? null,
+          form: formOf(l),
+          coverage: l.coverage ?? 'curated',
+          accession: l.accession,
+          accepted_at: iso(l.accepted),
+          detected_at: iso(m?.detected_at ?? l.detected_at),
+          email_accepted_at: iso(l.sent),
+          sent_at: iso(l.sent),
+          gap_seconds: l.seconds,
+          team_delivered_at: iso(team.get(l.accession)),
+          first_alert_at: f13 ? iso(l.first_alert_at ?? (l.followup ? null : l.sent)) : null,
+          moves_sent_at: f13 ? iso(l.sent) : null,
+          held: hd?.n ?? 0,
+          released_at: hd && !hd.open ? iso(hd.released) : null,
+          missed: !!m,
+          delay_seconds: m ? l.seconds : null,
+          never: false,
+          replay: !!l.replay,
+          test: !!l.test,
+          email_delayed: !!l.email_delayed,
+        };
+      });
+      const missRow = (accession: string, slug: string, form: string, accepted: string, detected: string | null, audience: string) => ({
+        host: null, slug, manager: null, quarter: null, form, coverage: 'curated', accession, accepted_at: iso(accepted), detected_at: iso(detected), email_accepted_at: null, sent_at: null, gap_seconds: null,
+        team_delivered_at: null, first_alert_at: null, moves_sent_at: null, held: 0, released_at: null, missed: true, delay_seconds: null, never: true, audience, replay: false, test: false, email_delayed: false,
+      });
+      // Found by the missed-filing detector and never sent (6 hours on, it isn't coming).
+      const never = (extra.missed ?? []).filter((m) => !one.has(m.accession) && Date.parse(m.accepted) >= from && now - Date.parse(m.detected_at) > 6 * 3600_000).map((m) => missRow(m.accession, m.cik, m.form, m.accepted, m.detected_at, 'everyone'));
+      // Sent to followers, never to the members watching its tickers (the long-only routing outage).
+      const watchers = LONG_ONLY_MISSED.filter(([, , a]) => Date.parse(a) >= from).map(([acc, slug, a]) => missRow(acc, slug, '13F-HR', a, null, 'stock_watchers'));
+      return [...sent, ...never, ...watchers];
+    })(),
   };
 }
 export async function buildLatency(env: Env, now: number) {
   const log = JSON.parse((await env.DB.get('alerts:latency')) ?? '[]') as LatencyRow[];
   const ch = JSON.parse((await env.DB.get('alerts:latency:ch')) ?? '[]') as ChannelDelivery[];
-  const r: ReturnType<typeof latencyReport> & { reconciliation?: Record<string, unknown> } = latencyReport(log, now, ch);
-  r.reconciliation = await (await import('./alerts')).reconciliation(env);
+  const rec = await (await import('./alerts')).reconciliation(env);
+  const missed = JSON.parse((await env.DB.get('missed:log')) ?? '[]') as LatencyExtra['missed'];
+  const r: ReturnType<typeof latencyReport> & { reconciliation?: Record<string, unknown> } = latencyReport(log, now, ch, { missed, held: rec.held as LatencyExtra['held'] });
+  r.reconciliation = rec;
   // The 13F rows are complete once the pre-tag rows were re-timed (/speed/ shows the 13F card from then).
   if (r.by_form['13F'] && (await env.DB.get('latency:retimed:v1'))) Object.assign(r.by_form['13F'], { complete: true });
   return r;
@@ -336,7 +419,7 @@ export async function publishLatency(env: Env, now: number): Promise<string> {
   // two hosts it changes every minute, so latency.json is rewritten every quiet minute.
   const fo = await import('./failover');
   // When this run finished (it publishes last), not the minute it started: "last ran 40 s ago" is then true.
-  const poller = fo.syncOn(env) ? { poller_host: fo.isCloudflare(env) ? 'cloudflare' : 'gene', poller_last_run: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z') } : {};
+  const poller = fo.syncOn(env) ? { poller_host: fo.isCloudflare(env) ? 'cloudflare' : 'server', poller_last_run: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z') } : {};
   const body = JSON.stringify({ ...(await buildLatency(env, now)), ...poller, generated_at: new Date(Math.floor(now / 60_000) * 60_000).toISOString().replace(/\.\d{3}Z$/, 'Z') });
   const same = body.replace(/"generated_at":"[^"]*"/, '');
   if (same === publishedLatency && new Date(now).getUTCMinutes() % 30 !== 0) return 'unchanged';

@@ -630,7 +630,7 @@ describe('copybook api', () => {
     expect(mail.text).not.toContain(REST);
     expect(mail.html).toMatch(/<td[^>]*><b>DHI<\/b> \[you own\]<\/td><td[^>]*>40,000,000<\/td><td[^>]*>\$6\.0B<\/td><td[^>]*>19\.0%<\/td>/);
     const lat = JSON.parse((await env.DB.get('alerts:latency'))!);
-    expect(lat[0]).toMatchObject({ host: 'gene', accession: NEWH, form: '13F-HR/A', coverage: 'curated' }); // this copy isn't the Cloudflare one
+    expect(lat[0]).toMatchObject({ host: 'server', accession: NEWH, form: '13F-HR/A', coverage: 'curated' }); // this copy isn't the Cloudflare one
 
     // Handled once: the next minute sends nothing.
     sent = [];
@@ -870,7 +870,7 @@ describe('copybook api', () => {
     expect(JSON.parse((await cfStore.get('cus:n'))!).email).toBe('member@example.com');
     await run(cf, min(2));
     expect(await run(gene, min(2))).toMatchObject({ poller: 'backup (cloudflare polls)' });
-    expect((await (await handleRequest(new Request('https://api.test/health'), gene)).json())).toMatchObject({ poller_host: 'cloudflare', poller_last_run: new Date(min(2)).toISOString().replace('.000', ''), api_host: 'gene', poller_builds: { cloudflare: 'cccccccccccc', gene: 'aaaaaaaaaaaa' } });
+    expect((await (await handleRequest(new Request('https://api.test/health'), gene)).json())).toMatchObject({ poller_host: 'cloudflare', poller_last_run: new Date(min(2)).toISOString().replace('.000', ''), api_host: 'gene', poller_builds: { cloudflare: 'cccccccccccc', server: 'aaaaaaaaaaaa' } });
 
     // A member follows Ackman on gene: Cloudflare's cron has it a minute later.
     await putFollows('n', { investors: ['dan-loeb', 'bill-ackman'] });
@@ -3149,8 +3149,17 @@ describe('copybook api', () => {
     expect(lat.by_coverage).toEqual({ curated: { count: 2, median_seconds: 70, p90_seconds: 100 }, any_filer: { count: 1, median_seconds: 60, p90_seconds: 60 } });
     expect(lat.recent.map((r: { accession: string }) => r.accession)).toEqual(['A1', 'A2', 'A3']);
     expect(lat.recent[1]).toEqual({ form: '4', manager: 'Warren Buffett', slug: 'warren-buffett', coverage: 'curated', accession: 'A2', accepted_at: expect.any(String), delivered_at: expect.any(String), seconds: 100, channel: 'email' });
-    expect(lat.alerts.map((a: { accession: string }) => a.accession)).toEqual(['A1', 'A2', 'A3']);
-    expect(lat.alerts[1]).toMatchObject({ form: '4', gap_seconds: 100, manager: 'Warren Buffett' });
+    // Every alert row, the replay included and flagged (the figures above leave it out), then the misses.
+    type Row = { accession: string; missed: boolean; replay: boolean; audience?: string; never: boolean; team_delivered_at: string | null; email_accepted_at: string | null };
+    const sentRows = lat.alerts.filter((a: Row) => !a.missed);
+    expect(sentRows.map((a: Row) => [a.accession, a.replay])).toEqual([['A1', false], ['R1', true], ['A2', false], ['A3', false]]);
+    expect(sentRows[2]).toMatchObject({ form: '4', gap_seconds: 100, manager: 'Warren Buffett', missed: false, never: false, first_alert_at: null });
+    // Team channel: the first successful chat or webhook post (the fixture's posts all land at t; A3's Slack too).
+    expect([sentRows[0].team_delivered_at, sentRows[3].team_delivered_at]).toEqual([new Date(t).toISOString().replace(/\.\d{3}Z$/, 'Z'), new Date(t).toISOString().replace(/\.\d{3}Z$/, 'Z')]);
+    expect(sentRows[0].email_accepted_at).toBe(sentRows[0].sent_at);
+    // The long-only routing outage: 16 13Fs never reached stock watchers.
+    const watchers = lat.alerts.filter((a: Row) => a.audience === 'stock_watchers');
+    expect([watchers.length, watchers.every((a: Row) => a.missed && a.never && a.email_accepted_at === null)]).toEqual([16, true]);
     expect(lat.alerts[0].form).toBe('13F-HR');
   });
 
@@ -3520,7 +3529,9 @@ describe('copybook api', () => {
     });
     const plain = (path: string) => handleRequest(new Request(`https://api.test${path}`, { headers: { authorization: `Bearer ${key}` } }), envF);
     const stale = await plain('/v1/bulk/2026Q2.csv.gz');
-    expect([stale.status, (await stale.arrayBuffer()).byteLength]).toEqual([200, 1_200_000]);
+    expect([stale.status, (await stale.arrayBuffer()).byteLength, stale.headers.get('content-length')]).toEqual([200, 1_200_000, '1200000']);
+    // RFC 9530: the sha256 of the bytes, base64 between colons.
+    expect(stale.headers.get('repr-digest')).toBe(`sha-256=:${Buffer.from(gzSha, 'hex').toString('base64')}:`);
     await vi.waitFor(() => expect(bulkPuts).toEqual([`${gzSha} 1200000`]));
     for (const r of [await plain('/v1/bulk/2026Q2.csv.gz'), await viaF('/v1/bulk/2026Q2.csv.gz')]) {
       const u = new URL(r.headers.get('location')!);

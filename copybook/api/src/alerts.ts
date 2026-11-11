@@ -18,6 +18,8 @@ export function alertable(f: { form: string; filing_date: string }, now = Date.n
 
 export interface Alert13F {
   slug: string;
+  /** When this host's poll first saw the filing (the feed read, or the missed-filing detector). */
+  detected?: string;
   /** The book fails Holdterm's data check (information table vs cover total, or mostly notes): never in Holdterm alerts. */
   suspect_book?: boolean;
   /** When it was sent (set in the day's store, for seeding a new feed). */
@@ -84,6 +86,8 @@ export interface Insider {
 
 export interface AlertEvent {
   id: string;
+  /** When this host's poll first saw the filing. */
+  detected?: string;
   /** When it was sent (set in the day's store, for seeding a new feed). */
   sent_at?: string;
   /** A company insider's open-market buy on a stock members own or watch. */
@@ -1009,6 +1013,7 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
   } catch (err) {
     errors.push(String(err));
   }
+  const detectedAt = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
   // Filings the missed-filing detector found unsent past their window (KV missed:queue).
   entries.push(...(await missedQueue(env)).filter((e) => e.form.startsWith('13F-HR')));
   // Backstop for a filing the feed pages missed (a failed poll, or a deadline-day burst): a few
@@ -1122,6 +1127,7 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
         accession: e.accession,
         sec_url: `https://www.sec.gov/Archives/edgar/data/${Number(e.cik)}/${e.accession.replace(/-/g, '')}/${e.accession}-index.html`,
         accepted: e.accepted,
+        detected: (e as { detected_at?: string }).detected_at?.replace(/\.\d{3}Z$/, 'Z') ?? detectedAt,
         moves,
         tickers,
         ...(changed ? { changed } : {}),
@@ -1145,6 +1151,12 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
   const later = fresh.filter((f) => f.moves_pending);
   if (later.length) await env.DB.put('alerts:pending-moves', JSON.stringify([...JSON.parse((await env.DB.get('alerts:pending-moves')) ?? '[]'), ...later]));
   const sent = await deliver(env, fresh, [], now);
+  // A 13F sent without its moves: its first alert time, for the latency row its moves follow-up logs.
+  if (later.length) {
+    const first = JSON.parse((await env.DB.get('alerts:first')) ?? '{}') as Record<string, string>;
+    for (const f of later) first[f.accession] ??= new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+    await env.DB.put('alerts:first', JSON.stringify(Object.fromEntries(Object.entries(first).slice(-500))));
+  }
   await queueHeld(env, fresh);
   // A curated filer filed: refresh the data now, so pages, history and moves follow within ~15 minutes.
   const filed = done.filter((e) => curated[e.cik]);
@@ -1160,18 +1172,21 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
  * KV alerts:replays (test sends of old filings) are marked and never counted. `coverage`: a curated
  * manager's filing, or any other filer's (followed, a peer, or a member's linked book).
  */
-async function logLatency(env: Env, filings: { slug: string; accession: string; accepted?: string; kind?: string; manager?: string; quarter?: string; form?: string; extra?: boolean; coalesced?: boolean; followup?: boolean }[], sentAt: number): Promise<void> {
+async function logLatency(env: Env, filings: { slug: string; accession: string; accepted?: string; detected?: string; replay_to?: string[]; kind?: string; manager?: string; quarter?: string; form?: string; extra?: boolean; coalesced?: boolean; followup?: boolean }[], sentAt: number): Promise<void> {
   if (!filings.length) return;
   const replays = new Set(JSON.parse((await env.DB.get('alerts:replays')) ?? '[]') as string[]);
   // Emails held for the daily limit: the row is kept but marked, and not counted as fast.
   const delayed = new Set(JSON.parse((await env.DB.get((await import('./email')).DELAYED_IDS)) ?? '[]') as string[]);
   const log = JSON.parse((await env.DB.get('alerts:latency')) ?? '[]') as unknown[];
-  // Which poller sent it: the trader scores each host's latency.
+  // Which poller sent it (the trader scores each host): `server` is ours, never named on public pages.
   const { isCloudflare } = await import('./failover');
-  const host = isCloudflare(env) ? 'cloudflare' : 'gene';
+  const host = isCloudflare(env) ? 'cloudflare' : 'server';
+  // A 13F timed by its moves follow-up: its first alert went earlier, without the moves.
+  const first = filings.some((f) => f.followup) ? (JSON.parse((await env.DB.get('alerts:first')) ?? '{}') as Record<string, string>) : {};
+  const sentIso = new Date(sentAt).toISOString().replace(/\.\d{3}Z$/, 'Z');
   const add = filings
     .filter((f) => f.accepted)
-    .map((f) => ({ host, slug: f.slug, manager: f.manager || undefined, quarter: f.quarter, form: f.form ?? '13F-HR', kind: f.kind ?? '13f', ...((f.kind ?? '13f') === '13f' ? { moves: true } : {}), accession: f.accession, accepted: f.accepted, coverage: f.extra ? 'any_filer' : 'curated', sent: new Date(sentAt).toISOString(), seconds: Math.round((sentAt - Date.parse(f.accepted!)) / 1000), ...(replays.has(f.accession) ? { replay: true } : {}), ...(delayed.has(f.accession) ? { email_delayed: true } : {}), ...(f.coalesced ? { coalesced: true } : {}), ...(f.followup ? { followup: true } : {}) }));
+    .map((f) => ({ host, detected_at: f.detected ?? null, first_alert_at: (f.kind ?? '13f') === '13f' ? (f.followup ? (first[f.accession] ?? null) : sentIso) : null, ...(f.replay_to?.length ? { test: true } : {}), slug: f.slug, manager: f.manager || undefined, quarter: f.quarter, form: f.form ?? '13F-HR', kind: f.kind ?? '13f', ...((f.kind ?? '13f') === '13f' ? { moves: true } : {}), accession: f.accession, accepted: f.accepted, coverage: f.extra ? 'any_filer' : 'curated', sent: new Date(sentAt).toISOString(), seconds: Math.round((sentAt - Date.parse(f.accepted!)) / 1000), ...(replays.has(f.accession) ? { replay: true } : {}), ...(delayed.has(f.accession) ? { email_delayed: true } : {}), ...(f.coalesced ? { coalesced: true } : {}), ...(f.followup ? { followup: true } : {}) }));
   // A filing season's worth: the public /latency page reports the whole season.
   await env.DB.put('alerts:latency', JSON.stringify([...add, ...log].slice(0, 2000)));
 }
@@ -1797,6 +1812,8 @@ export async function reconcileDry(env: Env, now: number, o: { offset?: number; 
 export async function reconciliation(env: Env): Promise<Record<string, unknown>> {
   // The two hosts load a new build up to an hour apart: until gene writes the new log, show the previous one.
   let log = JSON.parse((await env.DB.get(RECONCILED)) ?? '[]') as Reconciled[];
+  // When the first frozen verdict was written (gene's 07:41 UTC run, Nov 11); null while the previous log is shown.
+  const verdictsFrozenAt = log.length ? log.map((x) => x.checked_at).sort()[0] : null;
   // The previous log predates the disclosure rule: its alerts named in a /status/ entry take that entry's class.
   if (!log.length)
     log = (JSON.parse((await env.DB.get(RECONCILED_PREV)) ?? '[]') as Reconciled[]).map((x) => ({
@@ -1821,6 +1838,7 @@ export async function reconciliation(env: Env): Promise<Record<string, unknown>>
     held_pending: (JSON.parse((await env.DB.get('alerts:pending-check')) ?? '[]') as unknown[]).length,
     since: log.length ? log.reduce((m, x) => (x.checked_at < m ? x.checked_at : m), log[0].checked_at) : null,
     // Every row the gate held: still held (outcome null), then how each ended.
+    verdicts_frozen_at: verdictsFrozenAt,
     held: [
       ...(JSON.parse((await env.DB.get('alerts:pending-check')) ?? '[]') as Alert13F[]).flatMap((a) => (a.held ?? []).map((h): HeldEnd => ({ accession: a.accession, ticker: h.ticker ?? null, cusip: h.cusip, rule: h.reason, held_at: a.accepted ?? a.filing_date, released_at: null, outcome: null }))),
       ...(JSON.parse((await env.DB.get(HELD_LOG)) ?? '[]') as HeldEnd[]),
@@ -2192,6 +2210,7 @@ export async function runEventPoll(env: Env, now: number): Promise<Record<string
       errors.push(String(err));
     }
   }
+  const detectedAt = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
   entries.push(...(await missedQueue(env)).filter((e) => !e.form.startsWith('13F-HR')));
   // One filing appears once per party (Reporting/Issuer, Filed by/Subject): group by accession.
   const byAcc = new Map<string, FeedEntry[]>();
@@ -2323,7 +2342,7 @@ export async function runEventPoll(env: Env, now: number): Promise<Record<string
   if (pending.length) await env.DB.put('events:pending', JSON.stringify([...(JSON.parse((await env.DB.get('events:pending')) ?? '[]') as string[]), ...pending].slice(-200)));
   const sent = await deliver(env, [], fresh, now);
   const live = fresh.filter((e) => !isLate(e, now) && !e.cluster);
-  if (live.length) await logLatency(env, live.map((e) => ({ slug: e.slug || e.subject_tickers?.join(',') || '', manager: e.manager, form: e.form, kind: e.kind, accession: e.id, accepted: e.accepted, extra: !e.slug })), Date.now());
+  if (live.length) await logLatency(env, live.map((e) => ({ slug: e.slug || e.subject_tickers?.join(',') || '', manager: e.manager, form: e.form, kind: e.kind, accession: e.id, accepted: e.accepted, detected: e.detected ?? detectedAt, extra: !e.slug })), Date.now());
   return { status: 'checked', events: fresh.map((e) => `${e.kind} ${e.slug || e.manager} ${e.ticker ?? e.issuer ?? ''}${e.details_pending ? ' (pending)' : ''}`), ...sent, ...(errors.length ? { errors } : {}) };
 }
 

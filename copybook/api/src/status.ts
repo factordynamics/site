@@ -164,8 +164,8 @@ export async function buildStatus(env: Env, now: number, s: ProbeState) {
     types_guard: JSON.parse((await env.DB.get('types:guard')) ?? 'null'),
     // Bulk downloads: each listed file against what its link serves (size, sha256, ETag), hourly.
     bulk_check: JSON.parse((await env.DB.get('bulk:check')) ?? 'null'),
-    // Each poller's build (commit, 12 characters): Cloudflare's own, gene's from the probe of its /health.
-    poller_builds: { cloudflare: env.BUILD_SHA?.slice(0, 12) ?? null, gene: s.last?.build ?? null },
+    // Each poller's build (commit, 12 characters): Cloudflare's own, our server's from the probe of its /health.
+    poller_builds: { cloudflare: env.BUILD_SHA?.slice(0, 12) ?? null, server: s.last?.build ?? null },
     probe: {
       target: 'members API /health, from Cloudflare cron',
       interval_seconds: 60,

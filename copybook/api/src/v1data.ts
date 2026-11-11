@@ -786,8 +786,11 @@ ROUTES.push(
     }
     const obj = await env.HIST.get(`bulk/${file}`);
     if (!obj || (obj.size ?? 0) < MIN_BULK_BYTES) return v1error('not_yet_available', 501, `Coming: bulk export ${file} is not published yet${obj ? ' (the uploaded file failed its size check and waits to be regenerated)' : ''}. Parquet is coming; csv.gz is live for the quarters GET /v1/bulk lists.`);
+    // RFC 9530 Repr-Digest, so a client can check the bytes without the listing (the R2 link sends x-amz-meta-sha256).
+    const sha = f?.sha256 ?? obj.customMetadata?.sha256;
+    const digest: Record<string, string> = sha ? { 'repr-digest': `sha-256=:${btoa(String.fromCharCode(...(sha.match(/../g) ?? []).map((h) => parseInt(h, 16))))}:`, 'x-amz-meta-sha256': sha } : {};
     return new Response(obj.body, {
-      headers: { 'content-type': obj.httpMetadata?.contentType ?? 'application/octet-stream', 'content-disposition': `attachment; filename="copybook-13f-${file}"`, ...(obj.size != null ? { 'content-length': String(obj.size) } : {}), 'cache-control': 'private, max-age=3600', 'access-control-allow-origin': '*' },
+      headers: { ...digest, 'content-type': obj.httpMetadata?.contentType ?? 'application/octet-stream', 'content-disposition': `attachment; filename="copybook-13f-${file}"`, ...(obj.size != null ? { 'content-length': String(obj.size) } : {}), 'cache-control': 'private, max-age=3600', 'access-control-allow-origin': '*' },
     });
   }],
   ['GET', /^\/v1\/events$/, async ({ env, url }) => {
