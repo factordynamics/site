@@ -912,6 +912,36 @@ table.grid {
   margin-right: 6px;
   color: var(--dim);
 }
+/* A held line (share counts that don't fit across filings): an amber badge with an info icon, and its numbers
+   greyed with "as filed" under them, so neither reads as a real trade or a real position. */
+.tag.held {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: color-mix(in srgb, #d97706 14%, transparent);
+  color: color-mix(in srgb, #b45309 85%, var(--fg));
+  cursor: help;
+}
+[data-theme='dark'] .tag.held {
+  color: #fbbf24;
+}
+.as-filed {
+  color: var(--dim);
+  cursor: help;
+}
+.as-filed-note {
+  display: block;
+  font-size: 11px;
+  line-height: 1.2;
+}
+.held-note {
+  margin: 10px 0 0;
+}
+.build {
+  font-size: 12px;
+  color: var(--dim);
+  margin-top: 6px;
+}
 /* Activity pills: Added +14.6%, Trimmed, Sold out, New. */
 .tag {
   display: inline-block;

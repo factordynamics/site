@@ -7,6 +7,8 @@ import { A, navigate, usd, usePath } from './lib'
 import { dataSlug, firmName, fundPath, issuerName, publicSlug } from './names'
 import { price as PRICE } from './config'
 import { About, Account, Alerts, CONTACT, Consensus, Filings, Flows, Fund, Funds, Guide, Home, NotFound, reportError, Privacy, Stock, Terms } from './pages'
+/** The short commit this build comes from (vite.config.ts), shown in preview builds' footers. */
+declare const __COMMIT__: string
 
 // [path, label, g-key]; alerts is the header's button, not a nav tab.
 const NAV: [string, string, string][] = [
@@ -524,6 +526,7 @@ function App() {
             </A>
             <p className="tagline">What concentrated, long-term investors own and trade, from their filings with the SEC. No ads. Not investment advice.</p>
             <Fresh />
+            {location.hostname !== 'holdterm.factordynamics.com' && <p className="build">Preview build {__COMMIT__}</p>}
           </div>
           <nav aria-label="footer">
             <A to="/guide">How to read Holdterm</A>

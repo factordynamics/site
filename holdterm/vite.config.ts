@@ -1,4 +1,5 @@
 import react from '@vitejs/plugin-react'
+import { execSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -310,8 +311,15 @@ const pages = (): Plugin => ({
 
 // Holdterm: a static SPA on Cloudflare Pages (project "holdterm"), with no Functions. Data is read in the
 // browser straight from Copybook's static hosts.
+// The commit a build comes from, shown in the footer of preview builds (never on holdterm.factordynamics.com), so
+// reviewers can tell which build they are reading.
+let commit = 'dev'
+try {
+  commit = execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
+} catch {}
 export default defineConfig({
   base: '/',
+  define: { __COMMIT__: JSON.stringify(commit) },
   plugins: [react(), pages()],
   build: { target: 'es2022' },
 })

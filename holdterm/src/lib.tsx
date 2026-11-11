@@ -414,14 +414,35 @@ export function TabPanel({ tab, children }: { tab: string; children: ReactNode }
 }
 
 export const CHANGE_LABEL: Record<string, string> = { new: 'New', added: 'Added', trimmed: 'Trimmed', exited: 'Sold out', unchanged: '' }
+/** Why a line is held: its share counts don't fit across filings, so no trade is counted and its numbers are as filed. */
+export const HELD_WHY = 'The share counts in this 13F and the one before don’t fit together (often a stock split the filer didn’t adjust for), so no trade is counted and its shares and value are shown as filed.'
+/** A held line's shares, value or weight: greyed with a small "as filed" under it, or a dash on phones, where there
+ * is no room for the note and a greyed number still reads as a real one. */
+export const AsFiled = ({ children }: { children: ReactNode }) => (
+  <span className="as-filed" title={HELD_WHY}>
+    <span className="hide-sm">
+      {children}
+      <span className="as-filed-note">as filed</span>
+    </span>
+    <span className="show-sm">
+      —<span className="sr">not counted</span>
+    </span>
+  </span>
+)
 export function ChangeTag({ change, share_change, prev_shares, unclear }: { change: string | null; share_change?: number | null; prev_shares?: number | null; unclear?: boolean }) {
   // Share counts that don't fit across filings: no trade is counted, and the row says why instead of "No change".
-  // Phones say it in one word, so the tag doesn't squeeze the investor's name; the title gives the reason.
+  // A badge with an info icon, so it reads as a flag rather than a value; phones say it in one word so it doesn't
+  // squeeze the investor's name. The title (and the guide's list of tags) gives the reason.
   if (unclear)
     return (
-      <span className="dim" title="The share counts in this 13F and the one before don't fit together, so no trade is counted.">
+      <span className="tag held" title={HELD_WHY}>
+        <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden>
+          <circle cx="8" cy="8" r="6.6" fill="none" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M8 7.2v4M8 4.6v.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
         <span className="hide-sm">Shares don’t match</span>
         <span className="show-sm">Unclear</span>
+        <span className="sr"> {HELD_WHY}</span>
       </span>
     )
   if (!change || change === 'unchanged') return <span className="dim">No change</span>
