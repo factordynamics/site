@@ -2061,6 +2061,16 @@ describe('copybook api', () => {
     expect([own.status, (await own.json()).ok]).toEqual([200, true]);
     vi.stubGlobal('fetch', orig);
     expect((await worker.fetch(new Request('https://api.test/health'), env)).status).not.toBe(308);
+    // One-click unsubscribe for a member only gene has so far (just signed up; the minute sync copies 40 keys a minute):
+    // the Worker reads gene's published copy, records the unsubscribe, and publishes it for gene.
+    const r2 = new MemR2();
+    await r2.put('sync/gene/cus:free_gene1', JSON.stringify({ customer: 'free_gene1', email: 'new@reader.test', status: 'free', plan: 'free', interval: 'unknown', period_end: 0, subscription: '' }));
+    const cfEnv = { ...env, DB: new MemKV(), HIST: r2, MOVED_TO: 'https://gene.tail70ba3.ts.net/copybook/' } as Env;
+    const t = await signToken(env.SESSION_SECRET, 'unsub', 'free_gene1', 600);
+    const u = await worker.fetch(new Request(`https://copybook-api.factordynamics.workers.dev/unsubscribe?t=${t}`, { method: 'POST' }), cfEnv);
+    expect(await u.text()).toContain("Done: new@reader.test won't get the weekly any more.");
+    expect(JSON.parse(new TextDecoder().decode(r2.m.get('kv/cus:free_gene1'))).marketing_off).toBe(true);
+    expect(JSON.parse(new TextDecoder().decode(r2.m.get('sync/cloudflare/cus:free_gene1'))).marketing_off).toBe(true);
   });
 
   it('latency.json: the /latency report written to the public bucket when it changes, not every minute', async () => {

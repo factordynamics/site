@@ -307,7 +307,21 @@ export async function presignGet(env: Env, key: string, ttl: number, query: Reco
 export async function writeThrough<T>(env: Env, fn: (env: Env) => Promise<T>): Promise<T> {
   const store = r2kv(env.HIST, env.DB);
   const written = new Map<string, number>();
-  const out = await fn({ ...env, DB: recording(store, written) });
+  // Reads take the newest copy: our own write-through (kv/), or gene's published one (sync/gene/), which the minute
+  // sync copies into this KV at most 40 keys a minute. Without it a member gene just created reads as unknown here
+  // ("This link has expired" on a fresh unsubscribe link).
+  const fresh: KV = {
+    ...store,
+    async get(k) {
+      const [own, gene] = await Promise.all([env.HIST.get(`kv/${k}`), env.HIST.get(`sync/gene/${k}`)]);
+      const live = (o: typeof own) => !!o && !o.customMetadata?.deleted && !(o.customMetadata?.expires && Number(o.customMetadata.expires) < Date.now());
+      const pick = live(own) && (!gene || Number(own!.uploaded ?? 0) >= Number(gene.uploaded ?? 0)) ? own : gene;
+      for (const o of [own, gene]) if (o && o !== pick) await o.body.cancel?.();
+      if (pick) return new Response(pick.body).text();
+      return env.DB.get(k);
+    },
+  };
+  const out = await fn({ ...env, DB: recording(fresh, written) });
   await publish({ ...env, DB: store }, written, Date.now()).catch((e) => console.log(`unsubscribe publish: ${e}`));
   return out;
 }
