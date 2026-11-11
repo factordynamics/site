@@ -79,8 +79,8 @@ export const DATA_MANUAL: { id: string; date: string; kind: 'correction' | 'inci
     date: '2026-11-11',
     kind: 'correction',
     title: 'Long-only funds’ 13Fs didn’t alert members watching their stocks',
-    body: 'When ingest renamed the filer type “active” to “long_only” (Nov 9, about 06:00 UTC), the alert sender still matched only “hedge_fund” and “active”, so alerts on a stock you own or watch came only from hedge funds. Fixed Nov 11 at 05:36 UTC: long-only managers trigger them again.',
-    affected: 'Yes: from Nov 9 until 05:36 UTC Nov 11, 13F alerts for a watched or owned stock came only from hedge funds; 16 long-only funds’ Q3 filings (e.g. Baillie Gifford, FMR, First Eagle) didn’t alert members who watch those stocks without following the fund. Followers were unaffected, and Form 4 and 13D/G alerts were unaffected.',
+    body: 'Nov 9 – Nov 11, 06:36 UTC: 16 long-only funds’ Q3 13Fs (e.g. Baillie Gifford, FMR, First Eagle, Davis) didn’t alert members who watch a stock they traded without following the fund. A data field was renamed (active → long_only) and the alert filter still read the old name. Fixed Nov 11; a contract check now blocks deploys and data publishes if a field alerts depend on is renamed or missing.',
+    affected: 'Yes: those 16 filings’ alerts to members who watch a traded stock without following the fund. Members who follow those funds were unaffected. Only test inboxes were affected; the alerts weren’t re-sent, and the filings appear in Friday’s email.',
   },
   {
     id: 'alert-bond-priors',

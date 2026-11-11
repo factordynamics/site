@@ -304,7 +304,7 @@ export function Methodology() {
                 <span className="font-medium text-ink">Own prior.</span> On lines of $50K or more, the implied price moved by about a whole number k ≥ 2 and the share count moved by about the same k the other way (a split nobody has listed yet). Bond lines are checked only for a 100× jump against their own prior, because their value per dollar of principal isn’t a share price.
               </li>
             </ul>
-            <p className="mt-3 text-[15.5px] leading-relaxed text-ink-2">A held row is left out of the totals, recomputed through the data build, and sent only once it passes.</p>
+            <p className="mt-3 text-[15.5px] leading-relaxed text-ink-2">A held row is left out of the totals and recomputed through the data build. It is sent once the build agrees, or after 24 hours marked “Filer’s reported value looks wrong; shown as filed”.</p>
             <p className="mt-3 text-[15.5px] leading-relaxed text-ink-2">
               <span className="font-medium text-ink">After it goes out,</span> within 15 minutes of the data build publishing the filing, every emailed row is compared with /v1. A row fails if it is more than 10% off in value or has the wrong sign or direction. Each failure is classed:
             </p>

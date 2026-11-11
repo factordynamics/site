@@ -33,6 +33,8 @@ type StatusFile = {
   /** 13F alerts waiting on the API machine's moves fallback; the wait counts from EDGAR acceptance. */
   moves_queue?: { pending: number; oldest_wait_seconds: number | null; last_fallback_send_at?: string | null } | null
   freshness?: { last_13f?: { manager: string; accepted_at: string } | null }
+  /** Payments' check that the index.json fields alert routing reads are present and hold known values. */
+  index_contract?: { ok: boolean; build?: string | null; problems?: string[]; checked_at?: string }
   restarts?: { unplanned_7d: number; deploys_7d: number; short_unconfirmed_7d: number; rows?: { at: string; down_seconds: number; kind: 'deploy' | 'unplanned' | 'short_unconfirmed'; build?: string | null; prev_build?: string | null; note?: string }[] }
 }
 const KIND = { deploy: 'Deploy', unplanned: 'Unplanned restart', short_unconfirmed: 'Brief restart we couldn’t attribute' } as const
@@ -63,6 +65,12 @@ const host = (u: string) => {
     return u
   }
 }
+/** A reconciliation class, linked to the Data entries below that disclose it. */
+const DataLink = ({ children }: { children: ReactNode }) => (
+  <a href="#data" className="font-medium text-accent hover:text-accent-2">
+    {children}
+  </a>
+)
 const pct = (v: number) => `${(v <= 1 ? v * 100 : v).toFixed(2)}%`
 
 type Tone = 'up' | 'warn' | 'down' | 'wait' | 'none'
@@ -137,9 +145,9 @@ export function Status() {
   // Payments' after-send check of each 13F alert against the published build (latency.json reconciliation).
   // Shown only with payments' breakdown (matched, disclosed, explained, wrong); the bare pass/fail count
   // mostly counted bugs in the check itself.
-  type Rec = { checked: number; matched?: number; disclosed?: number; explained?: number; wrong?: number }
+  type Rec = { checked: number; matched?: number; disclosed?: number; explained?: number; wrong?: number; disclosed_totals?: number; wrong_totals?: number; no_rows?: number }
   const rawRec = (l as { reconciliation?: Rec } | null | undefined)?.reconciliation
-  const rec = rawRec && rawRec.checked > 0 && [rawRec.matched, rawRec.disclosed, rawRec.explained, rawRec.wrong].every((n) => typeof n === 'number') ? (rawRec as Required<Rec>) : null
+  const rec = rawRec && rawRec.checked > 0 && [rawRec.matched, rawRec.disclosed, rawRec.explained, rawRec.wrong].every((n) => typeof n === 'number') ? (rawRec as Required<Pick<Rec, 'checked' | 'matched' | 'disclosed' | 'explained' | 'wrong'>> & Rec) : null
   const full24 = (pr24?.checks ?? 0) >= 1296
 
   const apiTone: Tone = checking ? 'wait' : h ? 'up' : 'down'
@@ -215,18 +223,14 @@ export function Status() {
                 {pollerHost === 'cloudflare' || pollerHost == null ? 'Checks EDGAR every minute from Cloudflare, with the API machine as backup.' : 'Cloudflare’s checks paused; the API machine is polling EDGAR as backup.'}
               </Row>
               {rec && (
-                <Row name="Alert accuracy" tone={rec.wrong ? 'warn' : 'up'} state={`Alerts reconciled: ${rec.matched} matched`}>
+                <Row name="Alert accuracy" tone={rec.wrong + (rec.wrong_totals ?? 0) ? 'warn' : 'up'} state={`Alerts reconciled: ${rec.checked} checked`}>
                   {[
-                    rec.disclosed > 0 && (
-                      <span key="d">
-                        {rec.disclosed} wrong,{' '}
-                        <a href="#data" className="font-medium text-accent hover:text-accent-2">
-                          disclosed below
-                        </a>
-                      </span>
-                    ),
-                    rec.explained > 0 && <span key="e">{rec.explained} explained (a CUSIP change, or under $1,000)</span>,
-                    rec.wrong > 0 && <span key="w">{rec.wrong} wrong, under review</span>,
+                    <span key="m">{rec.matched} matched</span>,
+                    rec.disclosed > 0 && <DataLink key="d">{rec.disclosed} disclosed</DataLink>,
+                    (rec.disclosed_totals ?? 0) > 0 && <DataLink key="t">{rec.disclosed_totals} disclosed (totals)</DataLink>,
+                    rec.explained > 0 && <DataLink key="e">{rec.explained} explained</DataLink>,
+                    rec.wrong + (rec.wrong_totals ?? 0) > 0 && <DataLink key="w">{rec.wrong + (rec.wrong_totals ?? 0)} wrong, under review</DataLink>,
+                    (rec.no_rows ?? 0) > 0 && <span key="n">{rec.no_rows} no rows to check</span>,
                   ]
                     .filter(Boolean)
                     .map((x, i, a) => (
@@ -239,6 +243,12 @@ export function Status() {
                   <Link to="/methodology/#alert-checks" className="font-medium text-accent hover:text-accent-2">
                     How
                   </Link>
+                </Row>
+              )}
+              {st.data?.index_contract && st.data.index_contract.ok === false && (
+                <Row name="Alert routing data" tone="warn" state="A field alerts depend on is missing or unexpected">
+                  {st.data.index_contract.problems?.length ? `${st.data.index_contract.problems.join('; ')}. ` : ''}
+                  Data publishes are held until it’s fixed{st.data.index_contract.checked_at ? `; checked ${utc(st.data.index_contract.checked_at)}` : ''}.
                 </Row>
               )}
               <Row name="Filing data" tone={dataTone} state={lagS == null ? 'Not known yet' : `Last data build ${ago(lagS)} ago${dataTone === 'warn' ? ', later than usual for a filing day' : ''}`}>
