@@ -140,7 +140,6 @@ function SeasonLead() {
           ]
             .filter(Boolean)
             .join(' ')}
-          solid
           after={<FundLine />}
         />
       ) : (
@@ -218,7 +217,8 @@ function ProductFrame({ slug, demo, onPick }: { slug: string; demo: Manager[]; o
               onClick={() => onPick(d.slug)}
               className={`shrink-0 rounded-lg px-3 py-1 text-[13px] transition-colors ${d.slug === slug ? 'bg-card font-medium text-ink shadow-[var(--shadow-card)]' : 'text-ink-3 hover:text-ink'}`}
             >
-              <span className="sm:hidden">{d.manager.split(' ').slice(-1)[0]}</span>
+              {/* A surname for a person, the firm's first word for "Berkshire Hathaway (Warren Buffett)". */}
+              <span className="sm:hidden">{/\)$/.test(d.manager) ? d.manager.split(' ')[0] : d.manager.split(' ').slice(-1)[0]}</span>
               <span className="hidden sm:inline">{d.manager}</span>
             </button>
           ))}

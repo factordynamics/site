@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Resvg } from '@resvg/resvg-js'
-import { displayName, MARQUEE, possessive, renamed } from '../src/lib/names.mjs'
+import { BY_SLUG, displayName, MARQUEE, possessive, renamed, shortName } from '../src/lib/names.mjs'
 import { dayName, isEdgarDay } from '../src/lib/calendar.mjs'
 import { recapFilers, recapTitle } from '../src/lib/titles.mjs'
 import { getJson } from './getjson.mjs'
@@ -141,8 +141,9 @@ ${rows || `<text x="72" y="430" font-family="Geist" font-size="24" fill="#5f6572
   const r = JSON.parse(readFileSync(join(out, 'd', 'recap', `${s.quarter}.json`), 'utf8'))
   const q = qLabel(r.quarter)
   // Who did it, not the company name: "Pzena", or "+3 funds" when several did.
-  const FIRMS = new Set(['Tweedy Browne', 'Ruane Cunniff'])
-  const short = (n) => (FIRMS.has(n) || n.split(' ').length !== 2 ? n : n.split(' ')[1])
+  // Firms keep their name ("Kahn Brothers", never "Brothers"); "Berkshire Hathaway (Warren Buffett)" fits as the firm.
+  const FIRMS = new Set(['Tweedy Browne', 'Ruane Cunniff', 'Boston Partners', 'Consulta Ltd', ...Object.values(BY_SLUG)])
+  const short = (n) => (FIRMS.has(n) ? shortName(n) : n.split(' ').length !== 2 ? n : n.split(' ')[1])
   const who = (people, n) => (n > 1 ? `${n} superinvestors` : short(displayName(people[0]?.manager ?? '')))
   // rows: [ticker, who, value]
   const col = (rows, x0, title, fg) =>

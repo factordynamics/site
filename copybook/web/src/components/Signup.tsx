@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { pricingTo } from '../lib/data'
-import { signupLive, TRIAL_DAYS } from '../config'
+import { signupLive, TRIAL_DAYS, TRIAL_LINE } from '../config'
 import { call, getToken, isFree, isPaying, useMemberState } from '../lib/account'
 import { signupDone, signupError } from './FollowSignup'
 import { utmTags } from '../lib/attribution'
@@ -39,6 +39,7 @@ export function Signup({ source, className = '' }: { source: string; className?:
           <Button to={pricingTo()} variant="outline" className="mt-4">
             Start {TRIAL_DAYS}-day free trial <Arrow />
           </Button>
+          <p className="mt-1.5 text-[12.5px] text-ink-3">{TRIAL_LINE}</p>
         </div>
         {onFriday ? (
           <p className="shrink-0 text-[13.5px] text-ink-2 md:w-[380px] md:pt-1">You’re on the Friday email. Copy adds an email for each filing from the funds you follow, checked on EDGAR every minute.</p>

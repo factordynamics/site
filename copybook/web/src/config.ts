@@ -89,6 +89,8 @@ export const renewalTerms = (id?: string) =>
 export const checkoutEnabled = () => Boolean(checkout.monthly || checkout.yearly)
 
 export const TRIAL_DAYS = 14
+/** Under every trial button: the terms and what follows the trial. */
+export const TRIAL_LINE = `Card required, nothing charged before day ${TRIAL_DAYS + 1}. Then $${prices.monthly}/month or $${prices.yearly}/year. Cancel anytime.`
 export const TRIAL_TERMS = trialTerms('copy')
 // A referral takes one month of the monthly price off the first charge after the trial, on either
 // interval (the API's coupon: amount_off = a month, duration once). Monthly: that month is free.

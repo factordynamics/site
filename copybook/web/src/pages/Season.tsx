@@ -9,7 +9,7 @@ import { FAMOUS, FridayBox } from '../components/FridayBox'
 import { FollowButton } from '../components/FollowButton'
 import { HedgeFlow } from '../components/HedgeFlow'
 import { EdgarClosed } from '../components/EdgarClosed'
-import { TRIAL_DAYS } from '../config'
+import { TRIAL_DAYS, TRIAL_LINE } from '../config'
 import { dateFmt, dateLabel, displayName, loadIndex, money, NUM, pricingTo, quarterLabel, useAsync, useTick, useTitle } from '../lib/data'
 import { seasonTitle } from '../lib/titles.mjs'
 import { thirteenFStats } from '../lib/latencyStats.mjs'
@@ -124,7 +124,6 @@ export function Season() {
               others={up?.people ?? []}
               collapsed
               trial={trialLine}
-              solid
             />
           )}
           {getToken() && !passed && next && (
@@ -133,7 +132,7 @@ export function Season() {
               {!isPaying(member) && (
                 <div className="mt-3">
                   <TrialButton />
-                  <p className="mt-1.5 text-[12.5px] text-accent-2/80">Card required, nothing charged before day {TRIAL_DAYS + 1}.</p>
+                  <p className="mt-1.5 text-[12.5px] text-accent-2/80">{TRIAL_LINE}</p>
                 </div>
               )}
               {/* Signed in (free or paid): a Follow button per name, saved to the account with the session. */}
@@ -226,9 +225,12 @@ export function Season() {
               <p className="flex items-center gap-2 text-[13.5px] text-accent-2">
                 <Lock /> {rows.length - FREE} more names, and an email each time a fund you follow files, with Copy
               </p>
-              <Link to="/pricing/" className="inline-flex h-8 items-center rounded-full bg-accent px-3.5 text-[13px] font-medium text-white hover:bg-accent-2">
-                Start 14-day free trial
-              </Link>
+              <span className="flex flex-col items-start gap-1">
+                <Link to="/pricing/" className="inline-flex h-8 items-center rounded-full bg-accent px-3.5 text-[13px] font-medium text-white hover:bg-accent-2">
+                  Start {TRIAL_DAYS}-day free trial
+                </Link>
+                <span className="text-[12px] text-accent-2/80">{TRIAL_LINE}</span>
+              </span>
             </div>
           )}
           {d && paid && (

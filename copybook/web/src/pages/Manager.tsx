@@ -12,7 +12,7 @@ import { CsvButton } from '../components/CsvButton'
 import { FollowButton } from '../components/FollowButton'
 import { Share } from '../components/Share'
 import { FundNotice, SinceLast13F, fundStatus } from '../components/FundNotes'
-import { fridayAfter, loadCardSet, loadCards, loadExpected, loadRecap, recapPath, seasonNow, seasonStatus, shortDay, stockPath, usualTime } from '../lib/stocks'
+import { aboutET, fridayAfter, loadCardSet, loadCards, loadExpected, loadRecap, recapPath, seasonNow, seasonStatus, shortDay, stockPath, usualTime } from '../lib/stocks'
 import { EdgarClosed } from '../components/EdgarClosed'
 import { TRIAL_DAYS } from '../config'
 import { track } from '../lib/track'
@@ -142,7 +142,7 @@ export function ManagerPage() {
           top={
             q3 && q3.kind !== 'filed' ? (
               <p className="mb-2 text-[13.5px] text-ink-2">
-                <span className="font-medium text-accent-2">{q3.kind === 'expected' && due ? `${q3.text.replace(' expected', ' 13F expected')}, ${usualTime(due)}.` : `${q3.text.replace(' due', ' 13F due')}, the filing deadline.`}</span> {fridayLine(f.manager, q3.day)}
+                <span className="font-medium text-accent-2">{q3.kind === 'expected' && due ? `${q3.text.replace(' expected', ' 13F expected')}, ${usualTime(due)}.` : `${q3.text.replace(' due', ' 13F due')}, the filing deadline.`}</span> {fridayLine(f.manager, q3.day, f.name)}
               </p>
             ) : undefined
           }
@@ -151,9 +151,8 @@ export function ManagerPage() {
           trial={
             q3 && q3.kind === 'expected' && due?.expected_date
               ? copyGap(due.expected_date, due.time_et)
-              : `Want ${possessive(shortFirst(f.manager))} 13F as it’s filed? Copy emails it with its moves, checked on EDGAR every minute.`
+              : `Want ${possessive(shortFirst(f.manager, f.name))} 13F as it’s filed? Copy emails it with its moves, checked on EDGAR every minute.`
           }
-          solid
         />
       )}
       {f && q3 && q3.kind !== 'filed' && getToken() && (
@@ -167,11 +166,11 @@ export function ManagerPage() {
             <>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <Link to={pricingTo()} onClick={() => track('trial_click')} className="inline-flex min-h-10 items-center rounded-full bg-accent px-4.5 py-2 text-[14px] font-medium leading-tight text-white shadow-[0_1px_2px_rgb(12_14_19/0.2)] hover:bg-accent-2">
-                  Get {possessive(shortFirst(f.manager))} 13F as it’s filed, {TRIAL_DAYS} days free
+                  Get {possessive(shortFirst(f.manager, f.name))} 13F as it’s filed, {TRIAL_DAYS} days free
                 </Link>
               </div>
               <p className="mt-1.5 text-[12.5px] text-accent-2/80">Card required, nothing charged before day {TRIAL_DAYS + 1}.</p>
-              <p className="mt-2 text-[13px] text-accent-2/85">{fridayLine(f.manager, q3.day)}</p>
+              <p className="mt-2 text-[13px] text-accent-2/85">{fridayLine(f.manager, q3.day, f.name)}</p>
             </>
           )}
         </div>
@@ -521,22 +520,21 @@ function RecapLabel() {
   return <>{recapTitle({ quarter: d.quarter, filed: d.superinvestors.filed, total: d.superinvestors.total, names: d.filing.filter((f) => f.filed).map((f) => displayName(f.manager)), final: d.final }).replace(/ · Copybook$/, '')}</>
 }
 
-// "Ackman" for a person, the name in full for a firm.
-const shortFirst = (n: string) => (/^[A-Z][a-z]+ [A-Z][a-z]+$/.test(n) ? n.split(' ')[1] : n)
+// "Ackman" for a person, the name in full for a firm: a two-word name the filer's own name starts with ("Kahn
+// Brothers", Kahn Brothers Group; Tweedy Browne, Ruane Cunniff) is a firm, never "Brothers'".
+const shortFirst = (n: string, filer = '') => (/^[A-Z][a-z]+ [A-Z][a-z]+$/.test(n) && !filer.toLowerCase().startsWith(n.split(' ')[0].toLowerCase()) ? n.split(' ')[1] : n)
 
 /** When a free follower gets a filing made on `day`: Friday's email, N days later. */
 /** "Copy: alert on Mon Nov 16 ~4 pm ET, 4 days before Friday's email." Until the fund files (expected.json). */
 function copyGap(day: string, timeEt: number) {
   const fr = fridayAfter(day)
-  const h = Math.round(timeEt / 60)
-  const at = `~${((h + 11) % 12) + 1} ${h < 12 ? 'am' : 'pm'} ET`
-  return `Copy: alert on ${shortDay(day)} ${at}, ${fr.days === 0 ? 'hours before' : `${fr.days} ${fr.days === 1 ? 'day' : 'days'} before`} Friday’s email.`
+  return `Copy: alert on ${shortDay(day)} ${aboutET(timeEt)}, ${fr.days === 0 ? 'hours before' : `${fr.days} ${fr.days === 1 ? 'day' : 'days'} before`} Friday’s email.`
 }
 
-function fridayLine(name: string, day: string) {
+function fridayLine(name: string, day: string, filer: string) {
   const fr = fridayAfter(day)
   const when = fr.days === 0 ? 'the same evening' : `${fr.days} ${fr.days === 1 ? 'day' : 'days'} later`
-  return `Free followers get ${possessive(shortFirst(name))} moves in Friday’s email (${shortDay(fr.day)}, ${when}).`
+  return `Free followers get ${possessive(shortFirst(name, filer))} moves in Friday’s email (${shortDay(fr.day)}, ${when}).`
 }
 
 /** A fund whose holdings another entity files (Ackman: Pershing Square Inc.): said once, under the name. */

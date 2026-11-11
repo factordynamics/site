@@ -11,10 +11,10 @@ import { downloadFile, getToken, isPro, loadEvents, loadHolders, useMember, type
 import { FridayBox } from '../components/FridayBox'
 import { issuerLatest, whenLabel } from '../lib/insiders'
 import { Arrow, Badge, Button, edgeFade, Lock, Monogram, NotCounted, Panel, Skeleton, Stat } from '../components/ui'
-import { DATA, getJSON, dateLabel, pricingTo, displayName, money, pct, quarterLabel, sharesFmt, loadIndex, typesAsOfLabel, useAsync, useTitle, flagNote, flagOf, NOT_COUNTED } from '../lib/data'
+import { DATA, getJSON, dateLabel, pricingTo, displayName, money, pct, quarterLabel, sharesFmt, loadIndex, typesAsOfLabel, useAsync, useTitle, flagNote, flagOf, heldLinesNote, NOT_COUNTED } from '../lib/data'
 import { dueLead, stockTitle } from '../lib/titles.mjs'
-import { MARQUEE, possessive } from '../lib/names.mjs'
-import { loadFilerHolders, loadStock, recapPath, resolveTicker, seasonNow, stockPath, type StockHolder } from '../lib/stocks'
+import { MARQUEE, possessive, shortName } from '../lib/names.mjs'
+import { aboutET, dayET, fridayAfter, loadExpected, loadFilerHolders, loadStock, recapPath, resolveTicker, seasonNow, shortDay, stockPath, type StockHolder } from '../lib/stocks'
 
 const CHANGE: Record<string, { label: string; tone: 'up' | 'down' | 'neutral' }> = {
   new: { label: 'New', tone: 'up' },
@@ -32,6 +32,8 @@ export function StockPage() {
   // The lens lives in the URL (?funds=all) so a view can be shared; superinvestors by default.
   const [params, setParams] = useSearchParams()
   const idx = useAsync(loadIndex, [])
+  // Signed out: who files next among this stock's superinvestors, the date the trial beats Friday's email by.
+  const exp = useAsync(() => (getToken() ? Promise.resolve(null) : loadExpected()), [])
   const lens = params.get('funds')
   const view: 'featured' | 'all' | 'hedge' | 'smart' | 'filers' = lens === 'all' || lens === 'filers' || lens === 'smart' || lens === 'hedge' ? lens : 'featured'
   const setView = (k: typeof view) => setParams(k === 'featured' ? {} : { funds: k }, { replace: true })
@@ -183,6 +185,14 @@ export function StockPage() {
   const num = (n: number) => n.toLocaleString('en-US')
   // No superinvestor here has filed the season's quarter, and none has Form 4 or 13D/G news: lead with who files next.
   const supHolders = (d?.holders ?? []).filter((h) => h.featured).sort((a, b) => b.value - a.value)
+  // Named in the box: the best-known holder first, then the two largest others by value.
+  const first = supHolders.length ? star(supHolders) : null
+  const heldBy = first ? [first, ...supHolders.filter((h) => h !== first).slice(0, 2)].map((h) => h.manager) : []
+  const today = dayET()
+  const dueBy = new Map((exp.data?.expected ?? []).filter((x) => x.expected_date && x.expected_date >= today).map((x) => [x.slug, x]))
+  const nextHolder = supHolders
+    .flatMap((h) => (dueBy.has(h.slug) ? [{ h, x: dueBy.get(h.slug)! }] : []))
+    .sort((a, b) => a.x.expected_date!.localeCompare(b.x.expected_date!) || a.x.time_et - b.x.time_et)[0]
   const due = d && supHolders.length && !supHolders.some((h) => h.quarter === sq) && !(d.since ?? []).length ? dueLead({ quarter: sq, deadline: seasonNow().deadline, names: supHolders.map((h) => h.manager) }) : null
   const countLabel = (f: { cur: number; older: number }) => `${num(f.cur)}${f.older ? ` (+${num(f.older)} older)` : ''}`
   return (
@@ -232,14 +242,19 @@ export function StockPage() {
             supHolders.length ? (
               <p className="mb-2 text-[13.5px] font-medium text-accent-2">
                 {supHolders.length} {supHolders.length === 1 ? 'superinvestor holds' : 'superinvestors hold'} {d.ticker}
-                {supHolders.length > 1 ? `, including ${star(supHolders).manager}` : `: ${star(supHolders).manager}`}
+                {supHolders.length > heldBy.length ? ', including ' : ': '}
+                {heldBy.length > 1 ? `${heldBy.slice(0, -1).join(', ')} and ${heldBy.at(-1)}` : heldBy[0]}
               </p>
             ) : undefined
           }
           title={`Get superinvestor moves in ${d.ticker} free, in Friday’s email`}
           people={[{ slug: d.ticker, name: d.ticker }]}
-          trial={supHolders.length ? `Copy: an alert whenever ${supHolders.length === 1 ? 'it' : 'one of them'} trades ${d.ticker}, as the 13F is filed.` : `Want the moves in ${d.ticker} as they’re filed? Copy emails each 13F as it’s filed, checked on EDGAR every minute.`}
-          solid
+          trial={
+            nextHolder
+              ? `Next ${d.ticker} holder to file: ${shortName(nextHolder.h.manager)}, ${shortDay(nextHolder.x.expected_date!)} ${aboutET(nextHolder.x.time_et)}. Copy alerts you then; the free email lands ${shortDay(fridayAfter(nextHolder.x.expected_date!).day)}.`
+              : supHolders.length
+                ? `Copy: an alert when ${supHolders.length === 1 ? 'it files' : 'one of them files'} a 13F, Form 4 or 13D that moves ${d.ticker}, checked on EDGAR every minute.`
+                : `Want the moves in ${d.ticker} as they’re filed? Copy emails each 13F as it’s filed, checked on EDGAR every minute.`}
         />
       )}
 
@@ -413,7 +428,7 @@ export function StockPage() {
                       <QuarterTag q={h.quarter} fresh={multi && h.quarter === d.quarters[0]} />
                       {(h.change === 'new' || h.change === 'exited') && <Badge tone={CHANGE[h.change].tone}>{CHANGE[h.change].label}</Badge>}
                     </span>
-                    {[h.note, h.held_note].filter(Boolean).map((t) => (
+                    {[h.note, heldLinesNote(h.held_lines, true)].filter(Boolean).map((t) => (
                       <span key={t} className="mt-0.5 block text-[12px] leading-snug text-ink-3">
                         {t}
                       </span>

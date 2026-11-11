@@ -62,7 +62,7 @@ export const flagOf = (h: Flaggable): Flag | null =>
   h.unreliable === 'value' || h.unreliable === 'shares' || h.unreliable === 'both' ? h.unreliable : h.suspect_units || h.change === 'unknown' || h.suspect_reason === 'reissue_ratio_not_applied' ? 'both' : null
 /** A flagged row: never in a page's dollar totals or biggest-moves lists. */
 export const unreliable = (h: Flaggable) => flagOf(h) != null
-export const NOT_COUNTED = 'Share count unreliable in this filing, not counted'
+export const NOT_COUNTED = 'Share count unreliable in this filing'
 /** The line a flagged row shows in place of its trade or dollar figure; `short` for a narrow badge. */
 export function flagNote(h: Flaggable, short = false): string | null {
   const f = flagOf(h)
@@ -83,13 +83,15 @@ export function flagNote(h: Flaggable, short = false): string | null {
 
 export type HeldLine = { shares: number; value: number; implied_price?: number | null }
 /** Lines ingest held out of a counted row, as filed and with no trade figure: "1 line not counted. As filed: 2,212,795
- *  shares, $9.8M (≈$4.44/sh)". Null when the row has none. */
-export function heldLinesNote(lines?: HeldLine[] | null): string | null {
+ *  shares, $9.8M (≈$4.44/sh)"; beside the ⚠ not counted pill (`pill`), "1 line as filed: …" so it's said once. Null
+ *  when the row has none. */
+export function heldLinesNote(lines?: HeldLine[] | null, pill = false): string | null {
   if (!lines?.length) return null
   const shares = lines.reduce((t, l) => t + l.shares, 0)
   const value = lines.reduce((t, l) => t + l.value, 0)
   const price = shares ? ` (≈$${(value / shares).toFixed(2)}/sh)` : ''
-  return `${lines.length} ${lines.length === 1 ? 'line' : 'lines'} not counted. As filed: ${sharesFmt(shares)} shares, ${money(value)}${price}`
+  const n = `${lines.length} ${lines.length === 1 ? 'line' : 'lines'}`
+  return `${pill ? `${n} as filed` : `${n} not counted. As filed`}: ${sharesFmt(shares)} shares, ${money(value)}${price}`
 }
 
 /** "XOM" as "XOM puts" or "XOM calls" for an option row, so an option move never reads as a stock trade. */

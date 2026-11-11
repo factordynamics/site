@@ -297,6 +297,12 @@ export function seasonStatus(m: { quarter?: string; filing_date?: string; status
   return { kind: 'due' as const, day: due, text: `${Q} due by ${shortDay(due)}` }
 }
 
+/** "~4 pm ET" for a usual filing time (New York minutes after midnight). */
+export const aboutET = (m: number) => {
+  const h = Math.round(m / 60)
+  return `~${((h + 11) % 12) + 1} ${h < 12 ? 'am' : 'pm'} ET`
+}
+
 /** The free Friday email that carries a filing made on `day` (YYYY-MM-DD): it goes out Fridays at 9 pm ET. */
 export function fridayAfter(day: string) {
   const t = new Date(`${day}T12:00:00Z`)

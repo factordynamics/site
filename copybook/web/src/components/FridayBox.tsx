@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { prices, TRIAL_DAYS } from '../config'
+import { TRIAL_DAYS, TRIAL_LINE } from '../config'
 import { pricingTo } from '../lib/data'
 import { track } from '../lib/track'
 import { FollowSignup } from './FollowSignup'
@@ -18,7 +18,7 @@ export const FAMOUS = [
   { slug: 'seth-klarman', name: 'Seth Klarman' },
 ]
 
-export function FridayBox({ title, people, others, collapsed = false, kind = 'investor', trial, solid = false, top, after, className = '' }: { title: string; people: { slug: string; name: string }[]; others?: { slug: string; name: string }[]; collapsed?: boolean; kind?: 'investor' | 'stock'; trial: ReactNode; solid?: boolean; top?: ReactNode; after?: ReactNode; className?: string }) {
+export function FridayBox({ title, people, others, collapsed = false, kind = 'investor', trial, top, after, className = '' }: { title: string; people: { slug: string; name: string }[]; others?: { slug: string; name: string }[]; collapsed?: boolean; kind?: 'investor' | 'stock'; trial: ReactNode; top?: ReactNode; after?: ReactNode; className?: string }) {
   return (
     <div className={`rounded-xl bg-accent-soft px-4 py-3.5 text-[15px] leading-snug text-accent-2 ${className}`}>
       {top}
@@ -29,10 +29,11 @@ export function FridayBox({ title, people, others, collapsed = false, kind = 'in
       </Link>
       <div className="mt-4 border-t border-accent/20 pt-4">
         <p className="text-[14px] text-ink-2">{trial}</p>
-        <Button to={pricingTo()} variant={solid ? 'primary' : 'outline'} onClick={() => track('trial_click')} className="mt-2.5 shrink-0">
+        {/* One solid button per box: the free email's. The trial stays outline (retail, Nov 11). */}
+        <Button to={pricingTo()} variant="outline" onClick={() => track('trial_click')} className="mt-2.5 shrink-0">
           Start {TRIAL_DAYS}-day free trial
         </Button>
-        <p className="mt-1.5 text-[12.5px] text-ink-3">Card required, nothing charged before day {TRIAL_DAYS + 1}. Then ${prices.monthly}/month or ${prices.yearly}/year. Cancel anytime.</p>
+        <p className="mt-1.5 text-[12.5px] text-ink-3">{TRIAL_LINE}</p>
         {after}
       </div>
     </div>
