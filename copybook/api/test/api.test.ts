@@ -947,6 +947,16 @@ describe('copybook api', () => {
     await run(cf, min(3));
     expect(JSON.parse((await cfStore.get('follows:n'))!).investors).toEqual(['dan-loeb', 'bill-ackman']);
 
+    // A revocation on gene (a member ends every session) is published at once, not at gene's next minute: the backup
+    // refuses the old session within seconds if members are on it (the drill: a seat removed on gene took 31 s).
+    const { signToken: st } = await import('../src/tokens');
+    const oldSess = await st(env.SESSION_SECRET, 'session', 'n', 3600);
+    const idx0 = JSON.parse(text('sync/gene.json') ?? '{"keys":{}}').keys['cus:n'] ?? 0;
+    vi.useFakeTimers({ toFake: ['Date'], now: min(3) + 20_000 });
+    expect((await worker.fetch(new Request('https://api.test/me/sessions/revoke', { method: 'POST', headers: { authorization: `Bearer ${oldSess}` } }), gene as Env)).status).toBe(200);
+    vi.useRealTimers();
+    expect(JSON.parse(text('sync/gene.json')!).keys['cus:n']).toBeGreaterThan(idx0);
+    expect(JSON.parse(text('sync/gene/cus:n')!).sessions_after).toBeGreaterThan(0);
     // gene can't reach Cloudflare's R2: it stays the backup (it can't tell whether Cloudflare polls).
     geneBlind = true;
     expect(await run(gene, min(3))).toMatchObject({ poller: 'backup (cloudflare heartbeat unreadable)' });

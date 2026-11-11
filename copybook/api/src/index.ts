@@ -1852,7 +1852,15 @@ export default {
               : proxyApi(req, env, b),
       );
     }
-    return fromProxy(req, env).then((r) => serve(r, env));
+    const res = await fromProxy(req, env).then((r) => serve(r, env));
+    // gene: a revocation (a removed seat, a deleted key, ended sessions, an erase) is published to the backup now, not at the
+    // next minute, so it holds there within seconds if members are moved to the Worker (the drill: 31 s).
+    const rp = new URL(req.url).pathname;
+    if (res.ok && (req.method === 'DELETE' || /\/revoke$|^\/ops\/(revoke-key|erase-member|erase-leads)$/.test(rp)) && /^\/(seats|keys|me|ops)(\/|$)/.test(rp)) {
+      const fo = await import('./failover');
+      if (fo.syncOn(env)) await fo.geneSync(env, Date.now()).catch((e) => console.log(`revocation publish: ${e}`));
+    }
+    return res;
   },
   async scheduled(event: { scheduledTime?: number }, env: Env, ctx: { waitUntil(p: Promise<unknown>): void }): Promise<void> {
     ctx.waitUntil(runScheduled(env, event.scheduledTime ?? Date.now()).then((r) => console.log(`cron: ${JSON.stringify(r)}`)));
