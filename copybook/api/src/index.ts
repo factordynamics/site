@@ -135,7 +135,10 @@ async function authed(req: Request, env: Env): Promise<Member | null> {
   const p = await verifyToken(env.SESSION_SECRET, token, 'session');
   const m = p ? await getMember(env, p.c) : null;
   // Signed out everywhere (a Fund owner revoked the seat's sessions): sessions issued before then are refused.
-  return m && !(m.sessions_after && (p!.i ?? p!.x - SESSION_TTL) <= m.sessions_after) ? m : null;
+  if (!m || (m.sessions_after && (p!.i ?? p!.x - SESSION_TTL) <= m.sessions_after)) return null;
+  // A signup's provisional session: until the member signs in by an emailed link or subscribes.
+  if (p!.s === 'provisional' && (m.verified || m.status !== 'free')) return null;
+  return m;
 }
 
 async function issueSession(env: Env, m: Member) {
@@ -514,7 +517,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       // Alert emails handed to the mailer this UTC day, by hour (both hosts: stats:sent is synced).
       const day0 = Math.floor(Date.now() / 86400_000) * 24;
       const byHour = Object.fromEntries((JSON.parse((await env.DB.get('stats:sent')) ?? '[]') as [number, number][]).filter(([hr]) => hr >= day0).map(([hr, n]) => [`${String(hr - day0).padStart(2, '0')}h`, n]));
-      return { ...m, by_kind: kindsView(m.used, m.kinds), alert_emails_today_by_hour: byHour, daily_cap: 100, monthly_cap: 3000, reserve_for_account_mail: 15 };
+      return { ...m, by_kind: kindsView(m.used, m.kinds), alert_emails_today_by_hour: byHour, daily_cap: 100, monthly_cap: 3000, reserve_for_account_mail: 15, policy: (await import('./email')).MAIL_POLICY };
     })(), moves_queue: await st.movesQueue(env, await st.alertHealth(env, Date.now())), ...business }, 200, h);
   }
 
@@ -1034,6 +1037,8 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       if (!p || !m) return json({ ok: false, error: 'link expired or invalid' }, 401, h);
       // A link from before the member's sessions were ended (a removed or signed-out seat's old invite) is dead too.
       if (m.sessions_after && !((p.i ?? 0) > m.sessions_after)) return json({ ok: false, error: 'This sign-in link is no longer valid. Ask for a new one.', code: 'link_revoked' }, 401, h);
+      // The address is proven: provisional sessions from the signup form stop working.
+      if (!m.verified) await putMember(env, { ...m, verified: true });
       // Once: the link's nonce is marked used until the link would have expired anyway.
       if (p.n) {
         if (await env.DB.get(`used:${p.n}`)) return json({ ok: false, error: 'This sign-in link was already used. Ask for a new one.', code: 'link_used' }, 401, h);

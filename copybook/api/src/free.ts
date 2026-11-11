@@ -45,6 +45,21 @@ type Reply = { status: number; body: Json; headers?: Record<string, string> };
 /** What happened to each requested follow: stored, already followed, or refused at the free cap. */
 type FollowResult = 'added' | 'already' | 'cap_reached';
 
+/**
+ * What became of an account email: sent; queued (Resend refused it, e.g. its daily quota: it retries every minute and
+ * goes out once Resend accepts, at the latest after the 00:00 UTC reset); test_inbox (a test address, launch week).
+ */
+function mailState(status: string): { state: 'sent' | 'queued' | 'test_inbox' | 'not_sent'; send_at?: string } {
+  if (status === '200') return { state: 'sent' };
+  if (status === 'sunk') return { state: 'test_inbox' };
+  if (/\b(429|5\d\d)\b/.test(status)) {
+    const next = new Date();
+    next.setUTCHours(24, 0, 0, 0);
+    return { state: 'queued', ...(/429/.test(status) ? { send_at: next.toISOString().replace(/\.\d{3}Z$/, 'Z') } : {}) };
+  }
+  return { state: 'not_sent' };
+}
+
 /** /signup tries an hour, signed out: per email, and per IP (mobile carriers put many people behind one address). */
 export const SIGNUP_PER_EMAIL = 5;
 export const SIGNUP_PER_IP = 30;
@@ -117,8 +132,9 @@ export async function handleSignup(env: Env, b: Json, ip: string, signedIn?: str
   if (cur && cur.status !== 'canceled') {
     if (cur.status !== 'free') return { status: 200, body: { ok: true, ...(follow ? { following: false, follow: 'sign_in' } : {}) } };
     const r = follow ? await addFollows(cur) : null;
-    let signIn: 'sent' | 'not_needed' | 'rate_limited' | 'already_sent' = 'not_needed';
+    let signIn: 'sent' | 'not_needed' | 'rate_limited' | 'already_sent' | 'queued' | 'test_inbox' | 'not_sent' = 'not_needed';
     let sentAt: string | null = null;
+    let sendAt: string | undefined;
     if (signedIn !== cur.customer) {
       // One welcome or sign-in email an hour per address: a resubmit within 15 minutes of the last one is
       // `already_sent` (with when), later in the hour `rate_limited`. Older markers hold '1' (no time).
@@ -130,11 +146,12 @@ export async function handleSignup(env: Env, b: Json, ip: string, signedIn?: str
       } else {
         sentAt = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
         await env.DB.put(k, sentAt, { expirationTtl: 3600 });
-        await sendMail(env, [await freeWelcomeMail(env, cur, false, r?.follow === 'added')]);
-        signIn = 'sent';
+        const st = mailState(await sendMail(env, [await freeWelcomeMail(env, cur, false, r?.follow === 'added')]));
+        signIn = st.state;
+        sendAt = st.send_at;
       }
     }
-    return { status: 200, body: { ok: true, sign_in_email: signIn, ...(sentAt ? { sent_at: sentAt } : {}), ...(r ?? {}) } };
+    return { status: 200, body: { ok: true, sign_in_email: signIn, ...(sentAt ? { sent_at: sentAt } : {}), ...(sendAt ? { send_at: sendAt } : {}), ...(r ?? {}) } };
   }
   const m: Member = {
     customer: await freeId(email),
@@ -152,11 +169,20 @@ export async function handleSignup(env: Env, b: Json, ip: string, signedIn?: str
   await putMember(env, m);
   const r = follow ? await addFollows(m) : null;
   if (!isTest(email)) await bump(env, 'signups', m);
-  const mail = await sendMail(env, [await freeWelcomeMail(env, m, true)]);
+  const mail = mailState(await sendMail(env, [await freeWelcomeMail(env, m, true)]));
   // The welcome carries a sign-in link: a resubmit within the hour gets no second email.
   const sentAt = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
   await env.DB.put(`rl:signin-mail:${m.customer}`, sentAt, { expirationTtl: 3600 });
-  return { status: 201, body: { ok: true, created: true, welcome: mail === '200' ? 'sent' : 'not sent', sent_at: sentAt, ...(r ?? {}) } };
+  // Signed in on this device at once, whatever the email does: a provisional session, good until the member first signs
+  // in by an emailed link or subscribes (then the link or checkout gives a full one). Only for an account made just now,
+  // so typing someone else's address never signs anyone into an existing account.
+  const { signToken } = await import('./tokens');
+  const { SESSION_TTL } = await import('./members');
+  const token = await signToken(env.SESSION_SECRET, 'session', m.customer, SESSION_TTL, { s: 'provisional' });
+  return {
+    status: 201,
+    body: { ok: true, created: true, welcome: mail.state, sign_in_email: mail.state, sent_at: sentAt, ...(mail.send_at ? { send_at: mail.send_at } : {}), token, session: 'provisional', ...(r ?? {}) },
+  };
 }
 
 async function freeWelcomeMail(env: Env, m: Member, first: boolean, followSaved = false): Promise<Mail> {

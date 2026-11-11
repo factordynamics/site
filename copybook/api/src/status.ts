@@ -261,6 +261,7 @@ async function mailQuotaStatus(env: Env, gene: Kinds | null) {
     resend_used: used,
     daily_cap: 100,
     reserve_for_account_mail: 15,
+    policy: (await import('./email')).MAIL_POLICY,
     // Adds up to resend_used: before_since + real + test + account + other (see kindsView). Both hosts' tallies, from the
     // earlier host's `since`.
     by_kind: { ...kindsView(used, first ? { ...first, real: add('real'), test: add('test'), account: add('account'), preview: add('preview') } : null) },

@@ -1480,9 +1480,25 @@ describe('copybook api', () => {
     expect(await env.DB.get('email:bot@reader.test')).toBeNull();
     const r = await signup({ email: 'Reader@Reader.test', source: 'home', utm_campaign: 'q3', utm_source: 'x', utm_content: 'kahn-watch' });
     expect(r.status).toBe(201);
+    // Signed in on this device at once (a provisional session), whatever the email does.
+    const rb = await r.clone().json();
+    expect([rb.welcome, rb.sign_in_email, rb.session]).toEqual(['sent', 'sent', 'provisional']);
+    expect((await call('/me', { token: rb.token })).status).toBe(200);
+    // Resend refusing (its daily quota): the page is told it's queued for after the 00:00 UTC reset, and is still signed in.
+    const em0 = await import('../src/email');
+    const used0 = em0.mailQuota.used;
+    resendUsed = 100;
+    const q = await (await signup({ email: 'copybook-test-later@reader.test' }, '9.9.9.9')).json();
+    expect([q.welcome, q.send_at?.slice(11), (await call('/me', { token: q.token })).status]).toEqual(['queued', '00:00:00Z', 200]);
+    expect((await call('/follows/investors/bill-ackman', { method: 'POST', token: q.token })).status).toBe(200);
+    resendUsed = 0;
+    em0.mailQuota.used = used0;
+    for (const k of [`cus:${await env.DB.get('email:copybook-test-later@reader.test')}`, 'email:copybook-test-later@reader.test', 'host:mail-retry']) await env.DB.delete(k);
     expect(sent.map((m) => [m.to[0], m.subject])).toEqual([['reader@reader.test', "You're on the Copybook weekly"]]);
     const s = await (await call('/session', { body: { login: loginTokenFrom(sent[0].text) } })).json();
     expect(s.member).toMatchObject({ plan: 'free', active: false });
+    // Signing in by the emailed link proves the address: the signup's provisional session ends.
+    expect((await call('/me', { token: rb.token })).status).toBe(401);
     expect((await call('/history/warren-buffett', { token: s.token })).status).toBe(402);
     // 5 an hour per address, signed out: a repeat sends the sign-in link again (at most one an hour), the 6th is refused.
     // A filer page's one-field signup from the same address adds the follow (a free member's Friday email leads with it).

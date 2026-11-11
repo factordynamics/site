@@ -152,6 +152,9 @@ async function delay(env: Env, mails: Mail[]): Promise<void> {
 
 /** Launch week (Nov 11-16): test and preview mail never uses Resend or Mailgun quota; it goes to the test inbox sink. */
 export const SINK_UNTIL = Date.parse('2026-11-17T00:00:00Z');
+/** The cap rules in plain words, for /health, status.json and /status/. */
+export const MAIL_POLICY =
+  "Account emails (sign-in, welcome) are sent even past the alert cap, until Resend itself refuses them; then they go out after the 00:00 UTC reset. Alert emails over the cap wait until 00:00 UTC, marked delayed; chat, feed and webhook alerts go at once. Test and preview mail goes to a test inbox, not by email, through Nov 16.";
 const isTestMail = (m: Mail) => !!m.preview || !!m.test || testAddress(m.to);
 /** The sink's object for one address: unguessable (HMAC of the address), readable at PUBLIC_URL + this key. */
 export async function sinkKey(env: Env, to: string): Promise<string> {

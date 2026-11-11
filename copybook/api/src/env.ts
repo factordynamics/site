@@ -122,6 +122,8 @@ export interface Member {
   seat_of?: string;
   /** Sessions issued before this (unix) are refused: the Fund owner revoked the seat's sessions. */
   sessions_after?: number;
+  /** Set when the member first signs in by an emailed link: a signup's provisional session stops working then. */
+  verified?: boolean;
   /** Set once the member picks an alert scope themselves (POST /alerts). */
   alerts_chosen?: boolean;
   /** A one-time line for the next email, e.g. "followed" after moving "all" to followed funds. */
