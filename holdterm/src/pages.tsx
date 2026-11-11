@@ -1600,7 +1600,7 @@ function planLine(m: Member): { pill: string; tone: 'pos' | 'neg' | 'acc'; text:
   if (!m.active) return { pill: m.status === 'canceled' ? 'Canceled' : 'Inactive', tone: 'neg', text: 'Alerts are off. Start a new plan to turn them back on; what you follow is kept.' }
   if (m.plan === 'copy') return { pill: 'Copy plan', tone: 'acc', text: 'Your Copy plan already sends filing alerts on Copybook. Holdterm alerts are not part of it.' }
   if (!COVERED.has(m.plan)) return { pill: 'Not included', tone: 'acc', text: 'Holdterm alerts are not part of your plan.' }
-  if (m.plan !== 'holdterm') return { pill: 'Included', tone: 'pos', text: `Holdterm alerts are included with your ${m.plan === 'fund' ? 'Fund' : 'Pro'} plan.` }
+  if (m.plan !== 'holdterm') return { pill: 'Included', tone: 'pos', text: `Holdterm is included with your ${m.plan === 'fund' ? 'Fund' : 'Pro'} plan. Alerts for investors you follow here arrive as Copybook alerts.` }
   if (m.cancel_at_period_end) return { pill: 'Ending', tone: 'neg', text: `Alerts stop on ${end || 'the end of this period'}. Resume any time in billing.` }
   if (m.status === 'trialing')
     return m.has_payment_method === false
