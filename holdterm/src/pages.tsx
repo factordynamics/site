@@ -243,6 +243,32 @@ function ActionTag({ e }: { e: Event }) {
     </span>
   )
 }
+/** What each filing's tag means, folded away under one line so it costs a row, not a screen. */
+function TagKey() {
+  const rows: [string, string, string][] = [
+    ['New 5%+ stake', 'pos', 'A first 13D or 13G on the company: the investor now owns 5% or more.'],
+    ['Stake update', '', 'A later 13D or 13G. “Bought, was 6.1%” or “Sold, was 10.6%” compares it with the investor’s previous one.'],
+    ['Sold below 5%', 'neg', 'The investor now owns less than 5%, so it stops filing 13Ds or 13Gs on the company.'],
+    ['Bought', 'pos', 'A Form 4: the investor, an insider of the company, bought shares on the open market.'],
+    ['Sold', 'neg', 'A Form 4 open-market sale.'],
+    ['Not a trade', 'dim', 'A Form 4 with no open-market trade: a gift, an award, a conversion or a holdings report.'],
+  ]
+  return (
+    <details className="tag-key">
+      <summary>What the tags mean</summary>
+      <dl>
+        {rows.map(([t, tone, d]) => (
+          <div key={t}>
+            <dt>
+              <span className={`tag ${tone}`}>{t}</span>
+            </dt>
+            <dd>{d}</dd>
+          </div>
+        ))}
+      </dl>
+    </details>
+  )
+}
 const stakePct = (p: number) => `${p.toFixed(p < 10 ? 2 : 1)}%`
 const eventCols = (firms: Map<string, string>, withWho = true): Col<Event>[] => [
   // With an Investor column, phones show the date under the investor's name, so the company gets the width.
@@ -1712,6 +1738,7 @@ export function Filings() {
                 ['Stake', 'The share of the company the investor owns after the filing.'],
               ]}
             />
+            <TagKey />
             <Grid rows={list} limit={150} href={(e) => (e.ticker && !ownVehicle(e) ? `/s/${e.ticker}` : null)} cols={eventCols(firms)} />
           </Panel>
         </>
@@ -2091,14 +2118,14 @@ export function Alerts() {
               <p>{c.what}</p>
             </div>
           ))}
-          {/* What's planned is a card of its own, plainly marked, next to what ships today. */}
+          {/* That more is planned is a card of its own, plainly marked, next to what ships today. */}
           {soon.length > 0 && (
             <div className="ap-channel ap-channel-soon">
               <div className="ap-channel-head">
-                <b>Coming next</b>
-                <span className="tag">No extra cost</span>
+                <b>More on the way</b>
               </div>
-              <p>{soon.map((c, i) => (i && /^(Phone|Private)/.test(c.name) ? c.name.replace(/^P/, (x) => (c.name.startsWith('Private') ? 'a p' : x.toLowerCase())) : c.name)).join(', ').replace(/, ([^,]*)$/, ' and $1')}. Members get them as they arrive, at the same price.</p>
+              {/* No channel is named until it is scheduled to ship. */}
+              <p>More ways to get alerts are planned. Members get them at no extra cost.</p>
             </div>
           )}
         </div>
@@ -2316,19 +2343,25 @@ export function Account() {
               </span>
               <span className={`tag ${covered(member) ? 'pos' : 'dim'}`}>{covered(member) ? 'On' : 'Off'}</span>
             </li>
-            {[
-              ['Phone and browser push', channels.push],
-              ['Discord, Slack and Telegram', channels.chat],
-              ['Private RSS feed', channels.chat],
-            ].map(([name, live]) => (
-              <li key={String(name)}>
-                <span>
-                  <b>{name}</b>
-                </span>
-                <span className="tag">{live ? 'Available' : 'Coming soon'}</span>
-              </li>
-            ))}
+            {/* Only channels that ship are named; the rest is one line, as on the Alerts page. */}
+            {(
+              [
+                ['Phone and browser push', channels.push],
+                ['Discord, Slack and Telegram', channels.chat],
+                ['Private RSS feed', channels.chat],
+              ] as [string, boolean][]
+            )
+              .filter(([, live]) => live)
+              .map(([name]) => (
+                <li key={name}>
+                  <span>
+                    <b>{name}</b>
+                  </span>
+                  <span className="tag">Available</span>
+                </li>
+              ))}
           </ul>
+          {!(channels.push && channels.chat) && <p className="dim small">More ways to get alerts are planned. Members get them at no extra cost.</p>}
         </section>
       </div>
       {covered(member) && (
