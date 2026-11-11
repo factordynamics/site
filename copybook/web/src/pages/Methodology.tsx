@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { Boundary, Panel } from '../components/ui'
 import { api } from '../config'
 import { DATA, dateLabel, loadIndex, quarterLabel, useAsync, useTitle } from '../lib/data'
-import { HISTORY_EXACT, loadSplitLog, stockPath } from '../lib/stocks'
+import { HISTORY_EXACT, loadSplitLog, stockPath, type SplitLog } from '../lib/stocks'
 
 // data/changelog.json from ingest: append-only, newest first; id is a stable anchor.
 type Entry = { id: string; date: string; title: string; body: string; kind: 'methodology' | 'restatement' | 'data_fix' | string; funds?: string[]; quarters?: string[]; accessions?: string[] }
@@ -125,6 +125,9 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
         <p id="unreliable" className="scroll-mt-24">
           <strong className="font-medium text-ink">Lines with unreliable figures.</strong> Some 13F lines don’t add up: a share count filed in thousands, a pre-split count kept under a reissued CUSIP, or a value far off every other filer’s price. These lines are never counted in a page’s dollar totals or its biggest buys and sells, and the totals say how many were left out. Each line says which figure is off. Where only the value is off, the share change shows and the value reads “value unavailable” with the price per share the filing implies. Where only the share counts don’t reconcile, the change is taken from the filed values. Where both are off, the line reads “share count unreliable in this filing, not counted”, and a pre-split count reads “pre-split count, change not computed”. New positions and exits keep their labels.
         </p>
+        <p>
+          <strong className="font-medium text-ink">Alerts follow the same rule.</strong> A new position or an exit always alerts. A line where only the value is off alerts on its share change, and a line where only the share counts are off alerts on the change in filed value. A line where both are off is held and doesn’t alert. If a flag is later cleared, a correction alert goes out with the line’s real move.
+        </p>
         <p>“Since the last 13F” rolls up Form 4 and Schedule 13D/G filings made after a fund’s latest 13F. The newest holding shown is the one in the most recent Form 4, which reports exact shares after each trade; a Schedule 13D/G counts the whole filing group, so it stands in only when there’s no Form 4. Dollar amounts there come from Form 4 open-market purchases and sales (codes P and S) at the prices reported.</p>
       </>
     ),
@@ -237,6 +240,18 @@ const WITH_TYPES: (Entry & { from: string })[] = [
 /** A ratio in the splits table: "—" when the row has none (issuer-filing rows carry no price ratio or holder count). */
 const ratioCell = (r: number | null | undefined) => (r == null ? '—' : r >= 0.1 ? r.toFixed(2) : String(+r.toPrecision(2)))
 
+/** A split row's evidence, named as the section above names it; an issuer filing cites its form and accession. */
+const splitSource = (x: SplitLog) => {
+  const src = x.source ?? ''
+  if (/issuer filing/i.test(src)) {
+    const f = x.evidence?.match(/^(\S+)\s+(\d{10}-\d{2}-\d{6})/)
+    return f ? `Issuer filing · ${f[1]} ${f[2]}` : 'Issuer filing'
+  }
+  if (/XBRL/i.test(src)) return 'Holders + SEC shares outstanding'
+  if (src.startsWith('Ingest')) return 'Holders'
+  return 'Our holder check'
+}
+
 export function Methodology() {
   useTitle('Methodology · Copybook')
   const log = useAsync(() => fetch(`${DATA}changelog.json`).then((r) => (r.ok ? (r.json() as Promise<{ updated_at?: string; entries: Entry[] }>) : null)), [])
@@ -284,15 +299,22 @@ export function Methodology() {
           <section id="splits" className="scroll-mt-24">
             <h2 className="text-[22px] font-semibold tracking-[-0.02em]">Stock splits</h2>
             <div className="mt-3 space-y-3 text-[15.5px] leading-relaxed text-ink-2">
-              <p>A split changes every holder’s share count without anyone trading. The data pipeline’s split list is the source of truth; every candidate below gets one of two treatments:</p>
+              <p>A split changes every holder’s share count without anyone trading. Each row in the table names the evidence behind it:</p>
               <ul className="list-disc space-y-1.5 pl-5">
                 <li>
-                  <span className="font-medium text-ink">Adjusted.</span> Confirmed by the data pipeline: at least 5 holders at the exact ratio, the median holder at that ratio, the price moving by about its inverse, and SEC XBRL shares outstanding not contradicting it. The pipeline matches by CUSIP, so a split that came with a new CUSIP (DD’s 1-for-3) is adjusted by our holder check instead, on strong evidence only: at least 10 holders, a median share ratio within 5% of the factor and a median price ratio within 10% of its inverse. Earlier quarters’ shares are multiplied by the ratio, so buying and selling are counted as usual.
+                  <span className="font-medium text-ink">Issuer filing.</span> The company’s own SEC filing states the ratio, and the row cites it (for example, Honeywell’s 1-for-2 reverse split, 8-K 0000773840-26-000084). No holder evidence is needed, so Holders and Price ratio read “—”.
                 </li>
                 <li>
-                  <span className="font-medium text-ink">Not treated.</span> A weaker pattern in our holder check (the median share ratio within 25% of a clean factor among at least 5 holders) that the pipeline doesn’t list as a split. The share changes count as trades; the row stays here as evidence. ETFs are exempt.
+                  <span className="font-medium text-ink">Holders + SEC shares outstanding.</span> At least 5 holders at the exact ratio, the median holder at that ratio, the price moving by about its inverse, and the company’s shares outstanding in its SEC XBRL filings changing by the same ratio (the XBRL shares column).
+                </li>
+                <li>
+                  <span className="font-medium text-ink">Holders.</span> The same holder and price tests, where the company’s XBRL shares outstanding don’t cover the quarter. They must not contradict it.
+                </li>
+                <li>
+                  <span className="font-medium text-ink">Our holder check.</span> A split the data pipeline doesn’t list. When it came with a new CUSIP, it is adjusted only on strong evidence: at least 10 holders, a median share ratio within 5% of the factor and a median price ratio within 10% of its inverse. A weaker pattern (the median share ratio within 25% of a clean factor among at least 5 holders) is not treated: the share changes count as trades, and the row stays here as evidence. ETFs are exempt.
                 </li>
               </ul>
+              <p>Adjusted means earlier quarters’ shares are multiplied by the ratio, so buying and selling are counted as usual.</p>
             </div>
             <Panel className="mt-4">
               <Boundary>
@@ -323,7 +345,7 @@ export function Methodology() {
                           </td>
                           <td className="px-3 py-2 text-ink-2">{quarterLabel(x.quarter)}</td>
                           <td className={`px-3 py-2 ${x.treatment === 'excluded' ? 'text-[#8a5a0b]' : 'text-ink-2'}`}>{x.treatment === 'adjusted' ? 'Adjusted' : x.treatment === 'excluded' ? 'Not counted' : 'Not treated'}
-                            <span className="block text-[12px] text-ink-3">{/issuer filing/i.test(x.source ?? '') ? 'Issuer filing' : (x.source ?? '').startsWith('Ingest') ? 'Pipeline' : 'Holder check'}</span>
+                            <span className="block text-[12px] text-ink-3" title={x.evidence ?? undefined}>{splitSource(x)}</span>
                           </td>
                           <td className="num px-3 py-2 text-right">{x.holders ?? '—'}</td>
                           <td className="num px-3 py-2 text-right">{ratioCell(x.share_ratio)}</td>

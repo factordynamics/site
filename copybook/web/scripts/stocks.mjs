@@ -154,7 +154,7 @@ for (const st of stocks.values()) {
   const ticker = [...st.classes.values()].sort((a, b) => b.value - a.value)[0]?.ticker ?? null
   for (const c of confirmed.filter((x) => cusips.has(x.cusip))) {
     ;(st.splits ??= {})[c.to_quarter] = { ratio: ratioLabel(c.ratio), adjusted: true }
-    splitLog.push({ ticker: ticker ?? c.ticker, name: st.name, quarter: c.to_quarter, ratio: ratioLabel(c.ratio), treatment: 'adjusted', holders: c.holders ?? null, share_ratio: c.ratio, price_ratio: c.price_ratio ?? null, xbrl_shares_ratio: c.xbrl_shares_ratio ?? null, source: `Ingest: ${c.confirmed_by}` })
+    splitLog.push({ ticker: ticker ?? c.ticker, name: st.name, quarter: c.to_quarter, ratio: ratioLabel(c.ratio), treatment: 'adjusted', holders: c.holders ?? null, share_ratio: c.ratio, price_ratio: c.price_ratio ?? null, xbrl_shares_ratio: c.xbrl_shares_ratio ?? null, source: `Ingest: ${c.confirmed_by}`, evidence: c.evidence ?? null })
   }
   if (st.sector === 'Funds & ETFs') continue
   const byQ = new Map()
