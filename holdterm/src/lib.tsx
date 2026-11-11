@@ -73,7 +73,7 @@ export function Tick({ t, name, label }: { t: string | null; name?: string; labe
       {label && label !== t ? (
         <>
           <span className="hide-sm">{label}</span>
-          <span className="show-sm">{t}+</span>
+          <span className="show-sm">{t}</span>
         </>
       ) : (
         t

@@ -3324,3 +3324,13 @@ p a,
     padding-right: 12px;
   }
 }
+
+/* Buys & sells: the quarter chips stay on one row (scrolling if a fourth quarter appears) and the note sits under them. */
+.quarter-pick {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.page > p.quarter-note {
+  margin: -6px 0 0;
+}
