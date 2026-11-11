@@ -2520,6 +2520,9 @@ describe('copybook api', () => {
 
     // The owner signs a seat out everywhere: its sessions stop working at once (even after the owner's next
     // subscription update rewrites the seat), and the seat can sign in again by email.
+    const seatKey = (await (await call('/keys', { body: { name: 'seat-revoke-test' }, token: seat })).json()).key as string;
+    const v1me = () => handleRequest(new Request('https://api.test/v1/me', { headers: { authorization: `Bearer ${seatKey}` } }), env);
+    expect((await v1me()).status).toBe(200);
     const before = await call('/seats/analyst%40fund.example/revoke', { method: 'POST', token: seat });
     expect(before.status).toBe(403); // only the owner
     const rv = await call('/seats/analyst%40fund.example/revoke', { method: 'POST', token: owner });
@@ -2527,6 +2530,8 @@ describe('copybook api', () => {
     await webhook({ type: 'customer.subscription.updated', data: { object: sub('sub_fund', 'cus_fund', 'active', 'year', 'fund_yearly') } });
     expect((await call('/me', { token: seat })).status).toBe(401);
     expect((await call('/me', { token: owner })).status).toBe(200);
+    // Its API keys stop too: "sign out everywhere" leaves a departing colleague no access.
+    expect((await v1me()).status).toBe(401);
     expect((await call('/seats/nobody%40fund.example/revoke', { method: 'POST', token: owner })).status).toBe(404);
     await new Promise((r) => setTimeout(r, 1000)); // a new session is issued in a later second
     const again = (await (await call('/session', { body: { login: await signToken(env.SESSION_SECRET, 'login', seatId, 600) } })).json()).token;

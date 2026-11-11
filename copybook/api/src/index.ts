@@ -444,6 +444,16 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   // Operator: send one real, already-parsed Form 4 or 13D/G (from /v1/events' store) through the alert
   // fan-out to the named members only: their email, chat, feed and webhook, with their team rules. It
   // is marked a replay (never counted in latency) and stays out of the day's digest store.
+  // Operator: revokes one API key by member email and key name (test cleanup). Answers with counts only.
+  if (req.method === 'POST' && path === '/ops/revoke-key') {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    const b = await body(req);
+    const cus = await env.DB.get(`email:${String(b.email ?? '').trim().toLowerCase()}`);
+    const keys = cus ? (await listKeys(env, cus)).filter((k) => k.name === b.name) : [];
+    for (const k of keys) await revokeKey(env, cus!, k.id);
+    return json({ ok: true, revoked: keys.length }, 200, h);
+  }
+
   // Operator: 13Fs already alerted without moves (before moves_pending existed) go back on gene's moves queue.
   if (req.method === 'POST' && path === '/ops/moves-requeue') {
     if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);

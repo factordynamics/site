@@ -49,12 +49,16 @@ function mirror(owner: Member, seat: Seat, prev?: Member | null): Member {
   };
 }
 
-/** The owner signs a seat out everywhere: its sessions issued until now stop working; it can sign in again by email. */
+/**
+ * The owner signs a seat out everywhere: its sessions issued until now stop working and its API keys are revoked
+ * (a departing colleague keeps no access). It can sign in again by email and make new keys while still a seat.
+ */
 export async function revokeSeatSessions(env: Env, owner: Member, raw: string, now = Date.now()): Promise<boolean> {
   const seat = (await listSeats(env, owner.customer)).find((s) => s.email === raw.trim().toLowerCase());
   const m = seat ? await getMember(env, seat.id) : null;
   if (!m) return false;
   await putMember(env, { ...m, sessions_after: Math.floor(now / 1000) });
+  await (await import('./keys')).revokeAll(env, m.customer);
   return true;
 }
 
