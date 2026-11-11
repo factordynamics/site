@@ -805,11 +805,11 @@ export function Fund({ slug }: { slug: string }) {
             rows={[...opts].sort((a, c) => c.value - a.value)}
             href={stockHref}
             cols={[
-              { key: 't', label: 'ticker', render: (r) => <StockCell t={r.ticker} name={r.display_name || r.issuer} former={r.former} />, width: '80px' },
-              { key: 'n', label: 'underlying', hideSm: true, render: (r) => <span className="trunc">{r.display_name}</span> },
-              { key: 'pc', label: 'type', render: (r) => <span className={`tag ${r.put_call === 'CALL' ? 'pos' : 'neg'}`}>{r.put_call}</span> },
-              { key: 'sh', label: 'shares', num: true, hideSm: true, render: (r) => num(r.shares) },
-              { key: 'v', label: 'notional', num: true, render: (r) => usd(r.value), sort: (r) => r.value },
+              { key: 't', label: 'Ticker', render: (r) => <StockCell t={r.ticker} name={r.display_name || r.issuer} former={r.former} />, width: '80px' },
+              { key: 'n', label: 'Company', hideSm: true, render: (r) => <span className="trunc">{r.display_name}</span> },
+              { key: 'pc', label: 'Call or put', render: (r) => <span className={`tag ${r.put_call === 'CALL' ? 'pos' : 'neg'}`}>{r.put_call === 'CALL' ? 'Call' : 'Put'}</span> },
+              { key: 'sh', label: 'Shares', num: true, hideSm: true, render: (r) => num(r.shares) },
+              { key: 'v', label: 'Value of shares', num: true, title: 'Value of the shares the options cover (notional)', render: (r) => usd(r.value), sort: (r) => r.value },
               { key: 'd', label: 'Change', num: true, render: (r) => <span className="dim">{signedUsd((r.value || 0) - (r.prev_value ?? 0))}</span> },
             ]}
           />
@@ -819,11 +819,11 @@ export function Fund({ slug }: { slug: string }) {
             rows={notes}
             href={stockHref}
             cols={[
-              { key: 'n', label: 'issuer', render: (r) => (r.ticker ? <StockCell t={r.ticker} name={r.display_name || r.issuer} /> : <span className="trunc">{issuerName(r.display_name || r.issuer)}</span>), sort: (r) => r.display_name || r.issuer },
-              { key: 'k', label: 'instrument', render: (r) => <span className="trunc dim">{noteLabel(r)}</span>, sort: (r) => r.title },
-              { key: 'a', label: 'amount', num: true, hideSm: true, render: noteAmount, sort: (r) => r.principal_amount ?? r.shares },
-              { key: 'c', label: 'activity', hideSm: true, render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} />, sort: (r) => r.share_change ?? 0 },
-              { key: 'v', label: 'value', num: true, render: (r) => usd(r.value), sort: (r) => r.value },
+              { key: 'n', label: 'Company', render: (r) => (r.ticker ? <StockCell t={r.ticker} name={r.display_name || r.issuer} /> : <span className="trunc">{issuerName(r.display_name || r.issuer)}</span>), sort: (r) => r.display_name || r.issuer },
+              { key: 'k', label: 'Security', render: (r) => <span className="trunc dim">{noteLabel(r)}</span>, sort: (r) => r.title },
+              { key: 'a', label: 'Amount', num: true, hideSm: true, render: noteAmount, sort: (r) => r.principal_amount ?? r.shares },
+              { key: 'c', label: 'This quarter', hideSm: true, render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} />, sort: (r) => r.share_change ?? 0 },
+              { key: 'v', label: 'Value', num: true, render: (r) => usd(r.value), sort: (r) => r.value },
               { key: 'pv', label: 'Last quarter', num: true, hideSm: true, render: (r) => <span className="dim">{usd(r.prev_value)}</span>, sort: (r) => r.prev_value ?? 0 },
             ]}
           />
@@ -941,15 +941,15 @@ function HoldingsGrid({ rows, own }: { rows: Holding[]; own?: (h: Holding) => bo
       initial={['w', 'desc']}
       href={stockHref}
       cols={[
-        { key: 't', label: 'ticker', render: (r) => <StockCell t={r.ticker} name={r.display_name || r.issuer} former={r.former} />, sort: (r) => r.ticker ?? '', width: '80px' },
-        { key: 'n', label: 'company', link: true, hideSm: true, render: (r) => <span className="trunc">{r.display_name}{r.put_call ? <span className="badge">{r.put_call}</span> : null}{own?.(r) ? <span className="badge">own fund</span> : null}</span>, sort: (r) => r.display_name ?? '' },
-        { key: 's', label: 'sector', hideSm: true, hide: 'lg', render: (r) => <Sector s={r.sector} />, sort: (r) => r.sector ?? '' },
+        { key: 't', label: 'Ticker', render: (r) => <StockCell t={r.ticker} name={r.display_name || r.issuer} former={r.former} />, sort: (r) => r.ticker ?? '', width: '80px' },
+        { key: 'n', label: 'Company', link: true, hideSm: true, render: (r) => <span className="trunc">{r.display_name}{r.put_call ? <span className="badge">{r.put_call}</span> : null}{own?.(r) ? <span className="badge">own fund</span> : null}</span>, sort: (r) => r.display_name ?? '' },
+        { key: 's', label: 'Sector', hideSm: true, hide: 'lg', render: (r) => <Sector s={r.sector} />, sort: (r) => r.sector ?? '' },
         { key: 'w', label: 'Weight', num: true, render: (r) => pct(r.weight), sort: (r) => r.weight, title: 'Share of the portfolio' },
         { key: 'ws', label: 'Last quarter vs now', hideSm: true, hide: 'lg', render: (r) => <WeightShift prev={r.prev_weight ?? 0} now={r.weight} max={max} />, title: 'Share of the portfolio last quarter (grey) and now' },
         { key: 'c', label: 'This quarter', render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} />, sort: (r) => r.share_change ?? 0 },
-        { key: 'sh', label: 'shares', num: true, hideSm: true, hide: 'md', render: (r) => num(r.shares), sort: (r) => r.shares },
+        { key: 'sh', label: 'Shares', num: true, hideSm: true, hide: 'md', render: (r) => num(r.shares), sort: (r) => r.shares },
         { key: 'p', label: 'Price in filing', num: true, hideSm: true, hide: 'lg', render: (r) => (r.shares && !r.put_call ? price(r.value / r.shares) : '—'), sort: (r) => (r.shares ? r.value / r.shares : 0) },
-        { key: 'v', label: 'value', num: true, render: (r) => usd(r.value), sort: (r) => r.value },
+        { key: 'v', label: 'Value', num: true, render: (r) => usd(r.value), sort: (r) => r.value },
       ]}
     />
   )
@@ -961,9 +961,9 @@ function MovesGrid({ rows }: { rows: Holding[] }) {
       rows={rows}
       href={stockHref}
       cols={[
-        { key: 't', label: 'ticker', render: (r) => <StockCell t={r.ticker} name={r.display_name || r.issuer} former={r.former} />, width: '80px' },
-        { key: 'n', label: 'company', link: true, hideSm: true, render: (r) => <span className="trunc">{r.display_name}</span> },
-        { key: 'c', label: 'activity', render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} /> },
+        { key: 't', label: 'Ticker', render: (r) => <StockCell t={r.ticker} name={r.display_name || r.issuer} former={r.former} />, width: '80px' },
+        { key: 'n', label: 'Company', link: true, hideSm: true, render: (r) => <span className="trunc">{r.display_name}</span> },
+        { key: 'c', label: 'What changed', render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} /> },
         { key: 'sc', label: 'Shares changed', num: true, hideSm: true, hide: 'md', render: (r) => <span className={(r.share_change ?? 0) > 0 ? 'pos' : 'neg'}>{(r.share_change ?? 0) > 0 ? '+' : ''}{num(r.share_change)}</span>, sort: (r) => r.share_change ?? 0 },
         { key: 'd', label: 'Trade size', num: true, render: (r) => <span className={(r.value_delta ?? 0) > 0 ? 'pos' : 'neg'}>{signedUsd(r.value_delta)}</span>, sort: (r) => r.value_delta ?? 0 },
         { key: 'pb', label: 'Of portfolio', num: true, render: (r) => pct(r.pct_of_book), sort: (r) => r.pct_of_book ?? 0, title: 'Trade size as a share of the whole portfolio' },
@@ -1276,13 +1276,13 @@ export function Filings() {
             rows={market}
             href={(r) => (r.ticker ? `/s/${r.ticker}` : null)}
             cols={[
-              { key: 'f', label: 'filed', render: (r) => <span className="dim">{date(r.filing_date)}</span>, sort: (r) => r.filing_date },
-              { key: 't', label: 'issuer', render: (r) => <StockCell t={r.ticker} name={issuerName(r.issuer)} /> },
-              { key: 'o', label: 'insider', render: (r) => <span className="trunc">{r.owner}</span> },
-              { key: 'r', label: 'role', hideSm: true, render: (r) => <span className="dim trunc">{r.relationship}</span> },
-              { key: 'c', label: 'side', render: (r) => <span className={`tag ${r.code === 'P' ? 'pos' : 'neg'}`}>{r.code === 'P' ? 'Bought' : 'Sold'}</span>, sort: (r) => r.code },
-              { key: 'p', label: 'price', num: true, hideSm: true, render: (r) => price(r.price) },
-              { key: 'v', label: 'value', num: true, render: (r) => <span className={r.code === 'P' ? 'pos' : 'neg'}>{usd(r.value_usd)}</span>, sort: (r) => r.value_usd },
+              { key: 'f', label: 'Filed', render: (r) => <span className="dim">{date(r.filing_date)}</span>, sort: (r) => r.filing_date },
+              { key: 't', label: 'Company', render: (r) => <StockCell t={r.ticker} name={issuerName(r.issuer)} /> },
+              { key: 'o', label: 'Insider', render: (r) => <span className="trunc">{r.owner}</span> },
+              { key: 'r', label: 'Role', hideSm: true, render: (r) => <span className="dim trunc">{r.relationship}</span> },
+              { key: 'c', label: 'Trade', render: (r) => <span className={`tag ${r.code === 'P' ? 'pos' : 'neg'}`}>{r.code === 'P' ? 'Bought' : 'Sold'}</span>, sort: (r) => r.code },
+              { key: 'p', label: 'Price', num: true, hideSm: true, render: (r) => price(r.price) },
+              { key: 'v', label: 'Value', num: true, render: (r) => <span className={r.code === 'P' ? 'pos' : 'neg'}>{usd(r.value_usd)}</span>, sort: (r) => r.value_usd },
               {
                 key: 's',
                 label: <span className="sr">SEC filing</span>,
