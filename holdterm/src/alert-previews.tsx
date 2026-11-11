@@ -122,6 +122,36 @@ export function EmailPreview({ s }: { s: Samples }) {
   )
 }
 
+const shortDay = (iso: string) => new Date(`${iso.slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+/** An inbox with the alert emails htEmail builds for the sample filings: each email's real subject, its first line
+ * and the day the filing came in, newest first. */
+export function InboxPreview({ s }: { s: Samples }) {
+  const events = [s.form4, s.d13, s.g13].filter((e): e is HtEvent => Boolean(e))
+  const pushes = htPush([s.filing], events, site)
+  const mails = [
+    { date: s.filing.filing_date, subject: htEmail([s.filing], [], site).subject, body: pushes[0].body },
+    ...events.map((e, i) => ({ date: e.filing_date, subject: htEmail([], [e], site).subject, body: pushes[i + 1].body })),
+  ].sort((a, b) => b.date.localeCompare(a.date))
+  return (
+    <figure className="ap ap-inbox" aria-label="Holdterm alert emails in an inbox">
+      <div className="ap-inbox-head">Inbox</div>
+      {mails.map((m) => (
+        <div className="ap-inbox-row" key={m.subject}>
+          <AppIcon size={28} />
+          <div>
+            <div className="ap-note-top">
+              <b>Holdterm</b>
+              <span>{shortDay(m.date)}</span>
+            </div>
+            <div className="ap-note-title">{m.subject}</div>
+            <div className="ap-note-body">{m.body}</div>
+          </div>
+        </div>
+      ))}
+    </figure>
+  )
+}
+
 /** A phone lock screen with the push notifications htPush builds. */
 export function PushPreview({ s, compact = false }: { s: Samples; compact?: boolean }) {
   const pushes = htPush([s.filing], [s.form4, s.d13].filter((e): e is HtEvent => Boolean(e)), site)

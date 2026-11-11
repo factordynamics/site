@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { api, channels, checkout, price as PRICE, SITE } from './config'
-import { AppIcon, ChatPreviews, EmailPreview, loadLatestTitle, loadSamples, PushPreview, SampleSources } from './alert-previews'
+import { AppIcon, ChatPreviews, EmailPreview, InboxPreview, loadLatestTitle, loadSamples, PushPreview, SampleSources } from './alert-previews'
 import {
   aggregate,
   funds,
@@ -1497,6 +1497,8 @@ export function Alerts() {
   const r = useLoad(loadSamples, [])
   const s = r.data
   const link = yearly ? checkout.yearly : checkout.monthly
+  const live = CHANNEL_LIST.filter((c) => c.live === true)
+  const soon = CHANNEL_LIST.filter((c) => c.live !== true)
   const plan = (
     <div className="ap-plan">
       <div className="filters" role="group" aria-label="Billing period">
@@ -1524,26 +1526,40 @@ export function Alerts() {
       <section className="ap-hero">
         <div className="ap-hero-text">
           <p className="eyebrow">Holdterm Alerts</p>
-          <h1>Know the moment your investors make a move</h1>
-          <p className="lede">When a fund you follow files a 13F, 13D, 13G or Form 4, you get a plain-English summary within hours: what it bought, what it sold and how much. By email, on your phone or in your team’s chat.</p>
+          <h1>{channels.push ? 'Know when your investors make a move' : 'An email when your investors make a move'}</h1>
+          {/* Say only what ships: email today; push and chat join the sentence as they go live. */}
+          <p className="lede">
+            When a fund you follow reports its portfolio, a new 5% stake or an insider trade to the SEC, you get a plain-English summary within hours of the filing: what it bought, what it sold and how much.{' '}
+            {channels.push && channels.chat ? 'By email, on your phone or in your team’s chat.' : channels.push ? 'By email or on your phone.' : channels.chat ? 'By email or in your team’s chat.' : ''}
+          </p>
           {plan}
         </div>
-        <div className="ap-hero-art">{s ? <PushPreview s={s} /> : <div className="ap-phone ap-skeleton" aria-hidden />}</div>
+        <div className="ap-hero-art">{s ? channels.push ? <PushPreview s={s} /> : <InboxPreview s={s} /> : <div className={`${channels.push ? 'ap-phone' : 'ap-inbox'} ap-skeleton`} aria-hidden />}</div>
       </section>
 
       <section className="ap-section">
         <h2>Choose where alerts arrive</h2>
         <p className="dim">Every plan includes every channel. Pick one or several in your account.</p>
         <div className="ap-channels">
-          {CHANNEL_LIST.map((c) => (
+          {live.map((c) => (
             <div className="ap-channel" key={c.name}>
               <div className="ap-channel-head">
                 <b>{c.name}</b>
-                {c.live === true ? <span className="tag pos-tag">Included</span> : <span className="tag">Coming soon</span>}
+                <span className="tag pos-tag">Included</span>
               </div>
               <p>{c.what}</p>
             </div>
           ))}
+          {/* That more is planned is a card of its own, plainly marked, next to what ships today. */}
+          {soon.length > 0 && (
+            <div className="ap-channel ap-channel-soon">
+              <div className="ap-channel-head">
+                <b>More on the way</b>
+              </div>
+              {/* No channel is named until it is scheduled to ship. */}
+              <p>More ways to get alerts are planned. Members get them at no extra cost.</p>
+            </div>
+          )}
         </div>
       </section>
 
@@ -1572,13 +1588,15 @@ export function Alerts() {
         {s ? <EmailPreview s={s} /> : r.error ? <Failed error={r.error} what="the sample alert" /> : <Loading what="Building the sample email" />}
       </section>
 
-      <section className="ap-section ap-split reverse">
-        <div>
-          <h2>Or straight into your chat</h2>
-          <p className="dim">The same alerts, formatted for each app, so a team or an investing club sees every filing together.</p>
-        </div>
-        {s ? <ChatPreviews s={s} /> : <Loading what="Building the previews" rows={6} />}
-      </section>
+      {channels.chat && (
+        <section className="ap-section ap-split reverse">
+          <div>
+            <h2>Or straight into your chat</h2>
+            <p className="dim">The same alerts, formatted for each app, so a team or an investing club sees every filing together.</p>
+          </div>
+          {s ? <ChatPreviews s={s} /> : <Loading what="Building the previews" rows={6} />}
+        </section>
+      )}
 
       <section className="ap-section ap-cta">
         <div>
@@ -1749,18 +1767,23 @@ export function Account() {
               </span>
               <span className={`tag ${covered(member) ? 'pos' : 'dim'}`}>{covered(member) ? 'On' : 'Off'}</span>
             </li>
-            {[
-              ['Phone and browser push', channels.push],
-              ['Discord, Slack and Telegram', channels.chat],
-              ['Private RSS feed', channels.chat],
-            ].map(([name, live]) => (
-              <li key={String(name)}>
-                <span>
-                  <b>{name}</b>
-                </span>
-                <span className="tag">{live ? 'Available' : 'Coming soon'}</span>
-              </li>
-            ))}
+            {/* Only channels that ship are listed; none is named before it is scheduled. */}
+            {(
+              [
+                ['Phone and browser push', channels.push],
+                ['Discord, Slack and Telegram', channels.chat],
+                ['Private RSS feed', channels.chat],
+              ] as const
+            )
+              .filter(([, live]) => live)
+              .map(([name]) => (
+                <li key={name}>
+                  <span>
+                    <b>{name}</b>
+                  </span>
+                  <span className="tag">Available</span>
+                </li>
+              ))}
           </ul>
         </section>
       </div>
