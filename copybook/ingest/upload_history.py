@@ -98,14 +98,14 @@ class Token:
         return self.value
 
 
-def quiet(now: datetime) -> bool:
-    """Inside a COPYBOOK_UPLOAD_QUIET window ("2026-11-11T09:15:00Z/2026-11-11T10:00:00Z", comma-separated): no uploads
-    at all, so gene can be timed with nothing arriving (runner's Funnel probe). Unsent files go next run."""
+def quiet(now: datetime) -> datetime | None:
+    """The end of the COPYBOOK_UPLOAD_QUIET window ("2026-11-11T13:55:00Z/2026-11-11T14:20:00Z", comma-separated)
+    that `now` is in, else None. No uploads inside one, so gene's uplink is left to members (post A's first sign-ins)."""
     for w in filter(None, (os.environ.get("COPYBOOK_UPLOAD_QUIET") or "").split(",")):
         a, b = (datetime.fromisoformat(x.strip().replace("Z", "+00:00")) for x in w.split("/"))
         if a <= now < b:
-            return True
-    return False
+            return b
+    return None
 
 
 def edgar_hours(now: datetime) -> bool:
@@ -186,9 +186,17 @@ def main() -> int:
     sent = 0
     try:
         for batch in bundles(todo):
-            if quiet(datetime.now(timezone.utc)):
+            now = datetime.now(timezone.utc)
+            until = quiet(now)
+            if until and os.environ.get("SCOPE", "full") != "full":  # a curated publish never waits
                 print(f"upload: quiet window (COPYBOOK_UPLOAD_QUIET); {len(todo) - sent} files wait for the next run", flush=True)
                 break
+            if until:  # a full run holds its upload until the window ends; the hold doesn't count against the budget
+                wait = (until - now).total_seconds()
+                print(f"upload: quiet window (COPYBOOK_UPLOAD_QUIET); holding {len(todo) - sent} files until "
+                      f"{until:%H:%M:%S} UTC ({wait:.0f} s)", flush=True)
+                time.sleep(wait)
+                started += wait
             if time.monotonic() - started > UPLOAD_BUDGET_S:
                 print(f"::warning::upload budget reached; {len(todo) - sent} files wait for the next run", flush=True)
                 break
