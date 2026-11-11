@@ -91,7 +91,7 @@ def holder_counts(data: Path, books: dict[str, dict]) -> list[str]:
             c = h.get("cusip") or ""
             c = (links.get(c) or {}).get("new") or c  # hl/ counts a reissued CUSIP's holders under the new one
             if len(c) >= 6 and not h.get("put_call") and h.get("shares_type", "SH") != "PRN" and h.get("shares") \
-                    and not not_common(h.get("title")):
+                    and not not_common(h.get("title"), c):  # a debt CUSIP (Joby 47775AAA9) is never a holder row
                 tracked.setdefault(c[:6], set()).add(b.get("cik"))
     bad = []
     for code, ciks in tracked.items():
