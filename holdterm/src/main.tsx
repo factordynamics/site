@@ -419,7 +419,8 @@ function App() {
 }
 
 // Only for Holdterm's own offline page on a reload without a connection (public/sw.js); nothing else is cached.
-if (import.meta.env.PROD && 'serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}))
+// VITE_HOLDTERM_SW=off builds the kill switch instead (scripts/sw-kill.js) and registers nothing.
+if (import.meta.env.PROD && import.meta.env.VITE_HOLDTERM_SW !== 'off' && 'serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}))
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

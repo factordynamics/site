@@ -25,4 +25,9 @@ npm run deploy   # build + wrangler pages deploy (needs CLOUDFLARE_API_TOKEN and
 `.github/workflows/holdterm.yml` builds on every push. It also deploys when the repo has a
 `CLOUDFLARE_API_TOKEN` secret.
 
+A small service worker (`public/sw.js`) only shows Holdterm's offline page on a reload without a connection. To
+remove it from visitors' browsers, don't delete it: build with `VITE_HOLDTERM_SW=off npm run build` and deploy.
+That ships the kill switch (`scripts/sw-kill.js`), which clears its caches, unregisters itself and reloads open
+tabs once; keep the variable set on later deploys until the worker is wanted again.
+
 Keys: `/` search, `g` then `h m f c d e` to jump, `j`/`k` + `enter` in tables, `1`-`5` tabs, `?` help.
