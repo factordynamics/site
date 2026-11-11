@@ -45,6 +45,10 @@ type Reply = { status: number; body: Json; headers?: Record<string, string> };
 /** What happened to each requested follow: stored, already followed, or refused at the free cap. */
 type FollowResult = 'added' | 'already' | 'cap_reached';
 
+/** /signup tries an hour, signed out: per email, and per IP (mobile carriers put many people behind one address). */
+export const SIGNUP_PER_EMAIL = 5;
+export const SIGNUP_PER_IP = 30;
+
 /** `signedIn`: the member a valid session on this request belongs to (the site sends it when signed in). */
 export async function handleSignup(env: Env, b: Json, ip: string, signedIn?: string): Promise<Reply> {
   const str = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
@@ -52,10 +56,25 @@ export async function handleSignup(env: Env, b: Json, ip: string, signedIn?: str
   if (!EMAIL.test(email) || email.length > 254) return { status: 400, body: { ok: false, error: 'Check the email address and try again.', code: 'bad_request' } };
   // The hidden `website` field: a bot filled it. Looks like success, does nothing.
   if (str(b.website, 200)) return { status: 200, body: { ok: true } };
-  for (const [k, max] of [[`rl:signup-ip:${ip}`, 5], [`rl:signup:${email}`, 3]] as const) {
-    const n = Number((await env.DB.get(k)) ?? 0);
-    if (n >= max) return { status: 429, body: { ok: false, error: 'Too many tries. Please try again in an hour.', code: 'rate_limited' }, headers: { 'retry-after': '3600' } };
-    await env.DB.put(k, String(n + 1), { expirationTtl: 3600 });
+  // Signed in: the session is the proof, no limit. Otherwise fixed hourly windows, per email and (looser, for carrier
+  // IPs shared by many phones) per IP. Both are checked before either counts, and a refused try counts nowhere, so
+  // retrying never extends the wait; Retry-After is the window's own end.
+  const me = signedIn ? await getMember(env, signedIn) : null;
+  if (me?.email !== email) {
+    const t = Date.now();
+    const wins = await Promise.all(
+      ([[`rl:su-em:${email}`, SIGNUP_PER_EMAIL], [`rl:su-ip:${ip}`, SIGNUP_PER_IP]] as const).map(async ([k, max]) => {
+        const w = JSON.parse((await env.DB.get(k)) ?? 'null') as { n: number; until: number } | null;
+        return { k, max, w: w && w.until > t ? w : { n: 0, until: t + 3600_000 } };
+      }),
+    );
+    const full = wins.filter((x) => x.w.n >= x.max);
+    if (full.length) {
+      const wait = Math.max(1, Math.ceil((Math.max(...full.map((x) => x.w.until)) - t) / 1000));
+      const mins = Math.ceil(wait / 60);
+      return { status: 429, body: { ok: false, error: `Too many tries. Please try again in ${mins} minute${mins === 1 ? '' : 's'}.`, code: 'rate_limited', retry_after: wait }, headers: { 'retry-after': String(wait) } };
+    }
+    for (const { k, w } of wins) await env.DB.put(k, JSON.stringify({ n: w.n + 1, until: w.until }), { expirationTtl: Math.max(60, Math.ceil((w.until - t) / 1000)) });
   }
   const utm = Object.fromEntries(UTM.map((k) => [k, str(b[k], 100)]).filter(([, v]) => v)) as Record<string, string>;
   const source = str(b.source, 60) ?? utm.utm_source ?? null;
@@ -806,6 +825,11 @@ export async function runEmail2(env: Env, now: number, preview?: string[]): Prom
 export async function runWeekly(env: Env, now: number): Promise<Record<string, unknown>> {
   const week = etDay(now);
   if ((await env.DB.get('weekly:last')) === week) return { status: 'already sent', week };
+  // Marketing email carries the mailing address by law: without it, this week's issue is skipped (recorded), as Email 2.
+  if (!env.POSTAL_ADDRESS?.trim()) {
+    await env.DB.put('weekly:skipped', JSON.stringify({ week, why: 'no postal address' }), { expirationTtl: 31 * 86400 });
+    return { status: 'skipped', why: 'no postal address', week };
+  }
   const members: Member[] = [];
   const follows = new Map<string, Follows>();
   for (const m of await listMembers(env)) {

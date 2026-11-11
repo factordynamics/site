@@ -1820,6 +1820,7 @@ export async function reconciliation(env: Env): Promise<Record<string, unknown>>
   let log = JSON.parse((await env.DB.get(RECONCILED)) ?? '[]') as Reconciled[];
   // When the first frozen verdict was written (gene's 07:41 UTC run, Nov 11); null while the previous log is shown.
   const verdictsFrozenAt = log.length ? log.map((x) => x.checked_at).sort()[0] : null;
+  const lastRun = Number((await env.DB.get('alerts:recheck-at')) ?? 0) || null;
   // The previous log predates the disclosure rule: its alerts named in a /status/ entry take that entry's class.
   if (!log.length)
     log = (JSON.parse((await env.DB.get(RECONCILED_PREV)) ?? '[]') as Reconciled[]).map((x) => ({
@@ -1842,9 +1843,12 @@ export async function reconciliation(env: Env): Promise<Record<string, unknown>>
     // Emailed rows the after-send cross-filer check marked "shown as filed".
     filer_value_rows: log.reduce((n, x) => n + (x.filer_value?.length ?? 0), 0),
     held_pending: (JSON.parse((await env.DB.get('alerts:pending-check')) ?? '[]') as unknown[]).length,
+    // The first verdict: fixed once verdicts are frozen. last_run_at moves with each hourly re-check run (gene).
     since: log.length ? log.reduce((m, x) => (x.checked_at < m ? x.checked_at : m), log[0].checked_at) : null,
-    // Every row the gate held: still held (outcome null), then how each ended.
     verdicts_frozen_at: verdictsFrozenAt,
+    last_run_at: lastRun ? new Date(lastRun).toISOString().replace(/\.\d{3}Z$/, 'Z') : null,
+    next_run_at: lastRun ? new Date(lastRun + 3600_000).toISOString().replace(/\.\d{3}Z$/, 'Z') : null,
+    // Every row the gate held: still held (outcome null), then how each ended.
     held: [
       ...(JSON.parse((await env.DB.get('alerts:pending-check')) ?? '[]') as Alert13F[]).flatMap((a) => (a.held ?? []).map((h): HeldEnd => ({ accession: a.accession, ticker: h.ticker ?? null, cusip: h.cusip, rule: h.reason, held_at: a.accepted ?? a.filing_date, released_at: null, outcome: null }))),
       ...(JSON.parse((await env.DB.get(HELD_LOG)) ?? '[]') as HeldEnd[]),

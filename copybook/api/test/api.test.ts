@@ -1415,14 +1415,27 @@ describe('copybook api', () => {
     const s = await (await call('/session', { body: { login: loginTokenFrom(sent[0].text) } })).json();
     expect(s.member).toMatchObject({ plan: 'free', active: false });
     expect((await call('/history/warren-buffett', { token: s.token })).status).toBe(402);
-    // 3 an hour per address: a repeat sends the sign-in link again, the 4th is refused.
+    // 5 an hour per address, signed out: a repeat sends the sign-in link again (at most one an hour), the 6th is refused.
     // A filer page's one-field signup from the same address adds the follow (a free member's Friday email leads with it).
     expect(await (await signup({ email: 'reader@reader.test', follow: [{ kind: 'investor', id: 'bill-ackman' }, { kind: 'stock', id: 'hhh' }], source: 'follow:/investors/bill-ackman/' }, '2.2.2.2')).json()).toEqual({ ok: true, following: true, follow: 'added', sign_in_email: 'sent' });
     // Signed out, a follow's sign-in link says the follow was saved; at most one an hour.
     expect(sent.map((m) => m.subject).at(-1)).toBe('Follow saved. Your Copybook sign-in link');
-    await signup({ email: 'reader@reader.test' }, '3.3.3.3');
+    for (const ip of ['3.3.3.3', '3.3.3.4', '3.3.3.5']) expect((await signup({ email: 'reader@reader.test' }, ip)).status).toBe(200);
     expect(sent.filter((m) => /sign-in link/.test(m.subject))).toHaveLength(1);
-    expect((await signup({ email: 'reader@reader.test' }, '4.4.4.4')).status).toBe(429);
+    // Refused tries never extend the window (retail was locked out for good by retrying): 20 minutes on, the wait
+    // is 20 minutes shorter, and Retry-After says so. Another address from the same IP still gets in.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const t0 = Date.now();
+    const first = await signup({ email: 'reader@reader.test' }, '4.4.4.4');
+    expect([first.status, (await first.json()).code]).toEqual([429, 'rate_limited']);
+    vi.setSystemTime(t0 + 20 * 60_000);
+    const again = await signup({ email: 'reader@reader.test' }, '4.4.4.4');
+    expect(Number(again.headers.get('retry-after'))).toBeLessThanOrEqual(Number(first.headers.get('retry-after')) - 20 * 60);
+    expect((await signup({ email: 'copybook-test-other@reader.test' }, '4.4.4.4')).status).toBe(201);
+    await env.DB.delete('email:copybook-test-other@reader.test');
+    vi.setSystemTime(t0 + 61 * 60_000);
+    expect((await signup({ email: 'reader@reader.test' }, '4.4.4.4')).status).toBe(200);
+    vi.useRealTimers();
     await putMember('paid', 'paid@reader.test', 'active', 'all'); // paying members never get the weekly
     // Up to 5 owned names on a free account; the 6th is refused with the limit, and /me shows them.
     for (const t of ['GOOGL', 'HHH', 'NVDA', 'AAPL', 'MSFT']) expect((await call(`/follows/owned/${t}`, { method: 'POST', token: s.token })).status).toBe(200);
@@ -1433,7 +1446,6 @@ describe('copybook api', () => {
     expect((await (await call('/follows', { token: s.token })).json()).follows.stocks).toEqual(['HHH', 'GOOGL', 'NVDA', 'AAPL']); // HHH first: followed from the signup form; the stock page stops saying Following
     expect((await (await call('/me', { token: s.token })).json()).member.free_names).toEqual({ names: ['GOOGL', 'HHH', 'NVDA', 'AAPL'], limit: 5, facts: [], hook: null, more: 0 });
     // Free investor follows cap at 10: one past it is never reported as added (Weitz and Hawkins were dropped silently).
-    await env.DB.delete('rl:signup:reader@reader.test');
     const nine = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'].map((x) => `fund-${x}`);
     for (const x of nine) expect((await call(`/follows/investors/${x}`, { method: 'POST', token: s.token })).status).toBe(200);
     const signedIn = (b: Record<string, unknown>, ip: string) => handleRequest(new Request('https://api.test/signup', { method: 'POST', body: JSON.stringify(b), headers: { origin: 'https://refcell.github.io', 'cf-connecting-ip': ip, authorization: `Bearer ${s.token}` } }), env);
@@ -1443,10 +1455,11 @@ describe('copybook api', () => {
     expect(capped).toEqual({ ok: true, following: true, follow: 'cap_reached', limit: 10, dropped: [{ kind: 'investor', id: 'wally-weitz' }], sign_in_email: 'not_needed' });
     expect(sent).toHaveLength(0);
     expect((await (await call('/follows', { token: s.token })).json()).follows.investors).not.toContain('wally-weitz');
-    const eleventh = await call('/follows/investors/wally-weitz', { method: 'POST', token: s.token });
-    expect([eleventh.status, (await eleventh.json()).code]).toEqual([402, 'cap_reached']);
+    // The site's Follow button posts /follows/{slug}: a free member gets the cap (409 cap_reached), never 402.
+    const eleventh = await call('/follows/wally-weitz', { method: 'POST', token: s.token });
+    expect([eleventh.status, await eleventh.json()]).toEqual([409, expect.objectContaining({ follow: 'cap_reached', code: 'cap_reached', limit: 10 })]);
     // Free members unfollow from /account/: then the next follow fits.
-    expect((await call('/follows/investors/fund-a', { method: 'DELETE', token: s.token })).status).toBe(200);
+    expect(await (await call('/follows/fund-a', { method: 'DELETE', token: s.token })).json()).toMatchObject({ ok: true, follow: 'removed' });
     expect(await (await signedIn({ email: 'reader@reader.test', follow: { kind: 'investor', id: 'wally-weitz' } }, '6.6.6.6')).json()).toMatchObject({ follow: 'added', sign_in_email: 'not_needed' });
     for (const x of [...nine.slice(1), 'wally-weitz']) await call(`/follows/investors/${x}`, { method: 'DELETE', token: s.token });
 
@@ -1511,6 +1524,10 @@ describe('copybook api', () => {
       return realFetch(u, init);
     });
     await call('/follows/owned/SIRI', { method: 'POST', token: s.token }); // 5th name
+    // No mailing address: the Friday email skips itself (marketing email must carry one), and can still go once it's set.
+    const { runWeekly } = await import('../src/free');
+    expect(await runWeekly(env, sat)).toMatchObject({ status: 'skipped', why: 'no postal address' });
+    expect(sent).toHaveLength(0);
     Object.assign(env, { POSTAL_ADDRESS: '1 Example Way, Suite 2, Austin, TX 78701' });
     await cron(42, sat);
     expect(sent.map((m) => m.to[0])).toEqual(['reader@reader.test']);
@@ -3227,9 +3244,9 @@ describe('copybook api', () => {
     const row = (acc: string, seconds: number, extra: Record<string, unknown> = {}) => ({ slug: 'warren-buffett', manager: 'Warren Buffett', quarter: '2026Q3', kind: '13f', accession: acc, accepted: new Date(t - seconds * 1000).toISOString(), sent: new Date(t).toISOString(), seconds, moves: true, ...extra });
     // Newest first, as logged; one replay; one from last season; a 13F timed by its first email (no moves), before the fix.
     // A1 again, to a second member 4 minutes later (a coalesced send): one alert, counted once at its first delivery.
-    await env.DB.put('alerts:latency', JSON.stringify([row('A1', 300, { sent: new Date(t + 260_000).toISOString(), coalesced: true }), row('A1', 40), row('R1', 163146, { replay: true }), row('A2', 100, { kind: 'form4', form: '4' }), row('A3', 60, { coverage: 'any_filer', slug: 'whale-rock-capital-management-llc' }), row('OLD', 5, { sent: '2025-01-02T00:00:00Z' }), row('FILED', 30, { moves: undefined })]));
+    await env.DB.put('alerts:latency', JSON.stringify([row('A1', 300, { sent: new Date(t + 260_000).toISOString(), coalesced: true }), row('A1', 40), row('R1', 163146, { replay: true }), row('A2', 100, { kind: 'form4', form: '4' }), row('A3', 60, { coverage: 'any_filer', slug: 'whale-rock-capital-management-llc' }), row('OLD', 5, { sent: '2025-01-02T00:00:00Z' }), row('FILED', 30, { moves: undefined }), row('0001386060-26-000054', 9149, { replay: true, slug: 'boston-partners', manager: 'Boston Partners' })]));
     const d = (channel: string, acc: string, seconds: number, extra: Record<string, unknown> = {}) => ({ channel, accession: acc, form: '13F-HR', manager: 'Warren Buffett', accepted: new Date(t - seconds * 1000).toISOString(), delivered: new Date(t).toISOString(), seconds, ...extra });
-    await env.DB.put('alerts:latency:ch', JSON.stringify([d('slack', 'A1', 41), d('slack', 'A3', 61), d('slack', 'A2', 101, { form: '4' }), d('discord', 'A1', 43), d('slack', 'OLD', 9, { delivered: '2025-01-02T00:00:00Z' })]));
+    await env.DB.put('alerts:latency:ch', JSON.stringify([d('slack', 'A1', 41), d('slack', 'A3', 61), d('slack', 'A2', 101, { form: '4' }), d('discord', 'A1', 43), d('slack', 'OLD', 9, { delivered: '2025-01-02T00:00:00Z' }), d('webhook', 'A3', 20, { moves: false, delivered: new Date(t - 40_000).toISOString() })]));
     const lat = await (await call('/latency')).json();
     expect(lat).toMatchObject({ count: 3, median_seconds: 60, p90_seconds: 100, p95_seconds: 100 });
     // Per form family and per channel (email: acceptance to the mailer; chat: to the first successful post), this season only.
@@ -3246,14 +3263,18 @@ describe('copybook api', () => {
     // Every alert row, the replay included and flagged (the figures above leave it out), then the misses.
     type Row = { accession: string; missed: boolean; replay: boolean; audience?: string; never: boolean; team_delivered_at: string | null; email_accepted_at: string | null };
     const sentRows = lat.alerts.filter((a: Row) => !a.missed);
-    expect(sentRows.map((a: Row) => [a.accession, a.replay])).toEqual([['A1', false], ['R1', true], ['A2', false], ['A3', false]]);
+    expect(sentRows.map((a: Row) => [a.accession, a.replay])).toEqual([['A1', false], ['R1', true], ['A2', false], ['A3', false], ['0001386060-26-000054', true]]);
     expect(sentRows[2]).toMatchObject({ form: '4', gap_seconds: 100, manager: 'Warren Buffett', missed: false, never: false, first_alert_at: null });
-    // Team channel: the first successful chat or webhook post (the fixture's posts all land at t; A3's Slack too).
+    // Team channel: the first successful chat or webhook post that carried a 13F's moves (A3's earlier webhook post
+    // without them isn't its time, nor in by_channel).
     expect([sentRows[0].team_delivered_at, sentRows[3].team_delivered_at]).toEqual([new Date(t).toISOString().replace(/\.\d{3}Z$/, 'Z'), new Date(t).toISOString().replace(/\.\d{3}Z$/, 'Z')]);
     expect(sentRows[0].email_accepted_at).toBe(sentRows[0].sent_at);
     // The long-only routing outage: 16 13Fs never reached stock watchers.
     const watchers = lat.alerts.filter((a: Row) => a.audience === 'stock_watchers');
     expect([watchers.length, watchers.every((a: Row) => a.missed && a.never && a.email_accepted_at === null)]).toEqual([16, true]);
+    // Each names its manager and its followers' alert, says how watchers get it, and stays out of the figures.
+    expect(watchers.find((a: Row) => a.accession === '0001386060-26-000054')).toMatchObject({ manager: 'Boston Partners', followers_alerted_at: expect.any(String), covered_by: 'weekly_names', covered_at: '2026-11-14T02:15:00Z', in_stats: false });
+    expect([lat.missed_stock_watchers, lat.missed_never, sentRows.filter((a: { in_stats: boolean }) => a.in_stats).map((a: Row) => a.accession)]).toEqual([16, 0, ['A1', 'A2', 'A3']]);
     expect(lat.alerts[0].form).toBe('13F-HR');
   });
 

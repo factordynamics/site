@@ -268,6 +268,10 @@ export interface LatencyExtra {
  * Nov 9 and routing kept only hedge_fund and active, until the Worker fix (05:36 UTC Nov 11) and gene's (06:36).
  * Followers got these alerts; watchers didn't, and they weren't re-sent (lead, Nov 11). /status/ Data lists them.
  */
+/** When Saturday's "Your names this week" (Fri 9:15pm ET) brings LONG_ONLY_MISSED to the members watching their tickers. */
+const WATCHERS_COVERED_AT = '2026-11-14T02:15:00Z';
+/** From gene's 09:40 UTC restart (Nov 11) both pollers time a 13F's team posts by the moves follow-up too; before it, they weren't recorded. */
+const TEAM_TIMED_FROM = '2026-11-11T09:40:00Z';
 const LONG_ONLY_MISSED: [string, string, string][] = [
   ['0001088875-26-000074', 'baillie-gifford-co', '2026-11-09T11:35:17Z'],
   ['0001172661-26-004909', 'comgest-global-investors-s-a-s-4947', '2026-11-09T15:13:14Z'],
@@ -304,7 +308,8 @@ export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDeliver
   // Every alert counts in the season's figures; the late 13Fs from before the moves fix are also listed to explain them.
   const rows = counted;
   const pre = counted.filter(isPre);
-  const chRows = ch.filter((c) => Date.parse(c.delivered) >= from);
+  // A 13F's channel time is its moves post, as its email's is (a first post without the moves isn't timed).
+  const chRows = ch.filter((c) => Date.parse(c.delivered) >= from && c.moves !== false);
   const all = spread(rows.map((l) => l.seconds));
   const FORM: Record<string, string> = { '13f': '13F-HR', form4: '4', '13d': 'SC 13D', '13g': 'SC 13G' };
   const formOf = (l: LatencyRow) => l.form ?? FORM[l.kind ?? '13f'] ?? 'other';
@@ -315,7 +320,7 @@ export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDeliver
     for (const x of xs) (g[key(x)] ??= []).push(secs(x));
     return Object.fromEntries(Object.entries(g).map(([k, v]) => [k, spread(v)]));
   };
-  return {
+  const report = {
     ok: true,
     season,
     since: new Date(from).toISOString().replace(/\.\d{3}Z$/, 'Z'),
@@ -332,6 +337,8 @@ export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDeliver
       return g;
     })(),
     moves_fix_at: MOVES_FIX_AT,
+    // Team channels (Slack, Discord, Telegram, webhook) were timed only from here; before it, team_delivered_at is null.
+    team_delivered_recorded_from: TEAM_TIMED_FROM,
     before_moves_fix: { '13F': { ...spread(pre.map((l) => l.seconds)), max_seconds: pre.length ? Math.max(...pre.map((l) => l.seconds)) : null, rows: pre.map((l) => ({ accession: l.accession, manager: l.manager ?? null, slug: l.slug, accepted_at: l.accepted, sent_at: l.sent, seconds: l.seconds })) } },
     by_channel: { email: all, ...group(chRows, (c) => c.channel, (c) => c.seconds) },
     by_coverage: group(rows, (l) => l.coverage ?? 'curated', (l) => l.seconds),
@@ -343,7 +350,7 @@ export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDeliver
       const one = new Map<string, LatencyRow>();
       for (const l of log.filter((l) => Date.parse(l.sent) >= from && ((l.kind ?? '13f') !== '13f' || l.moves)).sort((a, b) => a.sent.localeCompare(b.sent))) if (!one.has(l.accession)) one.set(l.accession, l);
       const team = new Map<string, string>();
-      for (const c of ch) if (c.channel !== 'feed' && (!team.has(c.accession) || c.delivered < team.get(c.accession)!)) team.set(c.accession, c.delivered);
+      for (const c of chRows) if (c.channel !== 'feed' && (!team.has(c.accession) || c.delivered < team.get(c.accession)!)) team.set(c.accession, c.delivered);
       const missed = new Map((extra.missed ?? []).map((m) => [m.accession, m]));
       const held = new Map<string, { n: number; open: boolean; released: string | null }>();
       for (const h of extra.held ?? []) {
@@ -378,22 +385,32 @@ export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDeliver
           missed: !!m,
           delay_seconds: m ? l.seconds : null,
           never: false,
+          in_stats: firsts.get(l.accession) === l,
           replay: !!l.replay,
           test: !!l.test,
           email_delayed: !!l.email_delayed,
         };
       });
       const missRow = (accession: string, slug: string, form: string, accepted: string, detected: string | null, audience: string) => ({
-        host: null, slug, manager: null, quarter: null, form, coverage: 'curated', accession, accepted_at: iso(accepted), detected_at: iso(detected), email_accepted_at: null, sent_at: null, gap_seconds: null,
-        team_delivered_at: null, first_alert_at: null, moves_sent_at: null, held: 0, released_at: null, missed: true, delay_seconds: null, never: true, audience, replay: false, test: false, email_delayed: false,
+        host: null, slug, manager: null as string | null, quarter: null as string | null, form, coverage: 'curated', accession, accepted_at: iso(accepted), detected_at: iso(detected), email_accepted_at: null, sent_at: null, gap_seconds: null,
+        team_delivered_at: null, first_alert_at: null, moves_sent_at: null, held: 0, released_at: null, missed: true, delay_seconds: null, never: true, audience, in_stats: false, replay: false, test: false, email_delayed: false,
       });
       // Found by the missed-filing detector and never sent (6 hours on, it isn't coming).
       const never = (extra.missed ?? []).filter((m) => !one.has(m.accession) && Date.parse(m.accepted) >= from && now - Date.parse(m.detected_at) > 6 * 3600_000).map((m) => missRow(m.accession, m.cik, m.form, m.accepted, m.detected_at, 'everyone'));
       // Sent to followers, never to the members watching its tickers (the long-only routing outage).
-      const watchers = LONG_ONLY_MISSED.filter(([, , a]) => Date.parse(a) >= from).map(([acc, slug, a]) => missRow(acc, slug, '13F-HR', a, null, 'stock_watchers'));
+      // `never` is for this audience only: the filing's followers got it (followers_alerted_at, its own row above), and the
+      // watchers get it in Saturday's "Your names this week" (Fri 9:15pm ET). Not in the latency figures.
+      const watchers = LONG_ONLY_MISSED.filter(([, , a]) => Date.parse(a) >= from).map(([acc, slug, a]) => {
+        const f = one.get(acc);
+        return { ...missRow(acc, slug, '13F-HR', a, null, 'stock_watchers'), manager: f?.manager ?? null, quarter: f?.quarter ?? null, followers_alerted_at: iso(f?.sent), covered_by: 'weekly_names', covered_at: WATCHERS_COVERED_AT };
+      });
       return [...sent, ...never, ...watchers];
     })(),
   };
+  // Missed rows, apart from the figures: filings no one was alerted to, and filings their followers got but the members
+  // watching their tickers didn't (each also has its sent row).
+  const missedBy = (aud: string) => report.alerts.filter((a) => a.missed && a.never && 'audience' in a && a.audience === aud).length;
+  return { ...report, missed_never: missedBy('everyone'), missed_stock_watchers: missedBy('stock_watchers') };
 }
 export async function buildLatency(env: Env, now: number) {
   const log = JSON.parse((await env.DB.get('alerts:latency')) ?? '[]') as LatencyRow[];
@@ -1118,16 +1135,20 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       const r = await changeFollows(env, m, { get: true });
       return json({ ok: true, follows: r.ok ? r.follows : await getFollows(env, m), limit: FREE_NAMES }, 200, h);
     }
-    // Investors (up to 10) and stocks: follow and unfollow from /account/ or a page, signed in.
-    const fl = path.match(/^\/follows\/(investors|stocks)\/([^/]+)$/);
+    // Investors (up to 10) and stocks: follow and unfollow from /account/ or a page, signed in. /follows/{slug} is an
+    // investor, as for paying members (the site's Follow buttons use it).
+    const fl = path.match(/^\/follows\/(?:(investors|stocks)\/)?([^/]+)$/);
     if (fl && (req.method === 'POST' || req.method === 'DELETE')) {
       const { FREE_INVESTORS } = await import('./free');
-      const list = fl[1] as 'investors' | 'stocks';
+      const list = (fl[1] ?? 'investors') as 'investors' | 'stocks';
       const value = list === 'investors' ? decodeURIComponent(fl[2]) : decodeURIComponent(fl[2]).toUpperCase().replace('-', '.');
       if (!(list === 'investors' ? SLUG : TICKER).test(value)) return json({ ok: false, error: list === 'investors' ? 'not a filer slug' : 'not a ticker like BRK.B', code: 'bad_request' }, 400, h);
+      const had = (await getFollows(env, m))[list].includes(value);
       const r = await changeFollows(env, m, req.method === 'POST' ? { add: { list, value, max: FREE_INVESTORS } } : { remove: { list, value } });
-      if (!r.ok && r.error.startsWith('limit:')) return json({ ok: false, error: `Free accounts follow up to ${FREE_INVESTORS} ${list}. Remove one, or start Copy for unlimited follows.`, code: 'cap_reached', limit: FREE_INVESTORS }, 402, h);
-      return r.ok ? json({ ok: true, follows: r.follows, limit: FREE_INVESTORS }, 200, h) : json({ ok: false, error: r.error }, 400, h);
+      // At the cap: 409 with follow cap_reached (not 402: nothing is for sale on this call, and the follow wasn't stored).
+      if (!r.ok && r.error.startsWith('limit:')) return json({ ok: false, follow: 'cap_reached', error: `Free accounts follow up to ${FREE_INVESTORS} investors. Remove one, or start Copy for unlimited follows.`, code: 'cap_reached', limit: FREE_INVESTORS }, 409, h);
+      const follow = req.method === 'POST' ? (had ? 'already' : 'added') : had ? 'removed' : 'not_following';
+      return r.ok ? json({ ok: true, follow, follows: r.follows, limit: FREE_INVESTORS }, 200, h) : json({ ok: false, error: r.error }, 400, h);
     }
     const own = path.match(/^\/follows\/owned\/([^/]+)$/);
     if (own && (req.method === 'POST' || req.method === 'DELETE')) {

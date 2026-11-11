@@ -284,18 +284,21 @@ export interface ChannelDelivery {
   accepted: string;
   delivered: string;
   seconds: number;
+  /** A 13F post that carried the moves (the first alert or its moves follow-up); false: a first alert without them. Absent on events and older rows. */
+  moves?: boolean;
 }
 const timed: ChannelDelivery[] = [];
 
 function noteDelivered(channel: ChannelDelivery['channel'], filings: Alert13F[], events: AlertEvent[]): void {
   const at = Date.now();
   const rows = [
-    ...filings.filter((a) => !a.followup).map((a) => ({ accession: a.accession, form: a.reveal ? '13F-HR/A' : '13F-HR', manager: a.manager, accepted: a.accepted })),
+    // A 13F is timed like its email: by the post that carried the moves, a follow-up included.
+    ...filings.map((a) => ({ accession: a.accession, form: a.reveal ? '13F-HR/A' : '13F-HR', manager: a.manager, accepted: a.accepted, moves: !!a.moves })),
     ...events.filter((e) => !e.followup && !e.late).map((e) => ({ accession: e.id, form: e.form, manager: e.manager, accepted: e.accepted ?? e.accepted_at })),
   ];
   for (const r of rows) {
     if (!r.accepted || timed.some((t) => t.channel === channel && t.accession === r.accession)) continue;
-    timed.push({ channel, accession: r.accession, form: r.form, manager: r.manager || null, accepted: r.accepted, delivered: new Date(at).toISOString(), seconds: Math.round((at - Date.parse(r.accepted)) / 1000) });
+    timed.push({ channel, accession: r.accession, form: r.form, manager: r.manager || null, accepted: r.accepted, delivered: new Date(at).toISOString(), seconds: Math.round((at - Date.parse(r.accepted)) / 1000), ...('moves' in r ? { moves: r.moves as boolean } : {}) });
   }
 }
 
