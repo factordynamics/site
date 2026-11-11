@@ -135,10 +135,16 @@ class TypesGuardTest(unittest.TestCase):
             patches = dict(DATA=data, RECLASS=True, form_d_hedge=lambda: None, load_advisers=lambda: [],
                            adviser_index=lambda a: {}, adviser_for=lambda *a: None, shape=lambda *a: {},
                            classify=lambda *a: ("long_only", "shape", "test"))
+            (data / "index.json").write_text(json.dumps({"managers": []}))
             for accepted, want in ((False, "hedge_fund"), (True, "long_only")):
                 with mock.patch.multiple(ft, TYPES_ACCEPTED=accepted, **patches):
                     ft.main()
+                if not accepted:  # held: the published set keeps its date
+                    self.assertEqual(json.loads((data / "index.json").read_text())["types_as_of"], ft.FIRST_AS_OF)
                 got = json.loads((data / "filer_types.json").read_text())["filers"][ciks[0]]["type"]
                 guard = json.loads((data / "types_guard.json").read_text())
                 self.assertEqual((got, guard["status"]), (want, "accepted" if accepted else "held"))
             self.assertEqual(guard["moved"][0], {"type": "hedge_fund", "published": 20, "candidate": 0, "change_pct": -100.0})
+            # The held run kept the set and its date; the accepted run published a new set dated today.
+            from datetime import datetime, timezone
+            self.assertEqual(json.loads((data / "filer_types.json").read_text())["as_of"], datetime.now(timezone.utc).strftime("%Y-%m-%d"))

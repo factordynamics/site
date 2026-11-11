@@ -441,12 +441,28 @@ def write_guard(status: str, reason: str, published: dict, candidate: dict | Non
         "published_counts": published, "candidate_counts": candidate, "moved": moved}, indent=1) + "\n")
 
 
+# The published set's date (`as_of`, index.json `types_as_of`): set when a full type set is published (status published
+# or accepted); hand-checked corrections keep it. The set live since Nov 11 01:22 UTC predates the field.
+FIRST_AS_OF = "2026-11-11"
+
+
+def stamp_as_of(as_of: str) -> None:
+    """index.json `types_as_of` now, not only at the next run's build.py (which runs before this step)."""
+    index = read(DATA / "index.json")
+    if index is not None and index.get("types_as_of") != as_of:
+        (DATA / "index.json").write_text(json.dumps(index | {"types_as_of": as_of}, separators=(",", ":")) + "\n")
+
+
 def apply_overrides() -> int:
     """Curated runs: the hand overrides and reviewed cases on top of the last full run's filer_types.json,
     so a change to them is live (and passes the gate) without waiting for a full run."""
     doc = read(DATA / "filer_types.json")
     if not doc:
         return 0
+    if not doc.get("as_of"):
+        doc["as_of"] = FIRST_AS_OF
+        (DATA / "filer_types.json").write_text(json.dumps(doc, separators=(",", ":")) + "\n")
+    stamp_as_of(doc["as_of"])
     changed = {c: t for c, t in OVERRIDES.items() if c in doc["filers"] and doc["filers"][c].get("type") != t}
     for c, t in changed.items():
         doc["filers"][c] |= {"type": t, "basis": "override"}
@@ -527,8 +543,10 @@ def main() -> int:
         return apply_overrides()
     write_guard("accepted" if moved else "published", "accepted reclass flag" if moved else "within the limit",
                 published, counts, moved)
+    from datetime import datetime, timezone
+    as_of = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     (DATA / "filer_types.json").write_text(json.dumps({
-        "types": list(TYPES), "smart_money": list(SMART),
+        "as_of": as_of, "types": list(TYPES), "smart_money": list(SMART),
         "note": "SEC data only: hand-checked cases, then name rules (banks, brokers, ETF issuers, ...), then SEC Form ADV "
                 "(hedge_fund when Schedule D 7.B.1 hedge funds' gross assets are at least half of regulatory AUM or $1B "
                 "and more; wealth or long_only by client type), then the latest 13F book's shape, which never makes a "
@@ -544,6 +562,7 @@ def main() -> int:
         if shard is not None and (shard.get("type"), shard.get("display_name")) != (t, dn):
             shard["type"], shard["display_name"] = t, dn
             p.write_text(json.dumps(shard, separators=(",", ":")) + "\n")
+    stamp_as_of(as_of)
     print("filer types: " + ", ".join(f"{k} {v}" for k, v in sorted(counts.items(), key=lambda x: -x[1])))
     return 0
 

@@ -1209,6 +1209,13 @@ COUNT_DEFINITIONS = {
 }
 
 
+def types_as_of() -> str | None:
+    try:
+        return json.loads((DATA / "filer_types.json").read_text()).get("as_of")
+    except (OSError, ValueError):
+        return None
+
+
 def coverage_counts(managers: list[dict]) -> dict:
     """The one set of coverage numbers every page and the API show (index.json `counts`)."""
     qn = lambda q: int(q[:4]) * 4 + int(q[5]) - 1 if q else -1
@@ -1264,6 +1271,8 @@ def write_json(payload: dict) -> None:
                 "filed_count": payload["filed_count"],
                 "manager_count": payload["manager_count"],
                 "counts": coverage_counts(slim_managers),
+                # The day the current filer-type set was published (filer_types.py), for "Fund types as of" labels.
+                "types_as_of": types_as_of(),
                 "copycat_total_value": payload["copycat"]["total_value"],
                 "managers": slim_managers,
                 "copycat_top": [{k: h[k] for k in TOP_FIELDS if k in h} for h in payload["copycat"]["holdings"][:20]],
