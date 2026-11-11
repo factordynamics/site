@@ -296,6 +296,18 @@ export async function presignGet(env: Env, key: string, ttl: number, query: Reco
   return `https://${hostname}${path}?${qs}&X-Amz-Signature=${sig}`;
 }
 
+/**
+ * A request Cloudflare answers itself rather than sending on to gene (the one-click unsubscribe): it reads and writes
+ * the cron's store (R2 kv/ over KV) and publishes what it wrote, so gene applies it within a minute.
+ */
+export async function writeThrough<T>(env: Env, fn: (env: Env) => Promise<T>): Promise<T> {
+  const store = r2kv(env.HIST, env.DB);
+  const written = new Map<string, number>();
+  const out = await fn({ ...env, DB: recording(store, written) });
+  await publish({ ...env, DB: store }, written, Date.now()).catch((e) => console.log(`unsubscribe publish: ${e}`));
+  return out;
+}
+
 /** gene, every 5 minutes: held rows re-checked and sent 13F alerts reconciled against ingest's build. */
 async function checks(env: Env, now: number): Promise<Record<string, unknown>> {
   if (new Date(now).getUTCMinutes() % 5 !== 1) return {};

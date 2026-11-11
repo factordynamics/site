@@ -150,6 +150,13 @@ export interface Member {
   dunning_sent?: string;
 }
 
+/**
+ * Cloudflare's Worker: always up, and it answers /unsubscribe itself (failover.writeThrough), so a member email's
+ * one-click unsubscribe works when gene is down; its other paths 308 to the members' API. Member emails link here or to
+ * the site, never to gene's host.
+ */
+export const WORKER_URL = 'https://copybook-api.factordynamics.workers.dev';
+
 /** The one public base URL for every absolute link the API hands out (feeds, CSV and bulk links, email links), without
  * a trailing slash: API_URL when set (the API can sit under a path behind a proxy, e.g. self-hosted at
  * https://host/copybook/), else the request's origin. */

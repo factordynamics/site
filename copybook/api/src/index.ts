@@ -1,4 +1,4 @@
-import { type Alert13F, type AlertEvent, deliverTo, etDay, recentFeed, resolveFollowedFilers, runScheduled } from './alerts';
+import { type Alert13F, type AlertEvent, deliverTo, etDay, MOVES_FIX_AT, recentFeed, resolveFollowedFilers, runScheduled } from './alerts';
 import { fetchHistory, historyCsv, holdersCsv, shard, SHARD_KEY, SLUG } from './data';
 import { filers as curatedFilers, filerBook, filingMeta, resolveAny, rowsOf } from './v1data';
 import { verifyGithubOidc } from './oidc';
@@ -249,9 +249,6 @@ function spread(xs: number[]) {
  * acceptance to handing the alert to the mailer; chat, webhook and feed are acceptance to the
  * channel's first successful post (KV alerts:latency:ch).
  */
-/** From then (the deploy of 0bf5b8f) a 13F is timed by the email that carries its moves. Filings accepted earlier are left out of the figures. */
-const MOVES_FIX_AT = '2026-11-11T00:01:00Z';
-
 export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDelivery[] = []) {
   const { season, from } = seasonOf(now);
   const fixAt = Date.parse(MOVES_FIX_AT);
@@ -1344,6 +1341,8 @@ export default {
     // copy keeps its identity (Cloudflare, the primary poller) through a failover and back.
     if (env.MOVED_TO) {
       const u = new URL(req.url);
+      // Unsubscribe (the List-Unsubscribe one-click POST and its page) is answered here, so it works with gene down.
+      if (u.pathname === '/unsubscribe') return import('./failover').then((fo) => fo.writeThrough(env, (e) => serve(req, e)));
       return movedBase(env).then((b) => (new URL(b).origin === u.origin ? serve(req, env) : new Response(null, { status: 308, headers: { location: `${b}${u.pathname}${u.search}`, 'access-control-allow-origin': '*', 'cache-control': 'no-store' } })));
     }
     return serve(req, env);

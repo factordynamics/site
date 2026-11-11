@@ -1,6 +1,6 @@
 import type { Alert13F, AlertEvent } from './alerts';
 import { FOOTER, sendMail, type Mail } from './email';
-import { isActive, stableBase, isPaused, pauseScheduled, testAddress, type Env, type Member } from './env';
+import { isActive, isPaused, WORKER_URL, pauseScheduled, testAddress, type Env, type Member } from './env';
 import { unsubscribeUrl } from './free';
 import { getFollows, getMember, listMembers, putMember, syncSubscription } from './members';
 import { SEAT_LIMIT } from './seats';
@@ -226,7 +226,8 @@ export function winbackMail(env: Env, m: Member, resume: string, unsub: string):
   };
 }
 
-const API = (env: Env) => `${stableBase(env)}/`;
+// Emailed API links go through the Worker (it forwards to the members' API), never gene's host.
+const API = (_env: Env) => `${WORKER_URL}/`;
 
 /** Sends the day-14 note once per subscription when a trial runs out cancelled (not a mid-trial cancel). */
 export async function maybeWinback(env: Env, prev: Member | null, m: Member, now = Date.now()): Promise<void> {

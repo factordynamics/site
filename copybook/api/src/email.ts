@@ -1,6 +1,6 @@
 import type { Alert13F, AlertEvent } from './alerts';
 import { cleanItem4, filingId, UNUSUAL, type MoveRow, type Moves } from './edgar';
-import { testAddress, type Env, type Member } from './env';
+import { testAddress, WORKER_URL, type Env, type Member } from './env';
 import type { Follows } from './members';
 import { firmName } from '../../../holdterm/src/names';
 
@@ -57,13 +57,19 @@ const mailgunRoom = (env: Env) => (mailgunOn(env) ? Math.max(0, MAILGUN_DAILY_CA
 export const alertRoomToday = (env: Env) => Math.max(0, Math.min(MAIL_DAILY_CAP - MAIL_RESERVE - mailQuota.used, MAIL_MONTHLY_CAP - MAIL_RESERVE - mailQuota.monthly)) + mailgunRoom(env);
 
 /** One message through Mailgun's HTTP API. Returns the HTTP status. */
+/** The List-Unsubscribe target: the Worker, which records the one-click POST even when gene is down. */
+const oneClick = (u: string) => {
+  const t = /\/unsubscribe\/?\?/.test(u) ? new URL(u).searchParams.get('t') : null;
+  return t ? `${WORKER_URL}/unsubscribe?t=${encodeURIComponent(t)}` : u;
+};
+
 async function sendMailgun(env: Env, m: Mail): Promise<number> {
   const b = new URLSearchParams({ from: m.from ?? env.EMAIL_FROM, to: m.to, subject: m.subject, text: m.text });
   if (m.html) b.set('html', m.html);
   const reply = m.replyTo ?? env.CONTACT_EMAIL;
   if (reply) b.set('h:Reply-To', reply);
   if (m.unsubscribe) {
-    b.set('h:List-Unsubscribe', `<${m.unsubscribe}>`);
+    b.set('h:List-Unsubscribe', `<${oneClick(m.unsubscribe)}>`);
     b.set('h:List-Unsubscribe-Post', 'List-Unsubscribe=One-Click');
   }
   const base = (env.MAILGUN_BASE ?? 'https://api.mailgun.net').replace(/\/+$/, '');
@@ -184,7 +190,7 @@ export async function sendMail(env: Env, mails: Mail[], opts: { bulk?: boolean; 
     return 'skipped';
   }
   for (let i = 0; i < mails.length; i += 100) {
-    const batch = mails.slice(i, i + 100).map((m) => ({ from: m.from ?? env.EMAIL_FROM, to: [m.to], subject: m.subject, text: m.text, ...((m.replyTo ?? env.CONTACT_EMAIL) ? { reply_to: m.replyTo ?? env.CONTACT_EMAIL } : {}), ...(m.html ? { html: m.html } : {}), ...(m.unsubscribe ? { headers: { 'List-Unsubscribe': `<${m.unsubscribe}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' } } : {}) }));
+    const batch = mails.slice(i, i + 100).map((m) => ({ from: m.from ?? env.EMAIL_FROM, to: [m.to], subject: m.subject, text: m.text, ...((m.replyTo ?? env.CONTACT_EMAIL) ? { reply_to: m.replyTo ?? env.CONTACT_EMAIL } : {}), ...(m.html ? { html: m.html } : {}), ...(m.unsubscribe ? { headers: { 'List-Unsubscribe': `<${oneClick(m.unsubscribe)}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' } } : {}) }));
     const res = await fetch('https://api.resend.com/emails/batch', {
       method: 'POST',
       headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },

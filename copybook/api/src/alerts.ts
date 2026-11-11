@@ -152,6 +152,9 @@ interface Manager {
 type CikMap = Record<string, Manager[]>;
 
 /** Times are ET-ish for day keys: EDGAR's filing day ends at 22:00 ET (03:00 UTC in winter). */
+/** From then (the deploy of 0bf5b8f) a 13F is timed by the email that carries its moves. */
+export const MOVES_FIX_AT = '2026-11-11T00:01:00Z';
+
 export const etDay = (t: number) => new Date(t - 5 * 3600_000).toISOString().slice(0, 10);
 
 // ---------------------------------------------------------------------------------------------

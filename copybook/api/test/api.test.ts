@@ -1125,17 +1125,27 @@ describe('copybook api', () => {
     vi.stubGlobal('fetch', realFetch);
   });
 
-  it("Email 2: once, through Mailgun, to real free signups only; follows that filed today lead; skipped without a postal address or under 10", async () => {
+  it("Email 2: once, through Mailgun, to real free signups only; follows lead (never an empty state), the paid moment from logged times, a trial button; skipped without a postal address or under 10", async () => {
     const realFetch = globalThis.fetch;
     const mg: URLSearchParams[] = [];
-    const now = Date.now();
+    // Deadline night: Mon Nov 16, 9:30pm ET.
+    const now = Date.parse('2026-11-17T02:30:00Z');
+    index = { managers: [{ slug: 'matthew-mclennan', manager: 'Matthew McLennan', name: 'First Eagle Investment Management LLC', total_value: 50e9 }, { slug: 'irving-kahn', manager: 'Irving Kahn', name: 'Kahn Brothers Group Inc', total_value: 800e6 }] } as never;
+    // The latency log: First Eagle's moves email went 2 minutes after acceptance; Kahn's took 400 s, too slow to quote.
+    await env.DB.put('alerts:latency', JSON.stringify([
+      { slug: 'matthew-mclennan', accession: 'M', accepted: '2026-11-16T17:09:00Z', sent: '2026-11-16T17:11:00Z', seconds: 120, kind: '13f', moves: true },
+      { slug: 'irving-kahn', accession: 'K', accepted: '2026-11-16T18:00:00Z', sent: '2026-11-16T18:06:40Z', seconds: 400, kind: '13f', moves: true },
+    ]));
     const day = new Date(now - 5 * 3600_000).toISOString().slice(0, 10);
     vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => {
       if (String(u) === `${SITE}d/expected.json`) return Response.json({ quarter: '2026Q3', expected: [{ slug: 'seth-klarman', manager: 'Seth Klarman', expected_date: '2026-11-20' }] });
       if (String(u) === `${SITE}d/recap/2026Q3.json`)
         return Response.json({
-          filing: [{ slug: 'irving-kahn', filing_date: day }, { slug: 'matthew-mclennan', filing_date: day }, { slug: 'bill-ackman', filing_date: '2026-11-03' }],
-          biggest: [{ slug: 'bill-ackman', manager: 'Bill Ackman', ticker: 'UBER', change: 'new', delta_value: 2e9 }, { slug: 'matthew-mclennan', manager: 'Matthew McLennan', ticker: 'CHRW', change: 'exited', delta_value: -686e6 }, { slug: 'matthew-mclennan', manager: 'Matthew McLennan', ticker: 'EXPD', change: 'exited', delta_value: -329.4e6 }, { slug: 'irving-kahn', manager: 'Irving Kahn', ticker: 'TRIM', change: 'trimmed', delta_value: -8e6 }, { slug: 'matthew-mclennan', manager: 'Matthew McLennan', ticker: 'NVR', change: 'new', delta_value: 400.1e6 }],
+          filing: [{ slug: 'irving-kahn', filing_date: day }, { slug: 'matthew-mclennan', filing_date: day }, { slug: 'david-tepper', filing_date: day }, { slug: 'howard-marks', filing_date: day }, { slug: 'bill-ackman', filing_date: '2026-11-03' }],
+          biggest: [{ slug: 'bill-ackman', manager: 'Bill Ackman', ticker: 'UBER', change: 'new', delta_value: 2e9 }, { slug: 'matthew-mclennan', manager: 'Matthew McLennan', ticker: 'CHRW', change: 'exited', delta_value: -686e6 }, { slug: 'matthew-mclennan', manager: 'Matthew McLennan', ticker: 'EXPD', change: 'exited', delta_value: -329.4e6 }, { slug: 'irving-kahn', manager: 'Irving Kahn', ticker: 'TRIM', change: 'trimmed', delta_value: -8e6 }, { slug: 'matthew-mclennan', manager: 'Matthew McLennan', ticker: 'NVR', change: 'new', delta_value: 400.1e6 },
+            { slug: 'david-tepper', manager: 'David Tepper', ticker: 'TS1', change: 'exited', delta_value: -500e6 }, { slug: 'david-tepper', manager: 'David Tepper', ticker: 'TS2', change: 'trimmed', delta_value: -450e6 },
+            { slug: 'howard-marks', manager: 'Howard Marks', ticker: 'HM1', change: 'trimmed', delta_value: -300e6 }, { slug: 'howard-marks', manager: 'Howard Marks', ticker: 'HM2', change: 'trimmed', delta_value: -280e6 },
+            { slug: 'irving-kahn', manager: 'Irving Kahn', ticker: 'ADDS', change: 'added', delta_value: 5e6 }],
         });
       if (String(u) === 'https://mg.test/v3/factordynamics.com/messages') {
         mg.push(new URLSearchParams(String(init?.body)));
@@ -1145,7 +1155,7 @@ describe('copybook api', () => {
     });
     const { runEmail2 } = await import('../src/free');
     // Kahn filed today: 4 changed rows, of which Email 2 shows the 3 largest.
-    const row = (t: string, change: string, v: number) => ({ ticker: t, display_name: null, issuer: t, cusip: 'X', put_call: null, shares: 10, prev_shares: 5, value: Math.abs(v), value_delta: v, change });
+    const row = (t: string, change: string, v: number) => ({ ticker: t, display_name: null, issuer: t, cusip: 'X', put_call: null, shares: 10, prev_shares: 5, value: Math.abs(v), value_delta: v, change, delta_pct_of_book: v / 800e6 });
     const kahn = { slug: 'irving-kahn', slugs: ['irving-kahn'], manager: 'Irving Kahn', name: 'Kahn Brothers', quarter: '2026Q3', report_date: '2026-09-30', filing_date: day, accession: '0001039565-26-000005', sec_url: 'https://www.sec.gov/k', accepted: new Date(now).toISOString(),
       moves: { bought_usd: 9e6, sold_usd: 8e6, new: [row('NEWB', 'new', 4e6)], added: [row('ADDS', 'added', 5e6)], trimmed: [row('TRIM', 'trimmed', -8e6)], exited: [row('GONE', 'exited', -1e6)] } };
     const { deliver } = await import('../src/alerts');
@@ -1183,27 +1193,34 @@ describe('copybook api', () => {
     mg.length = 0;
     sent = [];
     const r = await runEmail2(env, now);
-    expect(r).toMatchObject({ sent: 10, filed_today: 2, biggest: 3 });
+    expect(r).toMatchObject({ sent: 10, filed_today: 4, biggest: 6, moment: 1 });
     expect(mg.map((b) => b.get('to')).sort()).toEqual(Array.from({ length: 10 }, (_, i) => `reader${i}@reader.test`));
     expect(sent).toHaveLength(0);
     const k = mg.find((b) => b.get('to') === 'reader0@reader.test')!;
     const text = k.get('text')!;
-    // Kahn's 3 largest moves (not GONE, the smallest), with his filing card; the day's biggest only from today's filers.
-    expect(text).toMatch(/Your follows that filed today:\n  Irving Kahn, Q3 13F: Trimmed TRIM −\$8\.0M; Added ADDS \+\$5\.0M; New NEWB \+\$4\.0M\n/);
+    // The date of the send; a Kahn follower's email opens on Kahn's filing: his 3 largest moves (not GONE), person and fund, % of fund.
+    expect(text.startsWith('13F deadline night, Monday, November 16.\n\nYour follows:\n  Irving Kahn (Kahn Brothers) filed its Q3 13F today: trimmed TRIM −$8.0M (1.0% of fund); added ADDS +$5.0M (0.6% of fund); new position in NEWB +$4.0M (0.5% of fund)\n')).toBe(true);
     expect(text).not.toContain('GONE');
     expect(text).toContain(`f/0001039565-26-000005/?utm_source=email&utm_medium=email&utm_campaign=e2&utm_content=e2-follows`);
-    // Largest first, at most 2 per manager: McLennan's third (EXPD) gives way to Kahn's.
-    expect(text).toContain("The day's biggest moves:\n  Matthew McLennan: sold out of CHRW −$686.0M\n  Matthew McLennan: new position in NVR +$400.1M\n  Irving Kahn: trimmed TRIM −$8.0M\n");
-    expect(text).not.toContain('UBER');
-    expect(text).toContain('pricing/?utm_source=email&utm_medium=email&utm_campaign=e2&utm_content=e2-paid&client_reference_id=email_e2-paid');
-    expect(text).toMatch(/You get this because you signed up for the free Copybook weekly\. Unsubscribe: \S+[\s\S]*1 Test St, Testville$/);
+    // The paid moment from the logged times, only a send under 5 minutes (First Eagle, not Kahn's 400 s); then the button.
+    expect(text).toContain("First Eagle filed at 12:09 pm ET. Copy members had its moves at 12:11 pm. You're reading them 9 hours later.\n\nStart 14-day free trial: https://refcell.github.io/gust/copybook/pricing/?from=e2&utm_source=email&utm_medium=email&utm_campaign=e2&utm_content=e2-paid&client_reference_id=email_e2-paid\nCard required · charged on day 15 unless you cancel.");
+    expect(k.get('html')).toMatch(/>Start 14-day free trial<\/a><\/p><p[^>]*>Card required · charged on day 15 unless you cancel</);
+    // Below: at most 2 per manager, at least 2 buys (Kahn's small ADDS makes the list over Marks's second trim), largest first.
+    expect(text).toContain("The day's biggest moves:\n  Matthew McLennan (First Eagle): sold out of CHRW −$686.0M (1.4% of fund)\n  David Tepper: sold out of TS1 −$500.0M\n  David Tepper: trimmed TS2 −$450.0M\n  Matthew McLennan (First Eagle): new position in NVR +$400.1M (0.8% of fund)\n  Howard Marks: trimmed HM1 −$300.0M\n  Irving Kahn (Kahn Brothers): added ADDS +$5.0M (0.6% of fund)\n");
+    expect(text).not.toMatch(/UBER|EXPD|HM2/);
+    // Member email links: the site and the Worker, never gene's host; one-click unsubscribe goes to the Worker.
+    for (const part of [text, k.get('html')!]) expect(part).not.toMatch(/ts\.net|trycloudflare/);
+    expect(text).toMatch(/You get this because you follow investors on Copybook\. Unsubscribe: https:\/\/copybook-api\.factordynamics\.workers\.dev\/unsubscribe\?t=\S+[\s\S]*1 Test St, Testville$/);
+    expect(k.get('h:List-Unsubscribe')).toMatch(/^<https:\/\/copybook-api\.factordynamics\.workers\.dev\/unsubscribe\?t=/);
     expect(k.get('h:List-Unsubscribe-Post')).toBe('List-Unsubscribe=One-Click');
-    expect(k.get('html')).toContain('>See the filing</a>');
-    expect(k.get('subject')).toBe('Irving Kahn filed today: the moves');
-    // A Klarman follower: none filed today, pointed to Friday.
+    expect(k.get('subject')).toBe("Deadline night: Kahn filed. Here's what they did");
+    // The preheader is the lead, never an empty state.
+    expect(k.get('html')).toMatch(/^<div style="display:none[^>]*>Kahn: trimmed TRIM/);
+    // A Klarman follower: Klarman is still due (never "none filed"); the subject is the night's biggest move.
     const s5 = mg.find((b) => b.get('to') === 'reader5@reader.test')!;
-    expect(s5.get('text')).toContain("Your follows that filed today: none filed today. Their moves come in Friday's email.");
-    expect(s5.get('subject')).toBe('13F deadline day: the biggest superinvestor moves');
+    expect(s5.get('text')).toContain("Your follows:\n  Seth Klarman's Q3 13F is still due; Copy emails it minutes after filing.");
+    expect(s5.get('text')).not.toMatch(/none filed/i);
+    expect(s5.get('subject')).toBe('First Eagle sold out of CHRW (−$686M) + 5 more deadline moves');
     // Once only.
     expect(await runEmail2(env, now)).toEqual({ status: 'already done' });
     Object.assign(env, { POSTAL_ADDRESS: undefined, MAILGUN_API_KEY: undefined });
