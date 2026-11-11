@@ -269,7 +269,7 @@ export const loadSplitLog = () => getJSON<{ splits: SplitLog[] }>(`${D}splits.js
 export const loadStockIndex = () => getJSON<{ funds: number; stocks: StockRef[] }>(`${D}stocks.json`)
 const named = <T extends { manager: string }>(x: T) => ({ ...x, manager: displayName(x.manager) })
 export const loadStock = (t: string) =>
-  getJSON<Stock>(`${D}stocks/${encodeURIComponent(t)}.json`).then((s) => ({ ...s, holders: s.holders.map(named), exited: s.exited.map(named), options: s.options.map(named) }))
+  getJSON<Stock>(`${D}stocks/${encodeURIComponent(t)}.json${fresh()}`).then((s) => ({ ...s, holders: s.holders.map(named), exited: s.exited.map(named), options: s.options.map(named) }))
 /** The site's flow.json (top 40 per list), or for members the API's fuller lists, falling back to the site's. */
 export const loadFlow = (member = false, v?: number) =>
   (member ? call<Flow | { flow: Flow }>('/flow', { auth: true }).then((r) => ('flow' in r ? r.flow : r)).catch(() => getJSON<Flow>(`${D}flow.json${fresh(v)}`)) : getJSON<Flow>(`${D}flow.json${fresh(v)}`)).then((f) => {
@@ -328,7 +328,7 @@ type HRaw = {
 }
 const lensBlock = (x: HRaw['smart']): SmartCounts | null => (x ? { ...x, moves: x.moves.map(([slug, name, quarter, change, delta_value]) => ({ slug, name: displayName(name), quarter, change, delta_value })) } : null)
 export const loadFilerHolders = (t: string) =>
-  getJSON<HRaw>(`${D}h/${encodeURIComponent(t)}.json`).then((d) => ({
+  getJSON<HRaw>(`${D}h/${encodeURIComponent(t)}.json${fresh()}`).then((d) => ({
     /** Every filer holding it: exact from ingest's full-book index when present (the shards undercount large books). */
     filers: d.index ? d.index.holders + d.index.older : d.filers,
     /** Filers whose latest 13F is for the newest or previous quarter; the rest are on older filings. */
