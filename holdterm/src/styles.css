@@ -3411,3 +3411,22 @@ p a,
   gap: inherit;
   min-width: 0;
 }
+
+/* Loading for 8 seconds or more: say so, with a retry. */
+.slow-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--raise);
+  color: var(--fg2);
+  font-size: 14px;
+}
+.slow-note .btn {
+  padding: 6px 12px;
+  font-size: 14px;
+}

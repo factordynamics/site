@@ -107,6 +107,7 @@ export function Loading({ what = 'Loading', rows = 8, quiet = false }: { what?: 
   return (
     <div className="loading" role={quiet ? undefined : 'status'} aria-live={quiet ? undefined : 'polite'}>
       {!quiet && <span className="sr">{what}…</span>}
+      {!quiet && <SlowNote />}
       <div className="skel-head" aria-hidden>
         {SKEL_COLS[0].map((w, j) => (
           <span key={j} className="skel" style={{ width: `${w * 0.6}%` }} />
@@ -143,11 +144,42 @@ export function BooksProgress({ what }: { what: string }) {
     </div>
   )
 }
+const useOffline = () => {
+  const [off, set] = useState(typeof navigator !== 'undefined' && navigator.onLine === false)
+  useEffect(() => {
+    const on = () => set(navigator.onLine === false)
+    window.addEventListener('online', on)
+    window.addEventListener('offline', on)
+    return () => (window.removeEventListener('online', on), window.removeEventListener('offline', on))
+  }, [])
+  return off
+}
+/** After 8 seconds of loading, a plain note that it's slow, with a retry, so a page never just sits there. */
+function SlowNote() {
+  const [slow, setSlow] = useState(false)
+  const offline = useOffline()
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), 8000)
+    return () => clearTimeout(t)
+  }, [])
+  if (!slow && !offline) return null
+  return (
+    <div className="slow-note">
+      <span>{offline ? 'You’re offline. This will finish loading when your connection is back.' : 'This is taking longer than usual. It’s still loading.'}</span>
+      {!offline && (
+        <button className="btn ghost" onClick={() => location.reload()}>
+          Try again
+        </button>
+      )}
+    </div>
+  )
+}
 /** A whole page while its data loads: title, summary, stat cards and a table, in the page's own layout. */
 export function PageLoading({ what = 'Loading', stats = 4, rows = 12, progress }: { what?: string; stats?: number; rows?: number; progress?: ReactNode }) {
   return (
     <div className="page page-loading" role="status" aria-live="polite">
       <span className="sr">{what}…</span>
+      <SlowNote />
       <div aria-hidden>
         <span className="skel skel-title" />
         <span className="skel skel-line" />
@@ -197,7 +229,14 @@ export function Empty({ title, hint, action }: { title: ReactNode; hint?: ReactN
 }
 /** A load that failed: what happened in plain words, a retry, and a way on; the technical reason is tucked away. */
 export function Failed({ error, what = 'this page' }: { error: string; what?: string }) {
-  const offline = typeof navigator !== 'undefined' && navigator.onLine === false
+  const offline = useOffline()
+  const [still, setStill] = useState(false)
+  // Back online: load the page again by itself.
+  useEffect(() => {
+    const on = () => location.reload()
+    window.addEventListener('online', on)
+    return () => window.removeEventListener('online', on)
+  }, [])
   return (
     <div className="failed" role="alert">
       <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden className="failed-icon">
@@ -208,11 +247,15 @@ export function Failed({ error, what = 'this page' }: { error: string; what?: st
         <h2>We couldn’t load {what}</h2>
         <p>
           {offline
-            ? 'You seem to be offline. Check your connection, then try again.'
-            : 'The SEC filing data didn’t arrive. This is usually a brief network hiccup, and trying again normally fixes it.'}
+            ? 'You’re offline. This page will load by itself as soon as your connection is back.'
+            : /^timeout /.test(error)
+              ? 'The SEC filing data is taking too long to arrive. The data host may be slow right now; trying again usually works.'
+              : 'The SEC filing data didn’t arrive. This is usually a brief network hiccup, and trying again normally fixes it.'}
+          {still && offline && <> Still offline.</>}
         </p>
         <div className="failed-actions">
-          <button className="btn" onClick={() => location.reload()}>
+          {/* Offline, a reload would only show the browser's own error page. */}
+          <button className="btn" onClick={() => (navigator.onLine === false ? setStill(true) : location.reload())}>
             Try again
           </button>
           <A to="/" className="btn ghost">

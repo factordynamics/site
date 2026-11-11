@@ -846,7 +846,16 @@ export function Fund({ slug }: { slug: string }) {
   const firms = useFirms()
   const [tab, setTab] = useState<ITab>('holdings')
   // A missing or held-back book is a real "not found"; anything else (offline, a mirror hiccup) can be retried.
-  if (b.error) return missing(b.error) ? <NotFound what={`no 13F book for "${slug}"`} /> : <Failed error={b.error} what="this portfolio" />
+  // An address that isn't a followed investor is not found. A followed investor whose file is missing is a data
+  // problem a retry may fix, so it gets the error page; one held back by the data checks says so.
+  if (b.error)
+    return /^held:/.test(b.error) ? (
+      <NotFound what="This investor’s latest 13F is held back while its numbers are checked against the filing’s cover page. It will be back once they match" />
+    ) : missing(b.error) && !inRoster(slug) ? (
+      <NotFound what="Holdterm doesn’t follow an investor at this address. It may have been renamed or left the list of investors Holdterm follows" />
+    ) : (
+      <Failed error={b.error} what="this portfolio" />
+    )
   if (!b.data) return <PageLoading what="Loading this portfolio" stats={5} rows={15} />
   const book = b.data
   title(`${book.firm} 13F portfolio`)
@@ -1475,7 +1484,11 @@ export function Stock({ ticker }: { ticker: string }) {
   const s = useLoad(
     () =>
       loadStock(ticker).catch(async (e) => {
-        const alias = (await loadStockIndex()).stocks.find((r) => r.a.includes(ticker))
+        // Not found only when the list of every stock loads and doesn't have it: if that list fails too, or has
+        // the ticker but its file is missing, it's a data problem a retry may fix, not an unknown stock.
+        const ix = await loadStockIndex().catch((x) => Promise.reject(new Error(`stock list: ${x?.message ?? x}`)))
+        if (ix.stocks.some((r) => r.t === ticker)) throw new Error(`file missing: ${e?.message ?? e}`)
+        const alias = ix.stocks.find((r) => r.a.includes(ticker))
         if (!alias) throw e
         return loadStock(alias.t)
       }),
@@ -1493,7 +1506,7 @@ export function Stock({ ticker }: { ticker: string }) {
   const firms = useFirms(!s.data)
   const [tab, setTab] = useState<STab>('holders')
   title(s.data ? `${issuerName(s.data.name)} (${ticker}): who owns it` : `${ticker}: who owns it`)
-  if (s.error) return missing(s.error) ? <NotFound what={`no tracked fund reports ${ticker} in its latest 13F`} /> : <Failed error={s.error} what={ticker} />
+  if (s.error) return missing(s.error) ? <NotFound what={`None of the investors Holdterm follows reports ${ticker} in its latest 13F`} /> : <Failed error={s.error} what={ticker} />
   if (!s.data) return <PageLoading what={`Loading ${ticker}`} stats={4} rows={12} />
   const d = s.data
   // A successor filer's stock line compares against its own standalone prior 13F; the fund's book
