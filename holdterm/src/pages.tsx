@@ -1393,7 +1393,8 @@ function FlowsStats({ rows, q, n }: { rows: Agg[]; q: string; n: number }) {
   )
   // Counts say "of how many", so a quoted card can't read as everyone, and selling says whether anyone sold out.
   const bought = (r: Agg) => `${aggCo(r)}, bought by ${num(r.buyers.length)} of ${num(n)}${r.newBuyers ? `, ${num(r.newBuyers)} new` : ''}`
-  const sold = (r: Agg) => (exits(r) ? `${aggCo(r)}, sold by ${num(r.sellers.length)} of ${num(n)}, ${num(exits(r))} sold out` : `${aggCo(r)}, trimmed by ${num(r.sellers.length)} of ${num(n)}, none sold out`)
+  const sold = (r: Agg) =>
+    exits(r) ? `${aggCo(r)}, sold by ${num(r.sellers.length)} of ${num(n)}: ${num(r.sellers.length - exits(r))} trimmed, ${num(exits(r))} sold out` : `${aggCo(r)}, trimmed by ${num(r.sellers.length)} of ${num(n)}, none sold out`
   // A net figure that one investor makes up most of says so, so "+$2.0B into NVIDIA" isn't read as a crowd.
   const net = (r: Agg) => {
     const lead = [...(r.net > 0 ? r.buyers : r.sellers)].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))[0]
@@ -1450,7 +1451,8 @@ function FilingsStats({ list, firms, days }: { list: Event[]; firms: Map<string,
     <div className="stats tick-stats" role="list" aria-label={`Filings in the last ${days} days`}>
       <Stat label="5% stakes reported" value={num(stakes.length)} sub={`13D and 13G filings, last ${days} days`} />
       <Stat label="New 5% stakes" value={num(newStakes.length)} tone={newStakes.length ? 'pos' : undefined} sub="A first 13D or 13G on the company" />
-      <Stat label="Insider trades" value={num(f4.length)} sub={f4.length ? cap(listing([buys > 0 && plural(buys, 'open-market buy'), sells > 0 && plural(sells, 'sale'), f4.length - buys - sells > 0 && `${num(f4.length - buys - sells)} other`])) : 'Form 4 filings'} />
+      {/* Named as the table tags them, so the parts add up to the count: a Form 4 with no open-market trade is "not a trade". */}
+      <Stat label="Insider filings" value={num(f4.length)} sub={f4.length ? cap(listing([buys > 0 && plural(buys, 'open-market buy'), sells > 0 && plural(sells, 'sale'), f4.length - buys - sells > 0 && `${num(f4.length - buys - sells)} not a trade`])) : 'Form 4 filings'} />
       <Stat
         label="Latest new stake"
         value={latestNew ? <Tick t={latestNew.ticker} name={issuerName(latestNew.display_name || latestNew.issuer)} /> : <span className="dim">None</span>}
