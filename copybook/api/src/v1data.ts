@@ -368,6 +368,8 @@ async function bookFor(env: Env, f: Filer, quarter: string): Promise<Record<stri
     prev_quarter_status: ['confidential_omitted', 'empty'].includes(q.prev_quarter_status) ? q.prev_quarter_status : null,
     prev_quarter_accession: typeof q.prev_quarter_accession === 'string' ? q.prev_quarter_accession : null,
     total_value_usd: Math.round(q.total_value ?? holdings.reduce((s: number, h: { value?: number }) => s + (h.value || 0), 0)),
+    // Ingest's counted total (run 43069248436): the book without lines whose value is unreliable ("value" or "both").
+    ...(Number.isFinite(q.total_value_counted ?? q.total_value_counted_usd) ? { total_value_counted_usd: Math.round(q.total_value_counted ?? q.total_value_counted_usd) } : {}),
     position_count: q.position_count ?? holdings.length,
     // A public shard holds the top 500 positions by value until the full book is in R2.
     truncated: Boolean(q.truncated ?? (q.position_count != null && q.position_count > holdings.length)),

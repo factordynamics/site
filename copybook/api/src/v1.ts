@@ -5,7 +5,7 @@ import { secBudget } from './edgar';
 /** Bumped on any breaking change to a /v1 response shape. Every response carries it. */
 export const SCHEMA_VERSION = '2026-11-09';
 /** info.version: the spec's own revision, bumped on any change to it (additive ones too); schema_version only on breaking ones. */
-export const SPEC_REVISION = '2026-11-11.9';
+export const SPEC_REVISION = '2026-11-11.10';
 /** Versions a client may pin with the Copybook-Schema-Version header (the current one, plus any in a notice window). */
 export const SCHEMA_VERSIONS = [SCHEMA_VERSION];
 
@@ -22,6 +22,7 @@ export const CHANGELOG: { id: string; date: string; shipped_at?: string; schema_
       'Webhook 13F payloads (77e8b62, a5599cb, 6bae423): a line that isn\'t counted is only in `moves.not_counted[]`, never in new, added, trimmed or exited, and never in bought_usd, sold_usd or a headline. Such a line\'s filed figures don\'t reconcile (share counts, values, an option line without a reliable side) or it may be a CUSIP change (an exit and a new line under one issuer prefix in one filing). Each not_counted row has `counted: false`, `value_delta: null` and `delta_pct_of_book: null`, and `change: "unknown"` where it would have read added or trimmed (new and exited stand). Its filed `value` and `prev_value` stay; there is no `value_change` field. Sum value_delta over new, added, trimmed and exited only. Alerts stored before this render the same way.',
       'Webhook 13F payloads (1941459): a line whose shares reconcile but whose filed value doesn\'t (`unreliable: "value"`, e.g. a price far off every other filer\'s) is a real trade. It stays in added, trimmed, new or exited with its `change`, and has `counted: false`, `value_delta: null` and `delta_pct_of_book: null`; it is outside bought_usd and sold_usd. Rows marked "shares" or "both", and a possible CUSIP change (now including lines already marked, and any line ingest flags `cusip_mismatch`), are only in not_counted[].',
       'Alert emails and feed items show the same lines on one "Not counted:" line with their filed facts, never a $ trade. A "value" or "both" line never shows a filed $ value: its shares, plus "filed value implausible (≈$X/sh vs ~$Y)" against other filers\' median. Only a "shares" line keeps "value as filed". "share count looks pre-split" appears only where ingest\'s held_reason says so.',
+      'GET /v1/filers/{filer}/holdings/{quarter}: `total_value_counted_usd`, the book without lines whose filed value is unreliable, when the data run carries it (total_value_usd stays as filed). Option lines reported in contracts already carry `shares_basis: "contracts"`.',
       'GET /v1/filers/{filer}/holdings/{quarter}: a malformed as_of returns 400 bad_request (a well-formed one still returns 501 not_yet_available until Nov 30, 2026).',
     ],
   },
