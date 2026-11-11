@@ -408,6 +408,8 @@ export interface WinterEvent {
   action: string | null;
   accession: string;
   url: string;
+  /** 13D/G: the subject company's name, title-cased as /winter-2025-26/ shows it. */
+  company?: string | null;
 }
 interface WinterCache {
   ticker: string;
@@ -509,7 +511,22 @@ async function fillWinterOne(env: Env, budget: number): Promise<Record<string, u
 }
 
 /** A member's names last winter, from the cache: counts, the events with dollars and dates, and names not read yet. */
-export type WinterPreview = { window: [string, string]; names: number; insider_buys: number; schedule_13dg: number; events: WinterEvent[]; pending: string[] };
+/**
+ * `events`: insider buys (largest first), then new 13D/G stakes (newest first); amendments (mostly routine 13G/As) are
+ * counted in `amendments`, not listed (the lead, Nov 11). `schedule_13dg` counts both.
+ */
+export type WinterPreview = { window: [string, string]; names: number; insider_buys: number; schedule_13dg: number; amendments: number; amendments_followed: boolean; events: WinterEvent[]; pending: string[] };
+
+/** All-caps EDGAR names in title case, keeping initialisms upper: the rule /winter-2025-26/ uses (GENESCO INC -> Genesco Inc). */
+export const titled = (s: string) =>
+  s === s.toUpperCase() ? s.split(' ').map((t) => (/^(LTD|JR|SR)\.?,?$/.test(t) || !/^[A-Z]+[.,]?$/.test(t.replace(/\./g, '')) || /[AEIOUY]/.test(t) ? t.charAt(0) + t.slice(1).toLowerCase() : t)).join(' ') : s;
+/** EDGAR's reporting owners, last name first ("Morfit G Mason"), as people read them ("G. Mason Morfit"). */
+export function person(raw: string): string {
+  const w = titled(raw.toUpperCase()).split(/\s+/);
+  const sfx = /^(jr|sr|ii|iii|iv)\.?$/i.test(w[w.length - 1] ?? '') && w.length > 2 ? [w.pop()!] : [];
+  const [last, ...rest] = w;
+  return [...rest.map((t) => (/^[A-Z]$/.test(t) ? `${t}.` : t)), last, ...sfx].join(' ');
+}
 interface PublishedWinter {
   at: number;
   /** Followed funds' 13D/Gs, by manager slug. */
@@ -533,6 +550,9 @@ async function publishedWinter(env: Env): Promise<PublishedWinter | null> {
   ]);
   if (!w) return null;
   const slugOf = new Map((idx?.managers ?? []).filter((x) => x.manager).map((x) => [x.manager!.toLowerCase(), x.slug]));
+  // A 13D/G's subject company to its ticker: SEC's ticker map (pre/sec-tickers.json, ticker -> 10-digit CIK), first listed.
+  const secMap = await env.HIST.get('pre/sec-tickers.json').then((o) => (o ? new Response(o.body).text() : '')).catch(() => '');
+  const tickerOfCik = (cik: string) => secMap.match(new RegExp(`"([A-Z0-9.\\-]+)":"${cik.padStart(10, '0')}"`))?.[1] ?? null;
   const buys = new Map<string, WinterEvent[]>();
   for (const f of w.insider_buys?.filings ?? []) {
     const e: WinterEvent = { ticker: f.ticker, kind: 'insider_buy', form: f.form, filed: f.filed, date: f.transaction_date, who: f.owner, role: f.roles?.includes('director') ? 'director' : f.officer_title || 'officer', value_usd: f.value_usd, action: null, accession: f.accession, url: '' }; // set from the issuer's CIK when used
@@ -544,7 +564,7 @@ async function publishedWinter(env: Env): Promise<PublishedWinter | null> {
     buys,
     rows: (w.schedule_13dg?.filings ?? []).flatMap((f) => {
       const slug = slugOf.get(f.manager.toLowerCase());
-      const e: WinterEvent = { ticker: f.subject_company, kind: 'schedule_13dg', form: f.form, filed: f.filed, date: null, who: f.manager, role: null, value_usd: null, action: /\/A$/.test(f.form) ? 'stake_update' : 'new_stake', accession: f.accession, url: `https://www.sec.gov/Archives/edgar/data/${Number(f.subject_cik)}/${f.accession.replace(/-/g, '')}/` };
+      const e: WinterEvent = { ticker: tickerOfCik(f.subject_cik) ?? '', company: titled(f.subject_company), kind: 'schedule_13dg', form: f.form, filed: f.filed, date: null, who: f.manager, role: null, value_usd: null, action: /\/A$/.test(f.form) ? 'stake_update' : 'new_stake', accession: f.accession, url: `https://www.sec.gov/Archives/edgar/data/${Number(f.subject_cik)}/${f.accession.replace(/-/g, '')}/` };
       return slug ? [{ slug, e }] : [];
     }),
   };
@@ -562,6 +582,7 @@ export async function winterPreview(env: Env, tickers: string[], investors: stri
   const names = [...new Set(tickers.map((x) => x.toUpperCase()))];
   if (!names.length && !investors.length) return null;
   const events: WinterEvent[] = (await investorWinter(env, investors).catch(() => [])).slice();
+  const followedAcc = events.map((e) => e.accession);
   const pending: string[] = [];
   for (const t of names.slice(0, 60)) {
     const obj = await env.HIST.get(WINTER.key(t));
@@ -569,8 +590,22 @@ export async function winterPreview(env: Env, tickers: string[], investors: stri
     if (!c?.done) pending.push(t);
     else events.push(...Object.values(c.seen).filter((x): x is WinterEvent => !!x && !events.some((y) => y.accession === x.accession)));
   }
-  events.sort((a, b) => (b.value_usd ?? 0) - (a.value_usd ?? 0) || b.filed.localeCompare(a.filed));
-  return { window: [WINTER.from, WINTER.to], names: names.length, insider_buys: events.filter((e) => e.kind === 'insider_buy').length, schedule_13dg: events.filter((e) => e.kind === 'schedule_13dg').length, events, pending };
+  const followed = new Set(followedAcc);
+  // Read-time cleanup (cached events predate it): people in reading order, company names in normal case.
+  const clean = events.map((e) => ({ ...e, who: e.kind === 'insider_buy' ? person(e.who) : e.who, company: e.company ?? null }));
+  const rank = (e: WinterEvent) => (e.kind === 'insider_buy' ? 0 : e.action === 'new_stake' ? 1 : 2);
+  clean.sort((a, b) => rank(a) - rank(b) || (b.value_usd ?? 0) - (a.value_usd ?? 0) || b.filed.localeCompare(a.filed));
+  const amend = clean.filter((e) => rank(e) === 2);
+  return {
+    window: [WINTER.from, WINTER.to],
+    names: names.length,
+    insider_buys: clean.filter((e) => e.kind === 'insider_buy').length,
+    schedule_13dg: clean.filter((e) => e.kind === 'schedule_13dg').length,
+    amendments: amend.length,
+    amendments_followed: amend.length > 0 && amend.every((e) => followed.has(e.accession)),
+    events: clean.filter((e) => rank(e) < 2),
+    pending,
+  };
 }
 
 /** "MU director bought $7.8M on Jan 13" */
@@ -578,5 +613,5 @@ export function winterLine(e: WinterEvent): string {
   const d = e.date ?? e.filed;
   const on = new Date(`${d}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
   const usd = (v: number) => (v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : v >= 1e3 ? `$${Math.round(v / 1e3)}K` : `$${Math.round(v)}`);
-  return e.kind === 'insider_buy' ? `${e.ticker} ${e.role} bought${e.value_usd ? ` ${usd(e.value_usd)}` : ''} on ${on}` : `${e.who} filed a ${e.form.replace(/^SC /, 'Schedule ')} on ${e.ticker} on ${on}`;
+  return e.kind === 'insider_buy' ? `${e.ticker} ${e.role} bought${e.value_usd ? ` ${usd(e.value_usd)}` : ''} on ${on}` : `${e.who} filed a ${e.form.replace(/^(SC|SCHEDULE) /, 'Schedule ')} on ${[e.ticker, e.company].filter(Boolean).join(' · ') || 'a company'} on ${on}`;
 }

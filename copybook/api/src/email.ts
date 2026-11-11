@@ -3,7 +3,7 @@ import { siteFirm, siteName } from './names';
 import { cleanItem4, countedMoves, exchangeLine, filingId, FILER_VALUE, posKey, UNUSUAL, type MoveRow, type Moves } from './edgar';
 import { testAddress, WORKER_URL, type Env, type Member } from './env';
 import type { Follows } from './members';
-import { firmName } from '../../../holdterm/src/names';
+import { firmName, publicSlug } from '../../../holdterm/src/names';
 
 export interface Mail {
   to: string;
@@ -1124,7 +1124,7 @@ function holdtermFiling(env: Env, a0: Alert13F): string {
   } else {
     lines.push('', 'Position changes follow once the filing is processed.');
   }
-  lines.push('', `${htSite(env)}m/${a.slug}`, a.sec_url);
+  lines.push('', `${htSite(env)}m/${publicSlug(a.slug)}`, a.sec_url);
   return lines.join('\n');
 }
 
@@ -1137,7 +1137,7 @@ function holdtermEvent(env: Env, e: AlertEvent): string {
     if (c.line) lines.push(`  ${c.line}${c.note ? ` (${c.note})` : ''}`);
   }
   const t = e.ticker ?? e.subject_tickers?.[0];
-  lines.push('', t ? `${htSite(env)}s/${t}` : e.slug ? `${htSite(env)}m/${e.slug}` : '', e.url);
+  lines.push('', t ? `${htSite(env)}s/${t}` : e.slug ? `${htSite(env)}m/${publicSlug(e.slug)}` : '', e.url);
   return lines.filter((l, i, a) => l || a[i - 1]).join('\n');
 }
 

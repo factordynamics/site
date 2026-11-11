@@ -3145,7 +3145,7 @@ describe('copybook api', () => {
   });
 
   it('GET /events: every issuer Form 4 since the quarter whose 13Fs are due began, not just the latest 20 (CSGP CEO buy behind 21 grants)', async () => {
-    await hist.put('pre/sec-tickers.json', '{"CSGP":"0001057352"}');
+    await hist.put('pre/sec-tickers.json', '{"CSGP":"0001057352","GCO":"0000018498"}');
     const since = Date.parse(quarterStart(Date.now()));
     const at = (days: number) => new Date(since + days * 86400_000).toISOString();
     const entry = (a: string, iso: string) => `<entry><category term="4"/><id>urn:tag:sec.gov,2008:accession-number=${a}</id><updated>${iso}</updated></entry>`;
@@ -3200,14 +3200,20 @@ describe('copybook api', () => {
     index = { managers: [{ slug: 'warren-buffett', manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc' }] };
     vi.stubGlobal('fetch', async (u: string, init?: RequestInit) =>
       String(u) === 'https://pub.test/winter-2025-26.json'
-        ? Response.json({ insider_buys: { stocks: ['CSGP'], filings: [{ ticker: 'CSGP', form: '4', filed: '2026-01-14', transaction_date: '2026-01-13', accession: '0001628280-26-052968', owner: 'FLORANCE ANDREW C', roles: ['director'], officer_title: 'CEO', value_usd: 2_000_001 }] }, schedule_13dg: { filings: [{ manager: 'Warren Buffett', form: 'SCHEDULE 13G/A', filed: '2025-12-15', accession: '0000950170-25-000001', subject_company: 'SIRIUS XM HOLDINGS INC.', subject_cik: '0000908937', filer: 'BERKSHIRE HATHAWAY INC' }, { manager: 'Nobody Followed', form: 'SCHEDULE 13D', filed: '2025-12-16', accession: 'x', subject_company: 'X', subject_cik: '1', filer: 'X' }] } })
+        ? Response.json({ insider_buys: { stocks: ['CSGP'], filings: [{ ticker: 'CSGP', form: '4', filed: '2026-01-14', transaction_date: '2026-01-13', accession: '0001628280-26-052968', owner: 'FLORANCE ANDREW C', roles: ['director'], officer_title: 'CEO', value_usd: 2_000_001 }] }, schedule_13dg: { filings: [{ manager: 'Warren Buffett', form: 'SCHEDULE 13G/A', filed: '2025-12-15', accession: '0000950170-25-000001', subject_company: 'SIRIUS XM HOLDINGS INC.', subject_cik: '0000908937', filer: 'BERKSHIRE HATHAWAY INC' }, { manager: 'Warren Buffett', form: 'SCHEDULE 13D', filed: '2025-12-20', accession: '0000950170-25-000002', subject_company: 'GENESCO INC', subject_cik: '0000018498', filer: 'BERKSHIRE HATHAWAY INC' }, { manager: 'Nobody Followed', form: 'SCHEDULE 13D', filed: '2025-12-16', accession: 'x', subject_company: 'X', subject_cik: '1', filer: 'X' }] } })
         : orig(u, init));
     try {
       const pi = (await winterPreview(env, ['CSGP'], ['warren-buffett']))!;
-      expect([pi.insider_buys, pi.schedule_13dg, pi.events.map((e) => [e.kind, e.who, e.ticker, e.action])]).toEqual([1, 1, [['insider_buy', expect.any(String), 'CSGP', null], ['schedule_13dg', 'Warren Buffett', 'SIRIUS XM HOLDINGS INC.', 'stake_update']]]);
+      // By strength (the lead, Nov 11): insider buys, then new stakes; amendments only counted. A 13D/G names the ticker
+      // and the company in normal case; an insider reads first name first.
+      expect([pi.insider_buys, pi.schedule_13dg, pi.amendments, pi.amendments_followed, pi.events.map((e) => [e.kind, e.who, e.ticker, e.company, e.action])]).toEqual([1, 2, 1, true, [['insider_buy', 'Andrew C. Florance', 'CSGP', null, null], ['schedule_13dg', 'Warren Buffett', 'GCO', 'Genesco Inc', 'new_stake']]]);
+      const { winterLine } = await import('../src/stockevents');
+      expect(winterLine(pi.events[1])).toBe('Warren Buffett filed a Schedule 13D on GCO · Genesco Inc on Dec 20');
+      const d = day12Mail(env, { customer: 'cus_t', email: 't@example.com', plan: 'copy', interval: 'monthly', status: 'trialing', trial_end: Date.UTC(2026, 10, 25, 20) / 1000, has_payment_method: false } as never, 'u', Date.now(), pi);
+      expect(d.text).toContain('Your 1 name had 1 insider buy and 2 13D/G filings last winter, e.g. CSGP director bought $2.5M on Jan 13; Warren Buffett filed a Schedule 13D on GCO · Genesco Inc on Dec 20; + 1 amendment by funds you follow.');
       // An investor alone, no names saved, still has a preview.
       const alone = (await winterPreview(env, [], ['warren-buffett']))!;
-      expect([alone.names, alone.insider_buys, alone.schedule_13dg]).toEqual([0, 0, 1]);
+      expect([alone.names, alone.insider_buys, alone.schedule_13dg]).toEqual([0, 0, 2]);
       // A top-100 stock not yet read takes its Form 4 verdicts from the published list (no Form 4 is fetched): its buy
       // carries the list's figures, the other filings read 0.
       await env.DB.delete('winter:done');

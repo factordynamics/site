@@ -439,7 +439,7 @@ export function day12Mail(env: Env, m: Member, unsub: string, now = Date.now(), 
   ];
   // The member's own names (marketing's rev 73): only when every name is read and something happened.
   const pv = preview && !preview.pending.length && preview.insider_buys + preview.schedule_13dg > 0 ? preview : null;
-  const mine = pv ? `Your ${pv.names} name${pv.names === 1 ? '' : 's'} had ${pv.insider_buys} insider buy${pv.insider_buys === 1 ? '' : 's'} and ${pv.schedule_13dg} 13D/G filing${pv.schedule_13dg === 1 ? '' : 's'} last winter${pv.events.length ? `, e.g. ${pv.events.slice(0, 2).map(winterLine).join('; ')}` : ''}.` : '';
+  const mine = pv ? `Your ${pv.names} name${pv.names === 1 ? '' : 's'} had ${pv.insider_buys} insider buy${pv.insider_buys === 1 ? '' : 's'} and ${pv.schedule_13dg} 13D/G filing${pv.schedule_13dg === 1 ? '' : 's'} last winter${pv.events.length ? `, e.g. ${pv.events.slice(0, 2).map(winterLine).join('; ')}` : ''}${pv.amendments ? `${pv.events.length ? '; ' : ', '}+ ${pv.amendments} amendment${pv.amendments === 1 ? '' : 's'}${pv.amendments_followed ? ' by funds you follow' : ''}` : ''}.` : '';
   // A cardless trialist is a subscriber: the founding price is what they keep or lose (marketing's rev 82).
   const keep = `Keep Copy. ${COPY_YEARLY}. Monthly? Pause once a year, up to 3 months. Add a card before ${day(m.trial_end!)} to keep the founding price, $9/month or $79/year, for as long as you stay. If the trial ends and you rejoin from Feb 1, it's $12/month or $99/year.`;
   const stay = 'The free pages and the free Friday email stay yours.';
