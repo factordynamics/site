@@ -28,6 +28,7 @@ const Methodology = lazy(() => import('./pages/Methodology').then((m) => ({ defa
 const ApiDocs = lazy(() => import('./pages/Api').then((m) => ({ default: m.ApiDocs })))
 const Contact = lazy(() => import('./pages/Contact').then((m) => ({ default: m.Contact })))
 const Legal = lazy(() => import('./pages/Legal').then((m) => ({ default: m.Legal })))
+const Questionnaire = lazy(() => import('./pages/Questionnaire').then((m) => ({ default: m.Questionnaire })))
 const NotFound = lazy(() => import('./pages/NotFound').then((m) => ({ default: m.NotFound })))
 const FilingCard = lazy(() => import('./pages/Filing').then((m) => ({ default: m.FilingCard })))
 const Upgrade = lazy(() => import('./pages/Upgrade').then((m) => ({ default: m.Upgrade })))
@@ -105,6 +106,7 @@ Promise.all([handoff, fontsReady]).then(() =>
             <Route path="terms" element={<Legal page="terms" />} />
             <Route path="privacy" element={<Legal page="privacy" />} />
             <Route path="security" element={<Legal page="security" />} />
+            <Route path="security/questionnaire" element={<Questionnaire />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>

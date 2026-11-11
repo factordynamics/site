@@ -5,7 +5,7 @@ import { FUND_SEATS, FUND_WHY, plans, TRIAL_DAYS, trialTerms, SPEED_CLAIMS } fro
 import { attributed, referredCheckout } from '../lib/attribution'
 import { gapLabel, loadLatency } from '../lib/account'
 import { BASE, useAsync, useTitle } from '../lib/data'
-import { HOST_MOVE, HOSTING } from '../lib/hosting'
+import { HOST_MOVE, HOSTING, VENDOR } from '../lib/hosting'
 import { loadCoverage, trackedPhrase } from '../lib/stocks'
 
 // Landing pages for the two buyers of the paid data plans: investment teams (Copy Fund) and quants
@@ -73,6 +73,50 @@ function Features({ items }: { items: [string, ReactNode][] }) {
         </div>
       ))}
     </div>
+  )
+}
+
+// The vendor review in one box: what we hold, what's public anyway, controls with their dates, what we
+// don't have, and what happens without the founder (lib/hosting VENDOR, the same lines as the questionnaire).
+function VendorSummary() {
+  const row = (h: string, body: ReactNode) => (
+    <div className="grid gap-1 py-3.5 first:pt-0 last:pb-0 md:grid-cols-[13rem_minmax(0,1fr)] md:gap-6">
+      <dt className="text-[13px] font-semibold text-ink">{h}</dt>
+      <dd className="text-[14.5px] leading-relaxed text-ink-2">{body}</dd>
+    </div>
+  )
+  const list = (xs: string[]) => (
+    <ul className="list-disc space-y-1 pl-4.5 marker:text-ink-3">
+      {xs.map((x) => (
+        <li key={x}>{x}</li>
+      ))}
+    </ul>
+  )
+  return (
+    <section aria-labelledby="vendor-summary" className="mt-6 rounded-[var(--radius-card)] bg-card p-5 shadow-[0_0_0_1.5px_rgb(43_68_214/0.35),var(--shadow-card)] md:p-6">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h3 id="vendor-summary" className="text-[17px] font-semibold tracking-[-0.01em]">
+          Vendor summary
+        </h3>
+        <p className="text-[12.5px] text-ink-3">As of Nov 11, 2026</p>
+      </div>
+      <dl className="mt-4 divide-y divide-line">
+        {row('What we hold', VENDOR.holds)}
+        {row('Public anyway', VENDOR.publicBook)}
+        {row('Controls today', list(VENDOR.today))}
+        {row('From Nov 17, 2026', list(VENDOR.nov17))}
+        {row('What we don’t have', <span className="font-medium text-ink">{VENDOR.noCert}</span>)}
+        {row('If the founder is unreachable', VENDOR.founder)}
+      </dl>
+      <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 border-t border-line pt-4 text-[14px]">
+        <Link to="/security/questionnaire/" className="inline-flex items-center gap-1 font-medium text-accent hover:text-accent-2">
+          Security questionnaire, filled in <Arrow className="size-3" />
+        </Link>
+        <Link to="/security/" className="inline-flex items-center gap-1 font-medium text-accent hover:text-accent-2">
+          Full security page and change log <Arrow className="size-3" />
+        </Link>
+      </div>
+    </section>
   )
 }
 
@@ -168,7 +212,8 @@ export function ForFunds() {
       />
 
       <H2 sub="Your holdings are yours. We hold the least we need and say exactly where it lives.">Security your compliance team can read</H2>
-      <div className="mt-6 grid gap-4 md:grid-cols-2">
+      <VendorSummary />
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
         <Panel className="h-full">
           <ul className="space-y-2.5 text-[14.5px] leading-relaxed text-ink-2">
             <li>
@@ -202,8 +247,8 @@ export function ForFunds() {
             <li>Remove names, keys and seats yourself at any time, or ask us to delete everything.</li>
             <li>
               {HOSTING.soc2}{' '}
-              <Link to="/security/" className="font-medium text-accent hover:text-accent-2">
-                Read the security page
+              <Link to="/security/questionnaire/" className="font-medium text-accent hover:text-accent-2">
+                Read the filled-in questionnaire
               </Link>
             </li>
           </ul>

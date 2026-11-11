@@ -25,7 +25,28 @@ export const HOSTING = {
   backups: 'Nightly encrypted off-site backup to Cloudflare R2, kept 30 days. Hourly local snapshots, encrypted with the same key as nightly backups. From November 17, backups are encrypted to a key whose private half is kept offline by the founder, on a passphrase-protected USB drive, not on our server. The server holds only the public key, so neither the Copybook service nor code deployed to it can decrypt a backup. Every week an automated check confirms each backup without the key: its checksum and size match the record made when it was taken, it is a correctly formed encrypted file for the current key, the newest is under 30 hours old, and its member and record counts are plausible. Once a month the founder decrypts the newest backup in a test restore, so for about a minute during that test the key is in memory on the server. Restoring from a backup always needs the founder. Until November 17 the maintenance agents also hold the backup key, so they can recover the service on their own during launch week.',
   logging: 'Every operator and /ops/ read of member data is logged with who, when, the route and the row ID; the operator header can’t be spoofed. Not covered until Nov 17: direct reads of the data store from a shell on the machine.',
   availability: 'There is no uptime SLA. Alerts are polled from Cloudflare, with the API machine as backup, so they keep going out when the machine is down. The tunnel to the machine is supervised: restarted on failure, health-checked every minute, and the operator is alerted after 2 minutes down.',
-  soc2: 'We don’t have SOC 2. A security questionnaire is available on request.',
+  soc2: 'We don’t have SOC 2 or any other certification, and there has been no third-party penetration test.',
+}
+
+/** /for-funds/ vendor summary and the top of /security/questionnaire/: the answers a fund's COO asks first. */
+export const VENDOR = {
+  holds: 'Member emails (yours and your seats’); the tickers you own or watch and the funds and stocks you follow; chat channel settings, including Slack and Discord webhook URLs; API keys, stored only as SHA-256 hashes. Card details go straight to Stripe; we never see them.',
+  publicBook: 'A book linked to your fund’s 13F is already public on SEC EDGAR. What we hold privately is that your team linked it, plus any names you add by hand.',
+  today: [
+    'TLS for all traffic; the machine’s disk is fully encrypted.',
+    'Member data is kept out of agent sessions, and reads of a member’s book are logged.',
+    'No public SSH; sign-in by one-time emailed links, with no passwords.',
+    'Nightly encrypted off-site backups, kept 30 days.',
+    'Since Nov 11: member access moves to the Cloudflare backup automatically if the API machine goes down.',
+  ],
+  nov17: [
+    'The API runs under its own service account, where the maintenance agents can’t read member data or secrets; signing secrets are rotated.',
+    'The agents’ payment key becomes a restricted, billing-support-only key.',
+    'The backup key’s private half is kept offline by the founder.',
+    'Direct reads of the data store from a shell on the machine are logged too.',
+  ],
+  noCert: 'No SOC 2, no other certification and no uptime SLA. Copybook is run by its founder with AI coding agents; there is no security team.',
+  founder: 'If the founder is unreachable for a week, alerts keep going out from Cloudflare, and member access moves to the backup automatically if the API machine goes offline. What waits for him: bringing the machine back if it is powered off or broken, and any restore from a backup.',
 }
 
 /** Every company that processes data for Copybook, and what for. */

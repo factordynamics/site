@@ -170,6 +170,7 @@ page('contact/', 'Contact · Copybook', 'Request Copy Fund access for your team,
 page('terms/', 'Terms of use · Copybook', 'The terms for using Copybook, its paid plans and its API.')
 page('privacy/', 'Privacy · Copybook', 'What Copybook stores about you, why, and how to have it deleted. We never sell your data.')
 page('security/', 'Security · Copybook', 'Where Copybook keeps data and how it is protected.')
+page('security/questionnaire/', 'Security questionnaire · Copybook', 'A vendor security questionnaire for Copybook, filled in: data held, access, encryption, backups, failover, subprocessors and what we don’t have.')
 page('about/', 'About · Copybook', 'Portfolios, as filed. How Copybook reads SEC 13F filings, and what it won’t do.')
 let n = 0
 mkdirSync(join(dist, 'managers'), { recursive: true })

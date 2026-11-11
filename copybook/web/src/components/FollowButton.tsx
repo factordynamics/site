@@ -103,7 +103,7 @@ export function FollowButton({ kind, id, name, size = 'sm', className = '' }: Pr
         {saving ? (p.want ? 'Saving…' : 'Removing…') : on ? (owned ? 'You own this' : 'Following') : 'Follow'}
       </button>
       {p?.state === 'error' && (
-        <span role="alert" className="absolute right-0 top-full z-10 mt-1.5 flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-card px-2.5 py-1.5 text-[12.5px] text-down shadow-[0_0_0_1px_var(--color-line),0_6px_16px_-6px_rgb(12_14_19/0.2)]">
+        <span role="alert" className={`absolute right-0 top-full z-10 mt-1.5 flex items-center gap-1.5 ${p.note ? 'w-[280px] whitespace-normal max-sm:fixed max-sm:inset-x-3 max-sm:bottom-3 max-sm:top-auto max-sm:z-50 max-sm:w-auto max-sm:px-3.5 max-sm:py-3' : 'whitespace-nowrap'} rounded-lg bg-card px-2.5 py-1.5 text-[12.5px] text-down shadow-[0_0_0_1px_var(--color-line),0_6px_16px_-6px_rgb(12_14_19/0.2)]`}>
           {p.note ?? (p.want ? 'Follow didn’t save.' : 'Unfollow didn’t save.')}
           <button type="button" onClick={() => save(p.want)} className="font-medium text-accent underline underline-offset-2 hover:text-accent-2">
             Retry

@@ -27,6 +27,7 @@ const urls = [
   ['terms/'],
   ['privacy/'],
   ['security/'],
+  ['security/questionnaire/'],
   ['flow/', newest],
   ['season/', newest],
   // The recap of the quarter now filing, and its % of book view (its own card and description).

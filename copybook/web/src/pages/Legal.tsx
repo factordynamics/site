@@ -145,7 +145,7 @@ const PAGES: Record<'terms' | 'privacy' | 'security', { title: string; lead: str
       ['Deleting data', <>Remove follows, owned stocks and keys yourself on your account page at any time, or ask us to delete everything through the {contact}. {HOSTING.deletion}</>],
       ['Breach notification', 'If a breach affects member data, we notify the affected members within 72 hours of finding it.'],
       ['Subprocessors', <>The companies that process data for Copybook are listed on the <Link to="/privacy/" className="font-medium text-accent hover:text-accent-2">privacy page</Link>.</>],
-      ['Certifications and questionnaires', <>{HOSTING.soc2} Email {email} or use the {contact}.</>],
+      ['Certifications and questionnaires', <>{HOSTING.soc2} The <Link to="/security/questionnaire/" className="font-medium text-accent hover:text-accent-2">security questionnaire</Link> is filled in and can be saved as a PDF. For anything it doesn’t answer, email {email} or use the {contact}.</>],
       ['Reporting a problem', <>If you find a security issue, please email {email} or use the {contact} before disclosing it. We’ll respond quickly.</>],
     ],
   },
