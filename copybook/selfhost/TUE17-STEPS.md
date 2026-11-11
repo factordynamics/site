@@ -84,15 +84,13 @@ changes (api.json and the front ends follow within 2 minutes).
 
 Payments' access (from payments' reply, Nov 11; the agents' tokens keep exactly this):
 - Cloudflare token: Workers Scripts edit (deploys, `wrangler secret put`); Account Analytics read (optional after
-  Nov 11); Workers KV: none (dropped; the store moved to R2). R2 copybook-history read: the lead's call, see below.
+  Nov 11); Workers KV: none (dropped; the store moved to R2); R2 copybook-history: none (dropped, lead's decision
+  Nov 11; payments audits member objects through the API's logged operator routes).
   copybook-public: through the separate R2 token (R2_PUBLIC_KEY_ID/SECRET, read and write, for failover's api.json).
 - Stripe restricted key: Customers write (includes read; test members, delete for cleanup), Subscriptions write,
   Prices read, Products read, Checkout Sessions read, Invoices write, Webhook Endpoints write, Events read, Coupons
   write, Promotion Codes write, Billing Portal configuration read. Nothing else.
-- R2 copybook-history read. Payments uses it for audits of member objects (kv/, sync/) and offered to audit through
-  the API's logged operator routes instead. Drop it (recommended: no unlogged agent reads of member data at
-  Cloudflare) or keep it (then a stated residual).
-- Acceptance run: ACC_KEEP="stripe-customers" if copybook-history read is dropped, or "stripe-customers cf-r2" if kept.
+- Acceptance run: ACC_KEEP="stripe-customers" (the Cloudflare KV and R2 copybook-history checks must be refused).
 
 From then on:
 - Deploys need nothing from you: any commit on main that passes the boot test deploys to gene and is logged with its
@@ -116,5 +114,5 @@ What still isn't closed, stated plainly:
 - Agents share the machine's main user account, so isolation stops accidental reads, not a deliberately malicious
   agent (one could, for example, capture a sudo password typed in that account). Do the steps above in a plain
   terminal.
-- Whatever Cloudflare or Stripe access payments keeps (ACC_KEEP) still reaches member data there.
+- The agents' Stripe key can read customers, which payments' work needs.
 - Older agent session logs keep what agents saw then (masked since Nov 11: counts, row IDs, a***@domain).
