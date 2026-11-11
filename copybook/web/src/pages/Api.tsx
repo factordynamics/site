@@ -1,10 +1,11 @@
 import { API_OUTAGE, HOST_MOVE } from '../lib/hosting'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge, Button, Panel, Skeleton } from '../components/ui'
 import { ApiStatus } from '../components/ApiStatus'
 import { probe } from '../lib/account'
 import { useAsync, useTitle } from '../lib/data'
-import { loadCoverage, trackedPhrase } from '../lib/stocks'
+import { HISTORY_EXACT, loadCoverage } from '../lib/stocks'
 
 // Renders the build's copy of the OpenAPI document (scripts/cards.mjs fetches {api}/v1/openapi.json), so new endpoints appear here with each build.
 type Op = { summary?: string; description?: string; parameters?: { name: string; in: string; required?: boolean; description?: string; schema?: { type?: string } }[]; responses?: Record<string, { description?: string }> }
@@ -20,13 +21,74 @@ type Change = { id?: string | null; date: string; status: string; breaking: bool
 const loadChangelog = () =>
   probe<{ data: Change[] }>('/v1/changelog').catch(() => fetch(`${import.meta.env.BASE_URL}api/changelog.json`).then((r) => (r.ok ? (r.json() as Promise<{ data: Change[] }>) : Promise.reject(new Error(String(r.status))))))
 
-/** The info.description packs limits and error codes into one paragraph; split it for display. */
-function parseInfo(d = '') {
-  const [intro, codes = ''] = d.split(/Error codes:\s*/)
-  const errors = [...codes.matchAll(/`([a-z_]+)`\s*\(([^)]*)\)/g)].map((m) => [m[1], m[2]] as const)
-  const sentences = intro.split(/(?<=\.)\s+/).filter((s) => s && !/^Copy Pro only/.test(s))
-  return { sentences, errors }
+const TERM = /`([a-z_]+)`\s*\(([^)]*)\)/g
+// One definition for the fields the spec defines in several places, and query parameters the glossary isn't for.
+const GLOSSARY_FIX: Record<string, string | null> = {
+  truncated: 'true when the full list isn’t loaded yet and a shorter public list is served instead: the top 500 positions by value for a filer’s holdings, the top 25 holders for a stock; false once the full list is in',
+  limit: null,
+  offset: null,
 }
+
+/** The info.description packs limits, error codes and then field notes into one string; split them for display. */
+function parseInfo(d = '') {
+  const [intro, rest = ''] = d.split(/Error codes:\s*/)
+  // The error codes are the paragraph right after "Error codes:"; `field` (definition) pairs after it are the glossary.
+  const cut = rest.search(/\n\s*\n/)
+  const [codes, notes] = cut < 0 ? [rest, ''] : [rest.slice(0, cut), rest.slice(cut)]
+  const errors = [...codes.matchAll(TERM)].map((m) => [m[1], m[2]] as const)
+  const seen = new Map<string, string>()
+  for (const m of notes.matchAll(TERM)) if (!seen.has(m[1]) && !errors.some(([c]) => c === m[1])) seen.set(m[1], m[2])
+  for (const [k, v] of Object.entries(GLOSSARY_FIX)) if (v === null) seen.delete(k); else seen.set(k, v)
+  const glossary = [...seen].filter(([, v]) => v !== 'additive')
+  const sentences = intro.split(/(?<=\.)\s+/).filter((s) => s && !/^Copy Pro only/.test(s))
+  return { sentences, errors, glossary }
+}
+
+/** Display fixes for spec text that is behind the API (payments owns api/src/openapi.ts): the finished type rename and the full filer type list. */
+const TYPES = 'hedge_fund, long_only, index, bank, wealth, pension, sovereign, insurance, other'
+const docText = (t = '') =>
+  t
+    .replace(/long_only \(still `active` in some rows during ingest's rename; the two match each other in `type=`\), index, bank, wealth, pension, sovereign, insurance, other/, TYPES)
+    .replace(/ \(or `hedge_fund,active`\)/, '')
+    .replace(/long_only \(or active\)/, 'long_only')
+    .replace(/\(hedge_fund, active, index, bank, wealth, pension, other\)/, `(${TYPES})`)
+    .replace(/true while only the public top-500 shard is available for a filer/, GLOSSARY_FIX.truncated!)
+
+/** Quick-start calls: who am I, a filer's latest book, and every 13F holder of a stock. */
+const examples = (base: string) => ({
+  curl: `# Your key and plan
+curl ${base}/v1/me \\
+  -H "Authorization: Bearer cbk_live_..." -A "my-research/1.0"
+
+# A filer's latest 13F book (slug or CIK)
+curl --compressed \\
+  ${base}/v1/filers/warren-buffett/holdings/latest \\
+  -H "Authorization: Bearer cbk_live_..." -A "my-research/1.0"
+
+# Every 13F holder of a stock, largest first
+curl --compressed \\
+  "${base}/v1/stocks/AAPL/holders?type=hedge_fund,long_only&limit=100" \\
+  -H "Authorization: Bearer cbk_live_..." -A "my-research/1.0"`,
+  python: `import requests
+
+API = "${base}"
+s = requests.Session()
+s.headers["Authorization"] = "Bearer cbk_live_..."
+s.headers["User-Agent"] = "my-research/1.0"
+
+# A filer's latest 13F book (slug or CIK)
+r = s.get(f"{API}/v1/filers/warren-buffett/holdings/latest", timeout=60)
+book = r.json()["data"]
+print(book["quarter"], book["filing"]["accepted_at"])
+for h in book["holdings"][:10]:
+    print(h["ticker"], h["value_usd"], h["weight"], h["change"])
+
+# Every 13F holder of a stock, largest first
+params = {"type": "hedge_fund,long_only", "limit": 100}
+r = s.get(f"{API}/v1/stocks/AAPL/holders", params=params, timeout=60)
+for row in r.json()["data"]["holders"]:
+    print(row["filer"]["name"], row["period"], row["value_usd"], row["change"])`,
+})
 
 const METHOD_TONE: Record<string, 'up' | 'accent' | 'down' | 'neutral'> = { get: 'up', post: 'accent', delete: 'down' }
 
@@ -39,6 +101,7 @@ export function ApiDocs() {
   // The published /v1 base (api.config.mjs API_DOCS_BASE), never the quick tunnel member pages use.
   const base = import.meta.env.VITE_API_DOCS_BASE as string
   const info = parseInfo(s?.info.description)
+  const [lang, setLang] = useState<'curl' | 'python'>('curl')
   // Parameters are often $refs into components.parameters; resolve them so the table has names.
   const resolve = (x: Param | { $ref?: string }): Param | null => {
     const ref = (x as { $ref?: string }).$ref
@@ -68,7 +131,7 @@ export function ApiDocs() {
           </Button>
         </div>
         <p className="mt-4 text-[14px] text-ink-3">
-          Coverage: {cov.data ? cov.data.filers.toLocaleString('en-US') : 'every'} filers, the same count as /v1/filers. History: the last 8 quarters (most from 2024Q3) for {trackedPhrase(cov.data)}; at least the latest quarter for every other filer; back to 2013Q2 by Dec 31 (<Link to="/methodology/#coverage" className="font-medium text-accent hover:text-accent-2">coverage</Link>). Coming: the as_of parameter with per-row amendment lots by Nov 30, Parquet bulk files with no date yet. Use is covered by our{' '}
+          Coverage: {cov.data ? cov.data.filers.toLocaleString('en-US') : 'every'} filers, the same count as /v1/filers. History: {HISTORY_EXACT} (<Link to="/methodology/#coverage" className="font-medium text-accent hover:text-accent-2">coverage</Link>). Coming: the as_of parameter with per-row amendment lots by Nov 30, Parquet bulk files with no date yet. Use is covered by our{' '}
           <Link to="/terms/" className="font-medium text-accent hover:text-accent-2">
             terms
           </Link>
@@ -78,8 +141,15 @@ export function ApiDocs() {
 
       <div className="mt-12 grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <Panel title="Quick start" sub={s ? `Version ${s.info.version}` : undefined}>
-          <pre className="overflow-x-auto rounded-xl bg-night p-4 font-mono text-[13px] leading-relaxed text-white/90">
-            <code>{`curl ${base}/v1/me \\\n  -H "Authorization: Bearer cbk_live_..."`}</code>
+          <div role="tablist" aria-label="Example language" className="mb-2 flex gap-1 text-[13px]">
+            {(['curl', 'python'] as const).map((k) => (
+              <button key={k} role="tab" aria-selected={lang === k} onClick={() => setLang(k)} className={`rounded-lg px-3 py-1.5 font-medium ${lang === k ? 'bg-night text-white' : 'text-ink-2 hover:bg-line/60'}`}>
+                {k === 'curl' ? 'curl' : 'Python requests'}
+              </button>
+            ))}
+          </div>
+          <pre className="overflow-x-auto rounded-xl bg-night p-4 font-mono text-[12.5px] leading-relaxed text-white/90">
+            <code>{examples(base)[lang]}</code>
           </pre>
           <p className="mt-2 text-[12.5px] text-ink-3">Base URL: <code className="font-mono">{base}</code>. {HOST_MOVE} {API_OUTAGE} Live API status: <Link to="/status/" className="text-accent hover:text-accent-2">/status/</Link>.</p>
           <p className="mt-4 rounded-xl bg-accent-soft px-4 py-3 text-[13.5px] leading-relaxed text-accent-2">
@@ -98,6 +168,7 @@ export function ApiDocs() {
             <Skeleton className="mt-5 h-20 w-full" />
           )}
         </Panel>
+        <div className="flex flex-col gap-6">
         <Panel title="Errors" sub="Every error response is JSON with one of these codes">
           {s ? (
             <dl className="divide-y divide-line text-[13.5px]">
@@ -114,6 +185,19 @@ export function ApiDocs() {
             <Skeleton className="h-40 w-full" />
           )}
         </Panel>
+        {info.glossary.length > 0 && (
+          <Panel title="Field glossary" sub="Response fields that need more than their name">
+            <dl className="divide-y divide-line text-[13.5px]">
+              {info.glossary.map(([field, what]) => (
+                <div key={field} className="flex gap-4 py-2">
+                  <dt className="w-40 shrink-0 font-mono text-[12.5px] text-ink">{field}</dt>
+                  <dd className="text-ink-2">{what.replace(/`/g, '')}</dd>
+                </div>
+              ))}
+            </dl>
+          </Panel>
+        )}
+        </div>
       </div>
 
       <section className="mt-6" aria-labelledby="endpoints">
@@ -130,7 +214,7 @@ export function ApiDocs() {
                 <code className="font-mono text-[14px] font-medium">{path}</code>
               </p>
               {op.summary && <p className="mt-2 text-[14.5px] text-ink-2">{op.summary}</p>}
-              {op.description && <p className="mt-1 text-[14px] text-ink-3">{op.description}</p>}
+              {op.description && <p className="mt-1 text-[14px] text-ink-3">{docText(op.description)}</p>}
               {op.parameters?.length ? (
                 <table className="mt-4 w-full text-[13.5px]">
                   <thead>
@@ -148,7 +232,7 @@ export function ApiDocs() {
                           {p.required && <span className="text-down">*</span>}
                         </td>
                         <td className="py-2 pr-3 text-ink-3">{p.in}</td>
-                        <td className="py-2 text-ink-2">{p.description}</td>
+                        <td className="py-2 text-ink-2">{docText(p.description)}</td>
                       </tr>
                     ))}
                   </tbody>

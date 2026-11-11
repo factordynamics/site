@@ -6,7 +6,7 @@ import { attributed, referredCheckout } from '../lib/attribution'
 import { gapLabel, loadLatency } from '../lib/account'
 import { BASE, useAsync, useTitle } from '../lib/data'
 import { HOST_MOVE, HOSTING, VENDOR } from '../lib/hosting'
-import { loadCoverage, trackedPhrase } from '../lib/stocks'
+import { HISTORY_EXACT, loadCoverage } from '../lib/stocks'
 
 // Landing pages for the two buyers of the paid data plans: investment teams (Copy Fund) and quants
 // (Copy Pro). Each has one primary call to action. Comparisons stick to facts a reader can check.
@@ -265,7 +265,6 @@ export function ForQuants() {
   useTitle('Copybook API for quants · Copy Pro')
   const cov = useAsync(loadCoverage, [])
   const filers = cov.data?.filers ? cov.data.filers.toLocaleString('en-US') : '8,900+'
-  const curated = trackedPhrase(cov.data)
   const sample = useAsync(() => fetch(`${BASE}api/sample-holdings.json`).then((r) => r.text()), [])
   const trial = attributed(plans.pro.links.yearly || plans.pro.links.monthly)
   const cta = (
@@ -287,7 +286,7 @@ export function ForQuants() {
         note={`${trialTerms('pro')} Founding price: subscribe before Dec 31 and keep $39/mo ($390/yr) for as long as you stay.`}
       />
 
-      <Facts items={[[filers, '13F filers in /v1, the latest filing of each'], ['8 quarters', `the last 8 for ${curated}, most from 2024Q3; at least the latest quarter for every other filer; back to 2013Q2 by Dec 31`], ['To the second', 'EDGAR acceptance time on every filing']]} />
+      <Facts items={[[filers, '13F filers in /v1, the latest filing of each'], ['8 quarters', HISTORY_EXACT], ['To the second', 'EDGAR acceptance time on every filing']]} />
 
       <div className="mt-12 grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         <Panel title="One request" sub="Send your key as a Bearer token, and a User-Agent that names your app">
@@ -335,7 +334,7 @@ export function ForQuants() {
       <div className="mt-6 grid gap-4 md:grid-cols-3 [&>*]:h-full">
         <Panel title="Coverage">
           <ul className="space-y-2 text-[14px] leading-relaxed text-ink-2">
-            <li>Live: at least the latest 13F for {filers} filers (the /v1/filers count), the last 8 quarters (most from 2024Q3) for {curated}, holders by stock, quarter-range history, Form 4 and 13D/G events, and bulk CSV files.</li>
+            <li>Live: at least the latest 13F for {filers} filers (the /v1/filers count), 8 quarters (2024Q3–2026Q2) for 341 of the 355 managers we track closely and 3–7 for the other 14, holders by stock, quarter-range history, Form 4 and 13D/G events, and bulk CSV files.</li>
             <li>Coming: hedge-fund and long-only new, exited and net trades in My book by Nov 20; the as_of parameter with per-row amendment lots by Nov 30; history back to 2013Q2 by Dec 31; Parquet bulk files, no date yet. Each appears in the changelog when it returns data.{' '}
               <Link to="/methodology/#coverage" className="font-medium text-accent hover:text-accent-2">
                 Coverage

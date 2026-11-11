@@ -6,7 +6,7 @@ import { attributed, checkRef, referredCheckout, refCode, utmTags } from '../lib
 import { gapLabel, loadLatency, useMember } from '../lib/account'
 import { thirteenFStats } from '../lib/latencyStats.mjs'
 import { money, useAsync, useTitle } from '../lib/data'
-import { loadCoverage, loadStock, trackedPhrase } from '../lib/stocks'
+import { HISTORY_EXACT, loadCoverage, loadStock, trackedPhrase } from '../lib/stocks'
 import { loadEvents } from '../components/FundNotes'
 import { BOOK_PRO, checkoutEnabled, FUND_SEATS, FUND_WHY, DATA_TERMS, plans, referredDeal, referredTerms, TRIAL_DAYS, trialTerms, type PlanId } from '../config'
 
@@ -37,7 +37,7 @@ const tiers = (filers: string, curated: string): Tier[] => [
       { t: 'Follow investors and stocks', d: 'Tell us what you own or watch, and hear when an active manager trades it.' },
       { t: 'Telegram, Discord, Slack and RSS delivery', d: 'Each alert in your chat or reader as it happens, as well as by email.' },
       { t: 'Insider buys and any filer’s 13D', d: 'On stocks you own or watch: open-market insider buys over a threshold you set, cluster buys by 3+ insiders, and a new 13D or 13G by anyone.' },
-      { t: 'Every move, every quarter', d: 'All buys and sells, the full filing-season flow, and the last 8 quarters of history (most from 2024Q3) with CSV for the managers we track closely.' },
+      { t: 'Every move, every quarter', d: 'All buys and sells, the full filing-season flow, and up to 8 quarters of history (2024Q3–2026Q2) with CSV for the managers we track closely.' },
     ],
   },
   {
@@ -47,7 +47,7 @@ const tiers = (filers: string, curated: string): Tier[] => [
     lead: 'Everything in Copy, plus',
     now: [
       { t: 'API keys and docs', d: 'Up to 10 keys, 60 requests a minute and 20,000 a day each, with usage on your account page.' },
-      { t: 'Filer and holdings endpoints', d: `Every 13F filer, ${filers}, as JSON. History: the last 8 quarters (most from 2024Q3) for ${curated}; at least the latest quarter for every other filer; back to 2013Q2 by Dec 31.` },
+      { t: 'Filer and holdings endpoints', d: `Every 13F filer, ${filers}, as JSON. History: ${HISTORY_EXACT}` },
       { t: 'Filing acceptance times', d: 'The EDGAR acceptance time of each filing, to the second.' },
       { t: 'Signed webhooks', d: 'A signed JSON POST to your endpoint for every alert, retried for 12 hours if it fails.' },
       { t: 'Holders, history and events endpoints', d: 'Every filer holding a stock, a filer’s books across a range of quarters, and Form 4 and 13D/G events, as JSON.' },
@@ -57,7 +57,7 @@ const tiers = (filers: string, curated: string): Tier[] => [
     ],
     soon: [
       { t: 'Point-in-time history', d: 'Per-row filing timestamps now; as_of point-in-time queries from Nov 30, so a backtest sees only what was public.' },
-      { t: 'History back to 2013Q2', d: 'By Dec 31, 2026. Today: the last 8 quarters (most from 2024Q3) for the managers we track closely, at least the latest quarter for every other filer.' },
+      { t: 'History back to 2013Q2', d: `By Dec 31, 2026. Today: ${HISTORY_EXACT.replace(/ History back.*/, '')}` },
       { t: 'Parquet bulk files', d: 'Next to the CSVs. No date yet.' },
     ],
   },
@@ -93,7 +93,7 @@ const compare = (filers: string): [string, ...(boolean | string)[]][] => [
   ['Every move and full flow', false, true, true, true],
   ['Slack, Discord, Telegram and RSS delivery', false, true, true, true],
   ['Insider buys and any filer’s 13D on your stocks', false, true, true, true],
-  ['the last 8 quarters of history (most from 2024Q3) and CSV', false, true, true, true],
+  ['Up to 8 quarters of history (2024Q3–2026Q2) and CSV', false, true, true, true],
   ['API keys, filer and holdings endpoints', false, false, true, true],
   ['Holders, history and events endpoints', false, false, true, true],
   ['Point-in-time history', false, false, 'by Nov 30', 'by Nov 30'],
@@ -377,7 +377,7 @@ export function Pricing() {
               ],
               [
                 'What’s live in Pro and Fund today?',
-                `Pro: everything in Copy, API keys, the filer, holdings, holders, history and events endpoints, bulk CSV files (each filer’s current version, with per-row filing timestamps), filing acceptance times, signed webhooks, the full My book (every 13F filer, crowding, 13F linking and CSV) and peer overlap. Copy includes My book lite: who among the superinvestors holds your names and what they did this season. Coming, at no extra cost: new, exited and net trades for all filers in My book by Nov 20, as_of point-in-time queries from Nov 30 (per-row filing timestamps are live now), history back to 2013Q2 by Dec 31 (today: the last 8 quarters, most from 2024Q3, for the managers we track closely, and at least the latest quarter for every other filer), and Parquet files with no date yet; each turns on in the API changelog when it returns data. Fund adds up to ${FUND_SEATS} seats, a shared book and peer lists, all live, and can be paid by annual invoice, net 30. Net-30 invoicing is for Fund; Pro is paid by card, with a full invoice.`,
+                `Pro: everything in Copy, API keys, the filer, holdings, holders, history and events endpoints, bulk CSV files (each filer’s current version, with per-row filing timestamps), filing acceptance times, signed webhooks, the full My book (every 13F filer, crowding, 13F linking and CSV) and peer overlap. Copy includes My book lite: who among the superinvestors holds your names and what they did this season. Coming, at no extra cost: new, exited and net trades for all filers in My book by Nov 20, as_of point-in-time queries from Nov 30 (per-row filing timestamps are live now), history back to 2013Q2 by Dec 31 (today: ${HISTORY_EXACT.replace(/ History back.*/, '').replace(/\.$/, '')}), and Parquet files with no date yet; each turns on in the API changelog when it returns data. Fund adds up to ${FUND_SEATS} seats, a shared book and peer lists, all live, and can be paid by annual invoice, net 30. Net-30 invoicing is for Fund; Pro is paid by card, with a full invoice.`,
               ],
               [
                 'How does the free trial work?',

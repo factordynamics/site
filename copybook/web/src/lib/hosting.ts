@@ -77,7 +77,7 @@ export const OUTAGES: [string, string][] = [
 
 // Newest first, in UTC. Every incident that made member pages or alerts unavailable or slow.
 /** Where the API host is going (no date until the DNS move). */
-export const HOST_MOVE = 'The API host will move to api.factordynamics.com. Key holders get email and a changelog entry at least 7 days before the old host stops working.'
+export const HOST_MOVE = 'Moving to api.factordynamics.com, planned Dec 5, with 7 days’ notice: key holders get email and a changelog entry before the old host stops working.'
 /** /api/: what an API client sees while the API host is down (payments' wording, Nov 11). */
 export const API_OUTAGE = 'If the API host is down, requests to this base fail until it’s back; member pages move to our backup automatically, but API clients don’t. Retry with backoff. Alerts, webhooks and chat posts keep coming from our other poller.'
 /** What the incident list counts. */

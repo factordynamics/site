@@ -305,6 +305,9 @@ export const loadCoverage = () => getJSON<{ filers: number; curated: number; in_
 /** "the 355 managers we track closely", or without a number until coverage.json loads. */
 export const trackedPhrase = (c: { curated: number; in_api?: number } | null | undefined) => `the ${c ? `${(c.in_api ?? c.curated).toLocaleString('en-US')} ` : ''}managers we track closely`
 
+/** Exact 13F history depth today (from ingest's counts, Nov 11). */
+export const HISTORY_EXACT = '341 of the 355 managers we track closely have 8 quarters (2024Q3–2026Q2) and 14 have 3–7; every other 13F filer has 1–3, mostly 2026Q1–Q3. History back to 2013Q2 comes by Dec 31.'
+
 /** Every 13F filer's latest position in a stock (scripts/stocks.mjs, d/h/{TICKER}.json): the 500 largest, plus counts. */
 export type FilerHolder = { slug: string; name: string; quarter: string; shares: number; value: number; weight: number; tier: 0 | 1 | 2; smart: boolean; hedge: boolean }
 /** Ingest's full-book holder index (hl/): every filer's latest 13F, current holders (this quarter or last) and older ones apart. */

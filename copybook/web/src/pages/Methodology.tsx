@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { Panel } from '../components/ui'
 import { api } from '../config'
 import { DATA, dateLabel, loadIndex, quarterLabel, useAsync, useTitle } from '../lib/data'
-import { loadSplitLog, stockPath } from '../lib/stocks'
+import { HISTORY_EXACT, loadSplitLog, stockPath } from '../lib/stocks'
 
 // data/changelog.json from ingest: append-only, newest first; id is a stable anchor.
 type Entry = { id: string; date: string; title: string; body: string; kind: 'methodology' | 'restatement' | 'data_fix' | string; funds?: string[]; quarters?: string[]; accessions?: string[] }
@@ -25,7 +25,7 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
     title: 'Coverage',
     body: (
       <ul>
-        <li>History: the last 8 quarters (most from 2024Q3) for the managers we track closely; at least the latest quarter for every other filer; back to 2013Q2 by Dec 31.</li>
+        <li>History: {HISTORY_EXACT}</li>
         <li>Bulk files (the API’s /v1/bulk): 2026Q1–Q3 so far.</li>
         <li>A few filers reach further back. Each fund’s 13F history button, and history_quarters in the API, lists exactly the quarters it has.</li>
         <li>Point-in-time books (the API’s as_of) are announced for Nov 30; until then each book is as known today (see Amendments).</li>
