@@ -177,9 +177,9 @@ export function Contact() {
                       'Check your inbox to sign in.'
                     )}{' '}
                     The invoice for $1,990 (the founding price, a year) comes on {day(started.invoice_on)}, due {day(started.due_on)}; nothing is charged before then. It’s payable online by card or US bank account (ACH). Cancel before {day(started.invoice_on)} in your account and nothing is owed.
-                    {/* Stripe emails the invoice to the owner; the AP address is only printed on it (payments, 15:15). */}{' '}
+                    {/* Stripe emails the invoice to the owner; from 17:00 Nov 11 the AP address gets a copy when it's finalized (payments). */}{' '}
                     The invoice {started.po ? `will show PO ${started.po} and ` : ''}goes to {started.email}
-                    {started.ap_email ? `; ${started.ap_email} is printed on it for your AP team` : ''}.
+                    {started.ap_email ? `, with a copy to ${started.ap_email} for your AP team` : ''}.
                   </p>
                 </>
               ) : (
@@ -287,7 +287,7 @@ export function Contact() {
                       {hintFor('ap_email')}
                     </label>
                   </div>
-                  <p className="text-[12.5px] leading-relaxed text-ink-3">Both print on the invoice. $1,990 a year at the founding price, invoiced on day 14, Net 30. Prices exclude applicable taxes. Copybook does not currently collect sales tax.</p>
+                  <p className="text-[12.5px] leading-relaxed text-ink-3">Both print on the invoice, and AP gets a copy of the invoice when it’s issued. $1,990 a year at the founding price, invoiced on day 14, Net 30. Prices exclude applicable taxes. Copybook does not currently collect sales tax.</p>
                 </fieldset>
               )}
               {fund && !invoiceTrial && (

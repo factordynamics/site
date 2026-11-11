@@ -767,13 +767,14 @@ const REASONS: [CancelReason, string][] = [
 /** A Fund owner on yearly billing moves the card subscription or trial to an invoice, Net 30 (POST /account/invoice). */
 const shortDay = (iso: string) => new Date(`${iso.slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
 // `amount` is Stripe's integer cents (199000 for the founding Fund year).
-const usd = (a?: number | null) => (a != null ? a / 100 : 1990)
+
 /** The plan line for a Copy Fund trial billed by invoice (payments' /me invoice_trial). */
 const invoiceTerms = (t: NonNullable<Member['invoice_trial']>) =>
   [
-    `Invoice trial: $${usd(t.amount).toLocaleString('en-US')} invoice on ${shortDay(t.invoice_on)}${t.invoice_to ? ` to ${t.invoice_to}` : ''}, due ${shortDay(t.due_on)} (Net 30)`,
+    // amount is in cents; records from before payments' 17:00 build read null until the hourly re-sync, so no amount then.
+    `Invoice trial: ${t.amount != null ? `$${(t.amount / 100).toLocaleString('en-US')} invoice` : 'invoice'} on ${shortDay(t.invoice_on)}${t.invoice_to ? ` to ${t.invoice_to}` : ''}, due ${shortDay(t.due_on)} (Net 30)`,
     t.po && `PO ${t.po}`,
-    t.ap_email && `AP ${t.ap_email}`,
+    t.ap_email && `AP ${t.ap_email} gets a copy`,
     'payable online by card or US bank account (ACH)',
     `cancel before ${shortDay(t.invoice_on)} and nothing is owed`,
   ]

@@ -53,7 +53,7 @@ const SECTIONS: [string, [string, ReactNode][]][] = [
       ['Use of AI and model providers', HOSTING.accessParts.find(([h]) => h === 'AI providers')?.[1]],
       ['Customer sign-in', 'One-time links sent by email; there are no passwords. Sessions are signed, expiring tokens we don’t store.'],
       ['Team seats', `Copy Fund covers up to ${FUND_SEATS} seats at a flat price. Your team’s admin adds and removes seats from the account page; adding or removing one doesn’t change what you pay.`],
-      ['API keys', 'Stored only as SHA-256 hashes and shown once, when created. A revoked key fails immediately, except while member access runs on our backup, when it takes effect on the move back.'],
+      ['API keys', 'Stored only as SHA-256 hashes and shown once, when created. A revoked key stops working within 3 seconds on whichever server is answering, the backup included, and stays revoked when we switch back.'],
     ],
   ],
   [
