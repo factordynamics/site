@@ -128,16 +128,20 @@ export function usualTime(x: Pick<Expected, 'pattern' | 'time_et' | 'time_range'
 /** The next two filing days' largest superinvestors, up to four a day (books within a few percent of each other are effectively tied). */
 export function nextUp(list: ExpectedSoon[], today: string, perDay = 4) {
   const days = [...new Set(list.filter((x) => x.expected_date! >= today).map((x) => x.expected_date!))].sort().slice(0, 2)
-  return days
-    .map((d) => {
-      const names = list
-        .filter((x) => x.expected_date === d)
-        .sort((a, b) => b.total_value - a.total_value)
-        .slice(0, perDay)
-        .map((x) => x.manager)
+  const groups = days.map((d) => ({
+    d,
+    people: list
+      .filter((x) => x.expected_date === d)
+      .sort((a, b) => b.total_value - a.total_value)
+      .slice(0, perDay),
+  }))
+  const text = groups
+    .map(({ d, people }) => {
+      const names = people.map((x) => x.manager)
       return `${names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0]} ${shortDay(d).split(' ')[0]}`
     })
     .join(', ')
+  return { text, people: groups.flatMap((g) => g.people.map((x) => ({ slug: x.slug, name: x.manager }))) }
 }
 
 export type Season = {

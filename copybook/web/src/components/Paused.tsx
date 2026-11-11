@@ -4,6 +4,11 @@ import { Arrow, Button } from './ui'
 
 // A YYYY-MM-DD day as given; a unix time (paused_until) on New York's calendar, like the 13F deadlines.
 export const dayLabel = (v: string | number) => new Date(typeof v === 'number' ? v * 1000 : v).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? 'UTC' : 'America/New_York' })
+/** A trial or period end with its New York time: "Nov 24, 2026, 7:46 pm ET" (Stripe shows these in UTC, which can read a day later). */
+export const timeLabel = (v: string | number) =>
+  typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)
+    ? dayLabel(v)
+    : `${dayLabel(v)}, ${new Date(typeof v === 'number' ? v * 1000 : v).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }).replace(/ ([AP])M$/, (_, x: string) => ` ${x.toLowerCase()}m`)} ET`
 
 /** Paused (Stripe pause_collection): no charges or alerts until the date; follows and settings stay. */
 export function Paused({ until, digest, onChange }: { until: number; digest: boolean; onChange: (m: Member) => void }) {

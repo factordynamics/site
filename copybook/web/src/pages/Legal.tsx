@@ -4,6 +4,22 @@ import { useTitle } from '../lib/data'
 import { HOSTING, SUBPROCESSORS } from '../lib/hosting'
 
 const UPDATED = 'November 9, 2026'
+// Material changes to /privacy/ and /security/, newest first. Every material edit adds a line here, and the
+// newest date is the page's "Last updated".
+const CHANGES: Partial<Record<'terms' | 'privacy' | 'security', [string, string][]>> = {
+  security: [
+    ['November 11, 2026', 'What else runs on it: the API machine is the founder’s home desktop and also runs his other personal projects, under the same operating-system account as the API.'],
+    ['November 11, 2026', 'Who can see member data: Copybook is maintained by AI coding agents on Amp; the MDR terms and their exceptions are quoted, and agent requests that run through the founder’s personal Claude and Grok subscriptions go under those providers’ consumer terms.'],
+    ['November 11, 2026', 'Hosting: the API is reached through a temporary Cloudflare quick tunnel until it has its own hostname. Hourly local snapshots are now encrypted. Sign-in and Fund invite link lifetimes added.'],
+    ['November 11, 2026', 'Recovery: the rebuild from encrypted backups was rehearsed (about 7 minutes to restore, 30–60 minutes end to end); the standby move is not yet rehearsed.'],
+    ['November 9, 2026', 'Where the API runs, encryption at rest, access, backups, physical risk and deletion described.'],
+  ],
+  privacy: [
+    ['November 11, 2026', 'Subprocessors: Amp (AI coding agents) and its model providers, Anthropic and SpaceXAI via personal subscriptions on consumer terms, and Amp’s session-log storage on Google Cloud in the US.'],
+    ['November 11, 2026', 'What we store now lists everything: your book, peers and team, imported 13F and broker CSV contents, and channel settings including webhook URLs and signing secrets.'],
+    ['November 9, 2026', 'Member records copied to a private Cloudflare R2 bucket; lawful basis, retention and deletion periods added.'],
+  ],
+}
 const email = (
   <a href="mailto:hello@factordynamics.com" className="font-medium text-accent hover:text-accent-2">
     hello@factordynamics.com
@@ -80,6 +96,7 @@ const PAGES: Record<'terms' | 'privacy' | 'security', { title: string; lead: str
       ['Encryption', HOSTING.encryption],
       ['Who can see member data', HOSTING.access],
       ['Where the machine is', HOSTING.physical],
+      ['What else runs on it', HOSTING.shared],
       ['Backups', HOSTING.backups],
       ['Access logging', HOSTING.logging],
       ['Availability', <>{HOSTING.availability} Live status and incidents are on the <Link to="/status/" className="font-medium text-accent hover:text-accent-2">status page</Link>.</>],
@@ -101,7 +118,7 @@ export function Legal({ page }: { page: keyof typeof PAGES }) {
   return (
     <div className="container-x pt-12 md:pt-16">
       <header className="max-w-2xl">
-        <p className="text-[13px] font-medium text-accent">Last updated {UPDATED}</p>
+        <p className="text-[13px] font-medium text-accent">Last updated {CHANGES[page]?.[0][0] ?? UPDATED}</p>
         <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-h1">{p.title}</h1>
         <p className="mt-4 text-[17px] leading-relaxed text-ink-2">{p.lead}</p>
       </header>
@@ -112,6 +129,19 @@ export function Legal({ page }: { page: keyof typeof PAGES }) {
             <div className="mt-2.5 text-[15.5px] leading-relaxed text-ink-2">{body}</div>
           </section>
         ))}
+        {CHANGES[page] && (
+          <section id="changes" className="scroll-mt-24 border-t border-line pt-8">
+            <h2 className="text-[17px] font-semibold tracking-[-0.01em]">Changes to this page</h2>
+            <ul className="mt-3 space-y-2.5 text-[14px] leading-relaxed text-ink-2">
+              {CHANGES[page]!.map(([d, t]) => (
+                <li key={d + t.slice(0, 20)}>
+                  <span className="num block text-[12.5px] text-ink-3">{d}</span>
+                  {t}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
       </div>
     </div>
   )

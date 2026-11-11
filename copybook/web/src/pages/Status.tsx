@@ -4,7 +4,7 @@ import { Skeleton } from '../components/ui'
 import { apiReady } from '../config'
 import { loadLatency, type Latency } from '../lib/account'
 import { useAsync, useTick, useTitle } from '../lib/data'
-import { INCIDENTS } from '../lib/hosting'
+import { HOSTING, INCIDENTS } from '../lib/hosting'
 
 // /status/: live state of each part of Copybook, read in the browser from the same public sources the site
 // uses (api.json and latency.json on R2, and the API's /health), rechecked every minute. Nothing is typed in
@@ -174,6 +174,7 @@ export function Status() {
             </li>
           ))}
         </ol>
+        <p className="mt-4 text-[14px] leading-relaxed text-ink-2">{HOSTING.shared}</p>
         <p className="mt-4 text-[14px] leading-relaxed text-ink-2">
           What happens to alerts during each kind of outage is on the{' '}
           <Link to="/speed/#availability" className="font-medium text-accent hover:text-accent-2">

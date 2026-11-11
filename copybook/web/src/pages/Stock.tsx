@@ -1,3 +1,4 @@
+import { useTrackVisit } from '../lib/track'
 import { Signup } from '../components/Signup'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -23,6 +24,7 @@ const CHANGE: Record<string, { label: string; tone: 'up' | 'down' | 'neutral' }>
 
 export function StockPage() {
   const { ticker = '' } = useParams()
+  useTrackVisit()
   const nav = useNavigate()
   const s = useAsync(() => loadStock(ticker.toUpperCase()), [ticker])
   // The lens lives in the URL (?funds=all) so a view can be shared; superinvestors by default.

@@ -8,7 +8,7 @@ import { FundSetup } from '../components/FundSetup'
 import { UpgradePro } from '../components/UpgradePro'
 import { FreeNames } from '../components/FreeNames'
 import { CopySetup } from '../components/CopySetup'
-import { dayLabel, Paused } from '../components/Paused'
+import { dayLabel, Paused, timeLabel } from '../components/Paused'
 import { CsvButton } from '../components/CsvButton'
 import { resetFollows, saveFollows, useFollows } from '../lib/follows'
 import { stockPath } from '../lib/stocks'
@@ -46,6 +46,7 @@ export function Account() {
         let member: Member
         if (sid?.startsWith('cs_')) member = await startSession({ checkout_session: sid })
         else if (login) member = await startSession({ login })
+        if (sid || login) member = await fetchMe().catch(() => member)
         else if (getToken()) {
           // The last-known account renders at once, marked updating, so a slow API isn't a blank page.
           const last = cachedFresh() ? null : lastMe()
@@ -119,7 +120,7 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
   const endRaw = cancelling && member.cancel_at ? member.cancel_at : member.status === 'trialing' && member.trial_end ? member.trial_end : member.period_end
   const end = endRaw ? new Date(typeof endRaw === 'number' ? endRaw * 1000 : endRaw) : null
   // Member-facing dates are on New York's calendar, like EDGAR's.
-  const endLabel = end?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' })
+  const endLabel = end ? timeLabel(end.getTime() / 1000) : undefined
   const trial = member.status === 'trialing'
   const alertMode = member.alerts === 'off' ? 'off' : Array.isArray(member.alerts) ? 'follows' : 'all'
   const idx = useAsync(loadIndex, [])
@@ -211,7 +212,7 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
             {member.interval === 'yearly' ? ', yearly' : member.interval === 'monthly' ? ', monthly' : ''}
             {member.pause_after_trial && !cancelling && !paused ? (
               <>
-                {' · '}free trial until {dayLabel(member.trial_end ?? member.pause_after_trial.from)} → then paused until {dayLabel(member.pause_after_trial.until)} · no charges ·{' '}
+                {' · '}free trial until {timeLabel(member.trial_end ?? member.pause_after_trial.from)} → then paused until {dayLabel(member.pause_after_trial.until)} · no charges ·{' '}
                 <UndoPause onChange={onChange} />
               </>
             ) : (
@@ -788,7 +789,7 @@ function Leave({ member, onChange }: { member: Member; onChange: (m: Member) => 
           Keep my plan
         </button>
       </div>
-      {offer && afterTrial && <p className="mt-3 text-[12.5px] leading-relaxed text-ink-3">Your trial continues with everything until {dayLabel(member.trial_end ?? offer.starts!)}. Then no charges and no real-time alerts until {dayLabel(offer.until)}, two weeks before the {offer.quarter ? offer.quarter.replace(/^(\d{4})Q(\d)$/, 'Q$2') : deadlineQuarter(offer.until)} 13F deadline. Your follows and settings stay.</p>}
+      {offer && afterTrial && <p className="mt-3 text-[12.5px] leading-relaxed text-ink-3">Your trial continues with everything until {member.trial_end ? timeLabel(member.trial_end) : dayLabel(offer.starts!)}. Then no charges and no real-time alerts until {dayLabel(offer.until)}, two weeks before the {offer.quarter ? offer.quarter.replace(/^(\d{4})Q(\d)$/, 'Q$2') : deadlineQuarter(offer.until)} 13F deadline. Your follows and settings stay.</p>}
       {offer && !afterTrial && <p className="mt-3 text-[12.5px] leading-relaxed text-ink-3">Pausing stops charges and real-time alerts until {dayLabel(offer.until)}{offer.quarter ? `, in time for the ${offer.quarter.replace(/^(\d{4})Q(\d)$/, 'Q$2 $1')} 13F season` : ''}. {member.digest_live ? ' The weekly digest of your names keeps coming, your' : ' Your'} follows and settings stay, and we’ll email you before it resumes.</p>}
       {err && <p role="alert" className="mt-2 text-[13px] text-down">{err}</p>}
     </div>

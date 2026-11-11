@@ -3,7 +3,7 @@ import { Arrow } from '../components/ui'
 import { api } from '../config'
 import { useTitle } from '../lib/data'
 import { PLAN_NAME, useMember } from '../lib/account'
-import { dayLabel } from '../components/Paused'
+import { timeLabel } from '../components/Paused'
 
 // The paused-plan email's link lands here (copybook.factordynamics.com/resume/?t=...). Opening it changes
 // nothing, so a mail scanner that follows links can't end a pause; the button posts the token to the API,
@@ -19,7 +19,7 @@ export function Resume() {
   const billFrom = (m?.status === 'trialing' ? m.trial_end : m?.period_end) ?? null
   const title = m?.cancel_at_period_end ? `Keep your ${plan} plan.` : pausedNow ? `Resume your ${plan} plan.` : 'Keep your plan.'
   const lead = m?.cancel_at_period_end
-    ? `This undoes the cancellation. ${billFrom ? `Billing starts ${m.status === 'trialing' ? '' : 'again '}${dayLabel(billFrom)}, as before.` : 'Billing continues as before.'} Your follows, names and settings stay as they are.`
+    ? `This undoes the cancellation. ${billFrom ? `Billing starts ${m.status === 'trialing' ? '' : 'again '}${timeLabel(billFrom)}, as before.` : 'Billing continues as before.'} Your follows, names and settings stay as they are.`
     : pausedNow
       ? 'Real-time alerts and billing start again today. Your follows, names and settings are just as you left them.'
       : 'This lifts a pause or a cancellation on your plan. Your follows, names and settings are just as you left them.'

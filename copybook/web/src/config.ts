@@ -104,4 +104,6 @@ export const BOOK_LITE = { t: 'My book lite', d: 'Who among the superinvestors h
 export const FUND_WHY = 'Why not separate Pro seats? Pro seats don’t share a book, peers or watchlist, so each analyst rebuilds the same list, alerts arrive once per seat in Slack instead of once, and Pro can’t be invoiced.'
 /** Copy Fund's seat cap (the API's /seats max wins when it answers). */
 export const FUND_SEATS = 10
+/** Measured alert-speed figures outside /speed/ (marketing pages). Off until the lead clears speed claims after Nov 16. */
+export const SPEED_CLAIMS = false
 export const BOOK_PRO = { t: 'Full My book', d: 'Your names against every 13F filer (holders, crowding, peers), 13F linking, CSV and API. New, exited and net trades are for tracked funds today; all filers by Nov 20.' }

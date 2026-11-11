@@ -69,7 +69,7 @@ const tiers = (filers: string, curated: number): Tier[] => [
       { t: `${FUND_SEATS} seats`, d: 'Invite your team by email; each seat signs in on its own and keeps its own alerts and channels.' },
       { t: 'Shared book and peer lists', d: 'One set of follows, watchlist, owned book and peers the whole team works from.' },
       { t: 'One team channel', d: 'Each alert posts once to your team’s Slack channel, whoever follows it.' },
-      { t: 'Seat admin', d: 'Add and remove seats from your account page, and sign a departing colleague out everywhere at once.' },
+      { t: 'Seat admin', d: 'Add and remove seats from your account page, and sign a departing colleague out everywhere at once (API keys keep working; Remove a seat to cut all access).' },
       { t: 'Annual invoice', d: 'Invoiced yearly, net 30. W-9 on request.' },
     ],
     why: FUND_WHY,
@@ -124,7 +124,9 @@ async function fromFact(from: string | null): Promise<string | null> {
   const what = (m: Move) => m.ticker || m.display_name || m.issuer
   if (top?.manager) return `${top.manager} ${top.action === 'buy' ? 'buy' : 'sell'} ${money(top.value_usd!)} of ${what(top)} between 13Fs`
   const stake = moves.find((m) => (m.kind === '13d' || m.kind === '13g') && m.manager && m.percent_of_class != null)
-  return stake ? `${stake.manager} report a ${stake.percent_of_class!.toFixed(1)}% stake in ${what(stake)} between 13Fs` : null
+  const pc = stake?.percent_of_class?.toFixed(1) ?? ''
+  // "an 8.3%", "an 11.0%", "a 70.8%": the article follows how the number is said.
+  return stake ? `${stake.manager} report ${/^(8|1[18](\.|$))/.test(pc) ? 'an' : 'a'} ${pc}% stake in ${what(stake)} between 13Fs` : null
 }
 
 export function Pricing() {

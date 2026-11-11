@@ -4,7 +4,9 @@ import { Link, Navigate, useParams } from 'react-router-dom'
 import { ChangeBars, Donut, foldSlices, Legend, StackBar, Treemap, WeightBars } from '../components/charts'
 import { mapPlan, treemapItems, useBook } from '../components/Portfolio'
 import { Arrow, Badge, Button, Lock, Monogram, Panel, Skeleton, Stat, Ticker } from '../components/ui'
-import { useMember } from '../lib/account'
+import { getToken, isPaying, useMember } from '../lib/account'
+import { useTrackVisit } from '../lib/track'
+import { FollowSignup } from '../components/FollowSignup'
 import { CsvButton } from '../components/CsvButton'
 import { FollowButton } from '../components/FollowButton'
 import { Share } from '../components/Share'
@@ -44,6 +46,7 @@ export function ManagerPage() {
   const cards = useAsync(loadCards, [])
   // Still to file this quarter: its usual day and time, from /season/'s expected list. Gone once it files.
   const soon = useAsync(loadExpected, [])
+  useTrackVisit()
   const due = f ? soon.data?.expected.find((x) => x.slug === f.slug) : undefined
   const card = f && cards.data?.get(f.slug)
 
@@ -121,12 +124,13 @@ export function ManagerPage() {
       </header>
 
       {f && due && soon.data && (
-        <p className="mt-5 rounded-xl bg-accent-soft px-4 py-2.5 text-[14.5px] leading-snug text-accent-2">
+        <div className="mt-5 rounded-xl bg-accent-soft px-4 py-2.5 text-[14.5px] leading-snug text-accent-2">
           <span className="font-medium">
             {quarterLabel(soon.data.quarter).split(' ')[0]} 13F expected {shortDay(due.expected_date!)}, {usualTime(due)}.
           </span>{' '}
-          Follow to get it by email, with its moves inside.
-        </p>
+          {isPaying(member) ? 'Follow to get it by email, with its moves inside.' : `Follow free: ${f.manager}’s moves land in Friday’s email. Or get the 13F as it’s filed, with Copy. We check EDGAR every minute.`}
+          {!getToken() && <FollowSignup people={[{ slug: f.slug, name: f.manager }]} label={`Follow ${f.manager} free`} className="mt-3 text-ink" />}
+        </div>
       )}
       {f && <FundNotice f={f} />}
 

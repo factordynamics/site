@@ -1,3 +1,6 @@
+import { getToken } from '../lib/account'
+import { useTrackVisit } from '../lib/track'
+import { FollowSignup } from '../components/FollowSignup'
 import { useMemo } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { FollowButton } from '../components/FollowButton'
@@ -32,6 +35,7 @@ export const cardUrl = (accession: string) => `${window.location.origin}${BASE}f
 
 export function FilingCard() {
   const { accession = '' } = useParams()
+  useTrackVisit()
   const c = useAsync(() => getJSON<Card>(`${BASE}d/f/${encodeURIComponent(accession)}.json`), [accession])
   const d = c.data
   // Signed-in members: tag the names they own or watch, and list their other names this 13F moved.
@@ -203,8 +207,9 @@ export function FilingCard() {
           {d && (
             <Panel title={`Get ${d.manager}’s next 13F by email`}>
               <p className="text-[14px] leading-relaxed text-ink-2">Follow with Copy and the next filing lands in your inbox, checked on EDGAR every minute, with every new, added, trimmed and exited position inside.</p>
+              {!getToken() && <FollowSignup people={[{ slug: d.slug, name: d.manager }]} className="mt-4" />}
               <div className="mt-4 flex flex-wrap items-center gap-2.5">
-                <FollowButton kind="investor" id={d.slug} name={d.manager} size="md" />
+                {getToken() && <FollowButton kind="investor" id={d.slug} name={d.manager} size="md" />}
                 <Button to={`/investors/${d.slug}/`} variant="outline">
                   All {d.moves_total} moves <Arrow />
                 </Button>

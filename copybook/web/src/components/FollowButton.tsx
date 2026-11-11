@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import { pricingTo } from '../lib/data'
 import { ApiError, getToken } from '../lib/account'
 import { isPaywall, setFollow, useFollows } from '../lib/follows'
+import { track } from '../lib/track'
+import { FollowSignup } from './FollowSignup'
 
 type Props = { kind: 'investor' | 'stock'; id: string; name: string; size?: 'sm' | 'md'; className?: string }
 
@@ -20,6 +22,7 @@ export function FollowButton({ kind, id, name, size = 'sm', className = '' }: Pr
   // A free account (GET /follows carries its 5-name limit) keeps stocks as "my names", not follows.
   const free = status === 'ready' && follows.limit != null
   const [freeMsg, setFreeMsg] = useState<string | null>(null)
+  const [joined, setJoined] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -101,8 +104,31 @@ export function FollowButton({ kind, id, name, size = 'sm', className = '' }: Pr
           </button>
         </span>
       )}
+      {open && <div aria-hidden className="fixed inset-0 z-40 bg-ink/30 sm:hidden" onClick={() => setOpen(false)} />}
       {open && (
-        <div role="dialog" aria-label={`Follow ${name}`} className="absolute right-0 top-full z-50 mt-2 w-[300px] rounded-2xl bg-card p-4 text-left shadow-[0_0_0_1px_rgb(12_14_19/0.08),0_18px_50px_-12px_rgb(12_14_19/0.3)]">
+        <div role="dialog" aria-label={`Follow ${name}`} className="absolute right-0 top-full z-50 mt-2 w-[300px] max-sm:fixed max-sm:inset-x-3 max-sm:bottom-3 max-sm:top-auto max-sm:mt-0 max-sm:w-auto rounded-2xl bg-card p-4 text-left shadow-[0_0_0_1px_rgb(12_14_19/0.08),0_18px_50px_-12px_rgb(12_14_19/0.3)]">
+          {!signedIn ? (
+            <>
+              <p className="text-[14.5px] font-semibold">Follow {name} free</p>
+              {!joined && <p className="mt-1 text-[13px] leading-relaxed text-ink-2">
+                {kind === 'investor' ? 'Their moves land in Friday’s email.' : 'Superinvestor moves in it land in Friday’s email.'}
+              </p>}
+              <FollowSignup people={[{ slug: id, name }]} kind={kind} label="Your email" className="mt-2.5" onDone={() => setJoined(true)} />
+              {!joined && <p className="mt-3 border-t border-line pt-3 text-[13px] leading-relaxed text-ink-2">
+                Or get each 13F as it’s filed, with Copy. We check EDGAR every minute.{' '}
+                <Link to={pricingTo()} onClick={() => track('trial_click')} className="font-medium text-accent hover:text-accent-2">
+                  Start 14-day free trial
+                </Link>
+              </p>}
+              <p className="mt-2 text-[12.5px] text-ink-3">
+                Have an account?{' '}
+                <Link to="/account/" className="font-medium text-accent hover:text-accent-2">
+                  Sign in
+                </Link>
+              </p>
+            </>
+          ) : (
+          <>
           <p className="text-[14.5px] font-semibold">{signedIn ? 'Following is a Copy feature' : `Follow ${name} with Copy`}</p>
           <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-2">
             {kind === 'investor'
@@ -110,7 +136,7 @@ export function FollowButton({ kind, id, name, size = 'sm', className = '' }: Pr
               : 'Get an email when a fund you track buys or sells it, and see who holds it each filing season.'}
           </p>
           <div className="mt-3.5 flex items-center gap-2">
-            <Link to={pricingTo()} className="inline-flex h-8 items-center rounded-full bg-accent px-3.5 text-[13px] font-medium text-white hover:bg-accent-2">
+            <Link to={pricingTo()} onClick={() => track('trial_click')} className="inline-flex h-8 items-center rounded-full bg-accent px-3.5 text-[13px] font-medium text-white hover:bg-accent-2">
               Start 14-day free trial
             </Link>
             {!signedIn && (
@@ -119,6 +145,8 @@ export function FollowButton({ kind, id, name, size = 'sm', className = '' }: Pr
               </Link>
             )}
           </div>
+          </>
+          )}
         </div>
       )}
     </div>

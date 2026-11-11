@@ -3,7 +3,9 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { REF_NOTE, Share, shareUrl, useRefCode } from '../components/Share'
 import { Signup } from '../components/Signup'
 import { Arrow, AvatarStack, Badge, Lock, Monogram, Panel, Skeleton } from '../components/ui'
-import { useMember } from '../lib/account'
+import { getToken, useMember } from '../lib/account'
+import { track, useTrackVisit } from '../lib/track'
+import { FollowSignup } from '../components/FollowSignup'
 import { dateFmt, dateLabel, money, NUM, quarterLabel, useAsync, useTick, useTitle } from '../lib/data'
 import { seasonTitle } from '../lib/titles.mjs'
 import { dayName, isEdgarDay } from '../lib/calendar.mjs'
@@ -45,7 +47,9 @@ export function Season() {
   const s = useAsync(() => loadSeason(tick ? Date.now() : undefined), [tick])
   // "Next up": the next two filing days' largest superinvestors, from d/expected.json.
   const soon = useAsync(loadExpected, [tick])
-  const next = soon.data ? nextUp(soon.data.expected, new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' })) : ''
+  const up = soon.data ? nextUp(soon.data.expected, new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' })) : null
+  const next = up?.text ?? ''
+  useTrackVisit()
   const cards = useAsync(loadCardSet, [])
   const member = useMember()
   const paid = Boolean(member?.active)
@@ -81,7 +85,7 @@ export function Season() {
 
   return (
     <div className="container-x pt-12 md:pt-16">
-      <header className="grid items-end gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <header className="grid grid-cols-[minmax(0,1fr)] items-end gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="max-w-2xl">
           <p className="flex items-center gap-2 text-[13px] font-medium text-accent">
             <span className="relative flex size-2">
@@ -92,12 +96,13 @@ export function Season() {
           </p>
           <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-h1">Who has filed, and what they bought.</h1>
           {!passed && next && (
-            <p className="mt-4 rounded-xl bg-accent-soft px-4 py-2.5 text-[15px] leading-snug text-accent-2">
+            <div className="mt-4 rounded-xl bg-accent-soft px-4 py-2.5 text-[15px] leading-snug text-accent-2">
               <span className="font-medium">Next up: {next}.</span>{' '}
-              <Link to="/pricing/" className="underline underline-offset-2 hover:text-accent">
+              <Link to="/pricing/" onClick={() => track('trial_click')} className="underline underline-offset-2 hover:text-accent">
                 Copy emails you each one’s moves.
               </Link>
-            </p>
+              {!getToken() && up && up.people.length > 0 && <FollowSignup people={up.people} label="Follow them free" className="mt-3 text-[14.5px] text-ink" />}
+            </div>
           )}
           <p className="mt-4 text-[17px] leading-relaxed text-ink-2">
             Every manager with $100M or more in 13F securities, mostly US-listed stocks, must file its {Q || 'quarter-end'} holdings with the SEC within 45 days. We check EDGAR every minute for the funds we track closely; this page refreshes about every 20 minutes.

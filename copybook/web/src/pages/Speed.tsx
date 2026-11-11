@@ -40,7 +40,8 @@ export function Speed() {
   const tick = useTick(60_000, true)
   const lat = useAsync(loadLatency, [tick])
   const d = lat.data
-  const alerts = (d?.alerts ?? []) as Alert[]
+  // Until 13F rows are complete, the histogram and the latest-alerts table leave them out too.
+  const alerts = ((d?.alerts ?? []) as Alert[]).filter((a) => f13Ready(d) || !a.form.startsWith('13F'))
   const gaps = alerts.map((a) => a.gap_seconds)
   const median = d?.median_seconds ?? null
   const p90 = d?.p90_seconds ?? null
@@ -72,6 +73,7 @@ export function Speed() {
       <section className="mt-10 grid gap-px overflow-hidden rounded-[var(--radius-card)] bg-line shadow-[var(--shadow-card)] sm:grid-cols-2 lg:grid-cols-4" aria-label="Alert speed by form type">
         {LEAD.map(([k, label]) => {
           const g = stat(d?.by_form, k) as LatencyStat & { timed_to?: string }
+          if (k === '13F') return <ThirteenF key={k} label={label} d={d} all={g} loading={loading} />
           return (
             <div key={k} className="bg-card p-5 md:p-6">
               <p className="text-[12.5px] font-medium text-ink-2">{label}</p>
@@ -79,7 +81,6 @@ export function Speed() {
               <p className="mt-2 text-[12.5px] text-ink-3">
                 median{g.p90_seconds != null ? ` · 90th pct ${gapLabel(g.p90_seconds)}` : ''} · {g.count.toLocaleString('en-US')} {g.count === 1 ? 'alert' : 'alerts'}
               </p>
-              {k === '13F' && g.timed_to !== 'moves' && <p className="mt-1 text-[12px] text-ink-3">Timed to first email; moves can follow later.</p>}
             </div>
           )
         })}
@@ -262,5 +263,33 @@ function Histogram({ gaps }: { gaps: number[] }) {
         </li>
       ))}
     </ul>
+  )
+}
+
+// 13F timings stay hidden until payments marks its 13F rows complete (by_form['13F'].complete) with at
+// least 5 timed alerts: on-time 13F sends weren't being logged, so the rows so far are only the late ones.
+const F13_MIN = 5
+export const f13Ready = (d: Latency | null | undefined) => {
+  const g = d?.by_form?.['13F'] as (LatencyStat & { complete?: boolean }) | undefined
+  return Boolean(g?.complete && g.count >= F13_MIN)
+}
+function ThirteenF({ label, d, all, loading }: { label: string; d: Latency | null | undefined; all: LatencyStat; loading: boolean }) {
+  const ready = f13Ready(d)
+  return (
+    <div className="bg-card p-5 md:p-6">
+      <p className="text-[12.5px] font-medium text-ink-2">{label}</p>
+      {loading ? (
+        <Skeleton className="mt-2 h-8 w-24" />
+      ) : ready ? (
+        <>
+          <p className="num mt-1.5 text-[30px] font-semibold leading-none tracking-[-0.03em]">{all.median_seconds != null ? gapLabel(all.median_seconds) : '—'}</p>
+          <p className="mt-2 text-[12.5px] text-ink-3">
+            median{all.p90_seconds != null ? ` · 90th pct ${gapLabel(all.p90_seconds)}` : ''} · {all.count.toLocaleString('en-US')} alerts
+          </p>
+        </>
+      ) : (
+        <p className="mt-2 text-[14px] leading-snug text-ink-2">13F timings are being re-logged after a logging fix; back shortly.</p>
+      )}
+    </div>
   )
 }

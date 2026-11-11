@@ -1,3 +1,4 @@
+import { timeLabel } from '../components/Paused'
 import { useState } from 'react'
 import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { Arrow, Button, Check, Skeleton } from '../components/ui'
@@ -18,7 +19,7 @@ const ADDS: Record<'pro' | 'fund', [string, string][]> = {
   ],
   fund: [
     [`${FUND_SEATS} seats`, 'Your team shares one book, one set of follows and one team channel, where each alert posts once.'],
-    ['Seat admin', 'Add and remove seats from your account page, and sign a departing colleague out everywhere at once.'],
+    ['Seat admin', 'Add and remove seats from your account page, and sign a departing colleague out everywhere at once (API keys keep working; Remove a seat to cut all access).'],
     ['Everything in Copy Pro', 'Full My book across every 13F filer, peers, 13F linking, CSV and the API.'],
     ['Annual invoice', 'Net 30 with a W-9, if your fund pays that way.'],
   ],
@@ -162,7 +163,7 @@ function Change({ member, target }: { member: Member; target: 'pro' | 'fund' }) 
         <dl className="divide-y divide-line text-[14px]">
           <Line k="Now" v={`${from.name} · ${price(from)}`} />
           <Line k="After" v={<span className="font-semibold">{`${to.name} · ${price(to)}`}</span>} sub="Founding price, kept for as long as you stay subscribed" />
-          <Line k="Billing" v={`${yearly ? 'Yearly' : 'Monthly'}, unchanged`} sub={end ? `${trial ? 'Trial ends' : 'Next renewal'} ${fmt(end)}` : undefined} />
+          <Line k="Billing" v={`${yearly ? 'Yearly' : 'Monthly'}, unchanged`} sub={end ? `${trial ? 'Trial ends' : 'Next renewal'} ${timeLabel(end.getTime() / 1000)}` : undefined} />
           <Line
             k="Today"
             v={trial ? '$0' : estimate != null ? `About $${estimate.toLocaleString('en-US')}` : 'Prorated'}

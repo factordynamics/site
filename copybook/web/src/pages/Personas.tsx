@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Arrow, Button, Check, Panel } from '../components/ui'
-import { FUND_SEATS, FUND_WHY, plans, TRIAL_DAYS, trialTerms } from '../config'
+import { FUND_SEATS, FUND_WHY, plans, TRIAL_DAYS, trialTerms, SPEED_CLAIMS } from '../config'
 import { attributed, referredCheckout } from '../lib/attribution'
 import { gapLabel, loadLatency, useApiBase } from '../lib/account'
 import { BASE, useAsync, useTitle } from '../lib/data'
@@ -106,7 +106,7 @@ export function ForFunds() {
   const filers = cov.data?.filers ? cov.data.filers.toLocaleString('en-US') : '8,900+'
   // The speed claim shows the live median once real alerts have gone out, and links to the log.
   const lat = useAsync(loadLatency, [])
-  const median = lat.data?.count ? lat.data.median_seconds : null
+  const median = SPEED_CLAIMS && lat.data?.count ? lat.data.median_seconds : null
   const cta = (
     <Button to="/contact/?topic=fund" size="md">
       Request Fund access <Arrow />
