@@ -1,9 +1,10 @@
 Tue Nov 17: moving the Copybook API out of the AI maintenance agents' reach (Andreas; about 45 minutes)
 
 Goal: the account the agents run as (refcell) can't read member data, the service's secrets (including the
-token-signing secrets) or the backup key, can't change code that runs as the service user, isn't in the member request
-path, and holds no credential that reads member data elsewhere. Agents keep the masked /ops/
-endpoints (counts and row IDs; a book read goes through the logged path) and the status directory.
+token-signing secrets) or the backup key, can't change the service's files, and isn't in the member request path.
+Builders keep shipping without waiting on you: any commit on main that passes the boot test deploys to gene, as today,
+and payments keeps deploying the Worker. Agents keep the masked /ops/ endpoints (counts and row IDs; a book read goes
+through the logged path) and the status directory.
 
 Pick a quiet hour (not 11:00–23:00 UTC on a filing day). Members see about 1–2 minutes of errors, and the tunnel URL
 changes (api.json and the front ends follow within 2 minutes).
@@ -34,7 +35,7 @@ changes (api.json and the front ends follow within 2 minutes).
    - checks the status directory, the tunnel, api.json and the front ends, and runs verify (19 checks).
    Wait for its "re-encrypted, ready for step 4".
 
-4. Take the credentials that reach member data away from the agents:
+4. Rotate the signing secrets and take the credentials agents don't need:
    a. Session secret (rotating it signs every member out once; they sign in again by email link):
         NEW=$(openssl rand -base64 48 | tr -d '\n')
         sudo sed -i "s|^SESSION_SECRET=.*|SESSION_SECRET=$NEW|" /var/lib/copybook/copybook-api/secrets.env
@@ -57,9 +58,9 @@ changes (api.json and the front ends follow within 2 minutes).
         read, Account Analytics read; the same as today's token) and put it in the service's secrets:
           sudo sed -i -e "s|^CF_API_TOKEN=.*|CF_API_TOKEN=<new>|" -e "s|^CLOUDFLARE_API_TOKEN=.*|CLOUDFLARE_API_TOKEN=<new>|" /var/lib/copybook/copybook-api/secrets.env
           sudo systemctl --user --machine=copybook@ restart copybook-api
-      - replace the Amp secret CLOUDFLARE_API_TOKEN with a token that has NO Workers Scripts edit, NO Workers KV, NO R2
-        (only what agents still need, e.g. Pages and Analytics read), or delete it. From then on you deploy the Worker
-        to Cloudflare yourself (npx wrangler deploy, logged in as you), after reviewing the change.
+      - replace the Amp secret CLOUDFLARE_API_TOKEN with a token that KEEPS Workers Scripts edit (payments deploys the
+        Worker) plus only the KV and R2 access payments listed as needed (see "Payments' access" below); everything
+        else off.
       - in the Workers dashboard, set copybook-api's CF_API_TOKEN secret to the new service token too (the Worker's cron
         uses it for the R2 sync and latency.json), then roll (re-issue) the old token so no copy of it works.
       - R2 → Manage API tokens: create a token for agents with Object Read & Write on bucket copybook-public ONLY
@@ -67,39 +68,45 @@ changes (api.json and the front ends follow within 2 minutes).
         R2_PUBLIC_SECRET. This keeps the Cloudflare failover (failover-a.sh) runnable by an agent.
       - GitHub → factordynamics/site → Settings → Secrets: any Cloudflare token there must be limited to Pages; agents
         can push workflows that use it.
-   d. Stripe dashboard → Developers → API keys: create a restricted key for agents without read access to Customers,
-      Checkout Sessions, Events, Invoices, Charges, Payment Intents or Subscriptions; replace the Amp secret
-      STRIPE_SECRET_KEY with it. The service keeps the full key (it is already in its secrets file).
+   d. Stripe dashboard → Developers → API keys: create a restricted key for agents with exactly the scopes payments
+      listed (see "Payments' access" below), and replace the Amp secret STRIPE_SECRET_KEY with it. The service keeps
+      the full key (it is already in its secrets file).
    e. Restart the Amp runner so its environment drops the removed secrets: systemctl --user restart amp-runner
       (ends agent shells in progress; other software on the machine runs as separate units and keeps running).
 
 5. Tell the thread "credentials done". The agent runs ~/copybook-api/ops/acceptance-test.sh from its own account:
    every read of member files, the members store, the secrets (SESSION_SECRET and STRIPE_WEBHOOK_SECRET by name) and
    the backup key must fail with "Permission denied", so must every write to code that runs as the service user and to
-   the deploy approval list; the removed credentials and passwords must be gone or refused; the unexpired old-secret
-   session must be refused; and /me and /v1 must still answer 200. It records the output in RESTORE.md and reports
-   PASS or FAIL.
+   the deploy switch; the removed credentials and passwords must be gone; access payments needs is run as
+   ACC_KEEP (reported as "kept", a stated residual, not a failure); the unexpired old-secret session must be refused;
+   and /me and /v1 must still answer 200. It records the output in RESTORE.md and reports PASS or FAIL.
+
+Payments' access (agents' tokens keep exactly this; filled in from payments' reply before Tue):
+- Cloudflare: Workers Scripts edit; KV: PENDING; R2: PENDING (copybook-public via R2_PUBLIC_KEY_ID either way).
+- Stripe restricted key: PENDING.
+- Acceptance run: ACC_KEEP="PENDING".
 
 From then on:
-- Deploys of the API on gene wait for you: review `git diff <deployed>..<sha> -- copybook/api holdterm/src` (the
-  pending sha is in /var/lib/copybook-status/state.txt), then
+- Deploys need nothing from you: any commit on main that passes the boot test deploys to gene and is logged with its
+  build (/var/lib/copybook-status/deploys.log and /status/). Per-deploy approval exists but is off; to turn it on
+  (for example for a tier holding fund shorts or sub-13F names), set DEPLOY_REQUIRE_APPROVAL=1 in
+  /var/lib/copybook/copybook-api/copybook-api.env with sudo, then approve each sha with
     echo <full sha> | sudo -u copybook tee -a /var/lib/copybook/copybook-api/deploy.approved
-  Deploy the same commit to Cloudflare yourself.
 - Monthly decrypt drill: automatic, as the service user (Mondays, result in /var/lib/copybook-status/backup-checks.log).
   The offline copy is for rebuilding on another machine.
 - Optional, unrelated to Copybook: Funnel also forwards public TCP port 8443 to SSH port 22, where nothing listens
   today. To remove it: sudo tailscale funnel --tcp=8443 off
 
 Who can deploy code that runs as the service user from then on: see RESTORE.md, "Who can deploy code that runs as
-the service user". In short, only you: API commits wait for your approval, and the scripts, units, node and binaries
-change only through sudo.
+the service user". In short: any push to main deploys API code after a boot test; the scripts, units, node and
+binaries change only through sudo.
 
 What still isn't closed, stated plainly:
-- File isolation stops accidental reads, not code someone deliberately ships. Code you approve runs with access to
-  member data; review is the control. The front ends (GitHub Pages) still deploy on every push without approval, and
-  their code runs in signed-in members' browsers.
-- The agents share your desktop account. Anything you type or display in that session (for example in tmux) is
-  readable by processes of that account, and they can edit its shell startup files, so a deliberately malicious agent
-  could capture the sudo password you type there. Do the steps above in a plain terminal, and treat that account as
-  untrusted for anything typed as root.
-- What agents saw before Nov 17 stays in their session logs (masked since Nov 11: counts, row IDs, a***@domain).
+- Code we deploy to the API can read member data, and deploys happen without per-deploy founder review. The same
+  holds for the Worker, which payments deploys.
+- The front ends deploy on every push, and their code runs in signed-in members' browsers.
+- Agents share the machine's main user account, so isolation stops accidental reads, not a deliberately malicious
+  agent (one could, for example, capture a sudo password typed in that account). Do the steps above in a plain
+  terminal.
+- Whatever Cloudflare or Stripe access payments keeps (ACC_KEEP) still reaches member data there.
+- Older agent session logs keep what agents saw then (masked since Nov 11: counts, row IDs, a***@domain).

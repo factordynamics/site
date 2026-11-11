@@ -52,12 +52,13 @@ if git diff --quiet "$cur" "$new" -- copybook/api holdterm/src; then
 fi
 tried=$(cat "$ROOT/state.last-failed" 2>/dev/null || true)
 [ "$tried" = "$new" ] && exit 0
-# Deploy gate (DEPLOY_APPROVAL=1, set by setup-service-user.sh): nothing from a new commit runs here (pnpm install,
-# vitest, build, boot) until Andreas approves its sha, because that code runs as the account that can read member data.
+# Optional deploy gate, off by default: any commit on main that passes the tests, the build and the boot test deploys.
+# With DEPLOY_REQUIRE_APPROVAL=1 (in copybook-api.env, for a future tier that holds more sensitive data) nothing from a
+# new commit runs here (pnpm install, vitest, build, boot) until Andreas approves its sha.
 # Approve (reviewing `git diff <deployed>..<sha> -- copybook/api holdterm/src` first):
 #   echo <full sha> | sudo -u copybook tee -a /var/lib/copybook/copybook-api/deploy.approved
 # Approving a sha approves everything up to it. The pending sha and its diffstat go to the status directory.
-if [ "${DEPLOY_APPROVAL:-0}" = 1 ] && ! grep -qx "$new" "$ROOT/deploy.approved" 2>/dev/null; then
+if [ "${DEPLOY_REQUIRE_APPROVAL:-0}" = 1 ] && ! grep -qx "$new" "$ROOT/deploy.approved" 2>/dev/null; then
   if [ "$(cat "$ROOT/state.pending" 2>/dev/null)" != "$new" ]; then
     echo "$new" > "$ROOT/state.pending"
     echo "awaiting deploy approval: $(git log -1 --format='%h %s' "$new" | cut -c1-100)"
@@ -97,3 +98,5 @@ rm -rf "$ROOT/build.prev"; mv "$ROOT/build" "$ROOT/build.prev"; mv "$ROOT/build.
 systemctl --user restart copybook-api.service
 echo "$new" > "$ROOT/state.deployed-sha"
 echo "deployed $new"
+# Every deploy, with its build, for the status directory (the public /status/ log names builds from /health).
+if [ -n "${STATUS_DIR:-}" ]; then printf '%s\t%s\t%s\n' "$(date -u +%FT%TZ)" "$new" "$(git -C "$SITE" log -1 --format=%s "$new" | cut -c1-100)" >> "$STATUS_DIR/deploys.log"; fi

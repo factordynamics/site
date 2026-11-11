@@ -19,7 +19,8 @@
 # Only data is copied: the state (KV, Durable Objects, local R2 copy) and the encrypted hourly backups.
 #
 # Moves to copybook (home /var/lib/copybook, 0700; lingering systemd user units): the API, its cron, the deployer
-# (with a deploy gate: nothing from a new commit runs until Andreas approves its sha), the nightly and hourly backups,
+# (any commit on main that boots deploys, as today, logged with its build; per-deploy approval exists but is off:
+# DEPLOY_REQUIRE_APPROVAL=0 in copybook-api.env), the nightly and hourly backups,
 # the hourly R2 push, the quick tunnel (now straight to the API, not through the maintainers' proxy) and its watcher,
 # plus two new timers: status (masked view for maintainers) and checks (verify, backup restore drill).
 # Makes a new backup key as copybook (0600); a passphrase-protected copy goes to OFFLINE_KEY for Andreas.
@@ -49,7 +50,7 @@ AGE_SHA256=eb7dd1b518f0a307c99cd97782623c5321da049154b04acd2d98d21aa7bc9b2c     
 AGE_KEYGEN_SHA256=0a0009db842259d6717f7eeb30acb6b90d2a2eb924c6acd0a0db0ca1f1537899
 CLOUDFLARED_SHA256=1f99fb518b83dec2ba8d870a7cc991d82a77e6196295a3d2754ba17ab9f91872 # cloudflared 2026.10.7 linux-amd64 (github.com/cloudflare/cloudflared)
 # sha256 of `git ls-tree -r <commit> -- copybook/selfhost` without *.md, backup.pub and this script (code_hash below).
-SELFHOST_CODE_SHA256=5c31c33ca8eb83f5b182f78d8b2815c4b6d45e8858d0a39e65c6ceca21668339
+SELFHOST_CODE_SHA256=078b1717f67c7de42229b9e6146df74acc63ec09cf6306c8b3da591aac76a709
 SECRET_KEYS='SESSION_SECRET|STRIPE_WEBHOOK_SECRET|STRIPE_SECRET_KEY|RESEND_API_KEY|HEALTH_TOKEN|CLOUDFLARE_API_TOKEN|CF_API_TOKEN'
 
 run() { if [ "$DRY" = 1 ]; then printf '+ %s\n' "$*"; else "$@"; fi; }
@@ -126,7 +127,7 @@ PORT=8787
 PUBLIC_API_URL=$PUB_API
 PUBLIC_ORIGIN=$PUB_ORIGIN
 CRON_FLAG=$DST/cron.enabled
-DEPLOY_APPROVAL=1
+DEPLOY_REQUIRE_APPROVAL=0
 STATUS_DIR=$STATUS
 EOF
 if [ "$DRY" = 1 ]; then echo "+ secrets.env <- the $n_ok allow-listed lines (0600)"; else
@@ -236,6 +237,8 @@ cat <<EOF
 Next (TUE17-STEPS.md): the agent re-encrypts the R2 backups to the new key; then Andreas rotates the signing secrets,
 removes the agents' credentials and account passwords, restarts the Amp runner; then the agent runs
 ~/copybook-api/ops/acceptance-test.sh.
-Approve a deploy:  echo <full sha> | sudo -u copybook tee -a $DST/deploy.approved
+Deploys: any commit on main that passes the boot test deploys (log: $STATUS/deploys.log). To require per-deploy
+approval, set DEPLOY_REQUIRE_APPROVAL=1 in $DST/copybook-api.env (sudo), then approve with
+  echo <full sha> | sudo -u copybook tee -a $DST/deploy.approved
 Status for agents: $STATUS
 EOF

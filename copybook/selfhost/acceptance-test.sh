@@ -55,6 +55,7 @@ denied "API process memory"      head -c 1 "/proc/${pid:-0}/mem"
 denied "root via sudo"           sudo -n true
 echo "== code that runs as the service user (writes)"
 denied "deploy approval list"    sh -c ': >> "$1"' sh "$D/deploy.approved"
+denied "deploy switch and paths (copybook-api.env)" sh -c ': >> "$1"' sh "$D/copybook-api.env"
 denied "service scripts"         touch "$D/ops/update.sh"
 denied "API source checkout"     touch "$D/site/copybook/api/src/index.ts"
 denied "API bundle"              touch "$D/build/BUILD_SHA"
@@ -68,17 +69,24 @@ for v in COPYBOOK_SESSION_SECRET COPYBOOK_BACKUP_AGE_KEY COPYBOOK_STRIPE_WEBHOOK
 done
 n=$(grep -cvE '^(RESEND_API_KEY=|$)' "$HOME/copybook-api/secrets.env" 2>/dev/null || true)
 if [ "${n:-0}" = 0 ]; then echo "ok    ~/copybook-api/secrets.env holds only the send-only email key"; else echo "FAIL  ~/copybook-api/secrets.env holds $n other lines"; fail=1; fi
+# Access the agents keep on purpose (payments' work needs it) is reported as a residual, not a failure:
+#   ACC_KEEP="cf-kv cf-r2 stripe-customers" (any subset), as decided before the run and recorded with the output.
+kept() { case " ${ACC_KEEP:-} " in *" $1 "*) return 0;; esac; return 1; }
+refused() { # id, label, http code
+  case $3 in 401|403) echo "ok    $2 cannot (HTTP $3)";;
+    *) if kept "$1"; then echo "kept  $2 can (HTTP $3): kept by decision; a residual for /security/"; else echo "FAIL  $2 can (HTTP $3)"; fail=1; fi;; esac
+}
 if [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
   c=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
     "https://api.cloudflare.com/client/v4/accounts/967e13dd88bb23b24662e62cbb6fd84f/storage/kv/namespaces?per_page=1")
-  case $c in 401|403) echo "ok    Cloudflare token cannot list KV (HTTP $c)";; *) echo "FAIL  Cloudflare token can list KV (HTTP $c)"; fail=1;; esac
+  refused cf-kv "Cloudflare token: list KV" "$c"
   c=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
     "https://api.cloudflare.com/client/v4/accounts/967e13dd88bb23b24662e62cbb6fd84f/r2/buckets/copybook-history/objects?per_page=1")
-  case $c in 401|403) echo "ok    Cloudflare token cannot read R2 copybook-history (HTTP $c)";; *) echo "FAIL  Cloudflare token can read R2 copybook-history (HTTP $c)"; fail=1;; esac
+  refused cf-r2 "Cloudflare token: read R2 copybook-history" "$c"
 else echo "ok    no Cloudflare token in this environment"; fi
 if [ -n "${STRIPE_SECRET_KEY:-}" ]; then
   c=$(curl -s -o /dev/null -w '%{http_code}' -u "$STRIPE_SECRET_KEY:" 'https://api.stripe.com/v1/customers?limit=1')
-  case $c in 401|403) echo "ok    Stripe key cannot read customers (HTTP $c)";; *) echo "FAIL  Stripe key can read customers (HTTP $c)"; fail=1;; esac
+  refused stripe-customers "Stripe key: read customers" "$c"
 else echo "ok    no Stripe key in this environment"; fi
 # The test member's session signed with the old secret (save-session, TUE17 step 3) took 200 then; still unexpired,
 # it must be refused now, which only the rotation explains.

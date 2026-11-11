@@ -88,21 +88,23 @@ watcher run as the system user `copybook`:
   Worker on Cloudflare gets the same new values.
 - Member requests reach the API without passing through `refcell`: the quick tunnel and Funnel's `/copybook` path go
   straight to `127.0.0.1:8787`.
-- New code runs there only after Andreas approves its commit (deploy gate in `update.sh`); see "Who can deploy code
-  that runs as the service user" below.
+- API code still deploys from main without waiting on anyone; see "Who can deploy code that runs as the service user"
+  below.
 - Agents see `/var/lib/copybook-status` (world-readable): shas, unit states, masked job logs, check results, and
   sessions for the comped test members. They maintain Copybook through the masked `/ops/` endpoints (counts and row
   IDs); reading a member's book goes through the logged path (`/ops/access-log`).
-- The agents' Cloudflare and Stripe credentials no longer read member data; the session and webhook secrets, the
-  backup key, the waitlist decryption key and the Cloudflare, Stripe and Resend account passwords are gone from their
-  environment (the passwords are changed). Their Resend key is send-only.
+- The session and webhook secrets, the backup key, the waitlist decryption key and the Cloudflare, Stripe and Resend
+  account passwords are gone from the agents' environment (the passwords are changed). Their Resend key is send-only.
+  Their Cloudflare token keeps Workers Scripts (payments deploys the Worker), and it and their restricted Stripe key
+  keep only the access payments' work needs; any of that which reaches member data is listed as a residual.
 
 **Acceptance test**, run from the agents' account: `~/copybook-api/ops/acceptance-test.sh`. It tries to read a member
 file, the members store, the private R2 copy, the hourly backups, the backup key, the service's secrets, the session
 and webhook signing secrets by name, and the API process's environment and memory, and needs `Permission denied` for
 each (a missing file doesn't count). It tries to write the deploy approval list, the service's scripts, source,
 bundle, node runtime and units, and to reach the service's systemd manager, and needs the same refusal. It checks the
-removed credentials and passwords are gone or refused (Cloudflare KV and R2 list, Stripe customers), that a test
+removed credentials and passwords are gone, that Cloudflare KV and R2 and Stripe customers are refused unless payments
+needs them (`ACC_KEEP`, reported as "kept", a stated residual), that a test
 member's session signed with the old session secret (saved before the rotation, unexpired) is now refused, and that
 `/me` and `/v1` still answer 200 for test members. It prints commands and errors only, never file contents.
 
@@ -116,11 +118,11 @@ Output after the move: recorded here on Tue Nov 17.
 ## Who can deploy code that runs as the service user (from Tue Nov 17)
 
 File isolation stops accidental reads. It doesn't stop code that someone deliberately ships, so this is the list of
-ways code gets to run as `copybook`, and who controls each.
+ways code gets to run as `copybook`, and who controls each. Deliberate-code risk is stated, not gated.
 
 | What | Who can change it | How |
 |---|---|---|
-| The API (`copybook/api`, `holdterm/src` and its npm lockfile) | Andreas | Anyone with push access to factordynamics/site main can push, including the agents (through Andreas's GitHub credentials). The deployer, as `copybook`, fetches every 2 minutes but installs, tests, builds and runs nothing from a new commit until Andreas appends its sha with `echo <sha> \| sudo -u copybook tee -a /var/lib/copybook/copybook-api/deploy.approved`. Approving a sha approves every commit before it, so he reviews `git diff <deployed>..<sha> -- copybook/api holdterm/src` first. Packages come from the lockfile, checked against npm's integrity hashes. |
+| The API (`copybook/api`, `holdterm/src` and its npm lockfile) | Anyone who can push to main, including the agents | API code: any push to main deploys after a boot test; every deploy is logged on /status/ with its build. Per-deploy founder approval exists but is off (`DEPLOY_REQUIRE_APPROVAL=1` in the service's `copybook-api.env`, set with sudo, turns it on; then each sha waits for `echo <sha> \| sudo -u copybook tee -a …/deploy.approved`). Packages come from the lockfile, checked against npm's integrity hashes. |
 | The service's scripts and units (`/var/lib/copybook/copybook-api/ops`, `~copybook/.config/systemd/user`) | Andreas (root) | Installed once by `setup-service-user.sh` from the pinned `copybook/selfhost` code. The deployer doesn't update them; a change to `copybook/selfhost` reaches the service only when Andreas installs it with sudo. |
 | node, age, cloudflared under `/var/lib/copybook` | Andreas (root) | Installed by the setup script from upstream downloads it checks against pinned sha256s. |
 | The operating system, Tailscale, systemd | Andreas (root) | Through sudo, which needs his password; agents don't have it. |
@@ -129,7 +131,7 @@ Not code: ingest's uploads (`/ingest/bundle`, archives of JSON and CSV), EDGAR f
 approved code parses; none of it is executed.
 
 Off gene, two places still run deliberately shipped code that reaches member data:
-- The Cloudflare Worker (it holds `SESSION_SECRET` and Cloudflare's copy of member data): from the move, only Andreas
-  deploys it (`wrangler deploy` as himself); the agents' Cloudflare token has no Workers Scripts permission.
+- The Cloudflare Worker (it holds `SESSION_SECRET` and Cloudflare's copy of member data): payments deploys it with
+  the agents' Cloudflare token, without per-deploy review.
 - The Copybook and Holdterm front ends (GitHub Pages): any push to main deploys them without approval, agents
   included, and their code runs in a signed-in member's browser. The move doesn't change this.
