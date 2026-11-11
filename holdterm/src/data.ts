@@ -248,9 +248,19 @@ export const failsData = (b: { total_value?: number | null; cover_total?: number
   const cover = b.cover_total ?? 0
   return (cover > 0 && (total > 1.5 * cover || total < cover / 1.5)) || (total > 0 && (b.prn_value ?? 0) / total > 0.25)
 }
+/** When Copybook last wrote the data this page has loaded (the newest of index.json, events.json and books.json),
+ * for the footer's "updated 20 minutes ago". Only files a page loads anyway count, so it costs no download. */
+export const freshness = { at: 0 }
+const seen = (ts: string | undefined) => {
+  const t = ts ? Date.parse(ts) : NaN
+  if (!(t > freshness.at) || typeof window === 'undefined') return
+  freshness.at = t
+  window.dispatchEvent(new Event('holdterm:fresh'))
+}
 let ixP: Promise<Index> | null = null
 export const loadIndex = () =>
   (ixP ??= get<Index>(DATA + 'index.json').then((ix) => {
+    seen(ix.generated_at)
     ix.managers = ix.managers.filter((m) => inRoster(m.slug) && !failsData(m as never))
     ix.managers.forEach(name)
     return ix
@@ -322,7 +332,7 @@ export const loadHistory = (slug: string) =>
     // Skip a quarter whose upstream row already cites the second filing.
     return { history: d.history.map((r) => (add[r.quarter] && !JSON.stringify(r).includes(c?.history_source?.[r.quarter] ?? '\u0000') ? { ...r, total_value: r.total_value + add[r.quarter], equity_value: r.equity_value == null ? undefined : r.equity_value + add[r.quarter] } : r)) }
   })
-export const loadEvents = () => get<{ updated_at: string; window_days: number; events: Event[] }>(DATA + 'events.json').then((d) => ((d.events = d.events.filter((e) => inRoster(e.slug))), d.events.forEach((e) => (fillTicker(e), (e.sector = sectorOf(e.ticker || e.former, e.sector, e.cusip)))), d))
+export const loadEvents = () => get<{ updated_at: string; window_days: number; events: Event[] }>(DATA + 'events.json').then((d) => (seen(d.updated_at), (d.events = d.events.filter((e) => inRoster(e.slug))), d.events.forEach((e) => (fillTicker(e), (e.sector = sectorOf(e.ticker || e.former, e.sector, e.cusip)))), d))
 export const loadFundEvents = (slug: string) => get<{ events: Event[] }>(`${DATA}events/${slug}.json`).catch(() => ({ events: [] as Event[] }))
 export const loadInsiders = () => get<{ updated_at: string; rows: Insider[] } | Insider[]>(DATA + 'insiders.json').then((d) => (Array.isArray(d) ? d : d.rows ?? [])).catch(() => null)
 /** Tickers Holdterm fills from src/tickers.json, each with every CUSIP of its issuer group (classes, and a
@@ -459,7 +469,7 @@ let combinedP: Promise<Record<string, Book> | null> | null = null
 // Fetched alongside index.json, not after it (both are preloaded by index.html on the pages that need them).
 const loadCombined = () =>
   (combinedP ??= Promise.all([get<{ generated_at: string; books: Record<string, Book> }>(DATA + 'books.json'), loadIndex()])
-    .then(([c, ix]) => (c.generated_at >= ix.generated_at && c.books ? c.books : null))
+    .then(([c, ix]) => (seen(c.generated_at), c.generated_at >= ix.generated_at && c.books ? c.books : null))
     .catch(() => null))
 /** loadBooks for a page that already shows something from the index: the books start once it has arrived. */
 export const loadBooksAfterIndex = () => loadIndex().then(loadBooks)

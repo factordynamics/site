@@ -362,6 +362,9 @@ main:focus {
   max-width: 420px;
   margin: 8px 0 0;
 }
+.foot .fresh {
+  margin: 6px 0 0;
+}
 .foot nav {
   display: flex;
   flex-wrap: wrap;
