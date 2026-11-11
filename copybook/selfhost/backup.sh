@@ -16,8 +16,13 @@ copy_blobs
 find kv do -type f -name '*.sqlite' -print0 | while IFS= read -r -d '' f; do mkdir -p "$work/$(dirname "$f")"; sqlite3 "file:$f?mode=ro" ".backup '$work/$f'"; done
 copy_blobs
 day=$(date -u +%F)
-tar -C "$work" -czf - kv do | age -R "$ROOT/backup.pub" -o "$out"
+# The plaintext tar is hashed (in RAM) before encryption so the manifest can be checked by a key-holder's restore drill;
+# the weekly check without the key verifies the ciphertext against the manifest (backup-verify.sh).
+tar -C "$work" -czf "$work.tgz" kv do; trap 'rm -rf "$work" "$work.tgz" "$out" "$out.json"' EXIT
+age -R "$ROOT/backup.pub" -o "$out" "$work.tgz"
+"$ROOT/ops/manifest.sh" "$day" "$work" "$work.tgz" "$out" "$(head -1 "$ROOT/backup.pub")" > "$out.json"
 cd "$ROOT/ops"
 node r2obj.mjs put "backups/$day.tar.age" "$out"
+node r2obj.mjs put "backups/$day.manifest.json" "$out.json"
 node r2obj.mjs prune backups/ 30
 echo "backup backups/$day.tar.age $(stat -c %s "$out") bytes, $(find "$work" -type f | wc -l) files"

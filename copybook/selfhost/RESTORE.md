@@ -5,7 +5,9 @@ copy is `~/copybook-api/ops` on gene. Alerts don't depend on gene: Cloudflare's 
 
 Masking rule: agent session logs are kept 30+ days, so these scripts print counts, booleans, opaque ids and
 `a***@domain` emails, never raw member rows; checks run only against test members. Keep it that way when editing them.
-Hourly local backups (`update.sh`) and nightly R2 backups (`backup.sh`) are both age-encrypted to `backup.pub`;
+Hourly local backups (`update.sh`) and nightly R2 backups (`backup.sh`) are both age-encrypted to `backup.pub`. Each
+nightly backup has a manifest (`backups/YYYY-MM-DD.manifest.json`: plaintext and ciphertext sha256, counts), checked
+weekly without the key by `backup-verify.sh` and monthly with it by `restore-check.sh`;
 `setup-service-user.sh` (run once with sudo) moves the service, its state and secrets to a dedicated `copybook` user.
 
 ## Option A: fail members over to the Cloudflare Worker (minutes)
@@ -58,7 +60,8 @@ a VM with the Amp CLI). Inbound ports are not needed: the quick tunnel is outbou
    there, and `copybook-api.env.example` to `~/copybook-api/copybook-api.env` (fix paths).
 3. R2: `node r2-pull.mjs <mirror dir>` (3.5 GB from copybook-history, 5 min measured), then with the service stopped
    `node import.mjs r2 <mirror dir>` (2.5 min measured).
-4. KV and Durable Objects: decrypt the newest `backups/*.tar.age` (key `COPYBOOK_BACKUP_AGE_KEY`; see
+4. KV and Durable Objects: decrypt the newest `backups/*.tar.age` (key `COPYBOOK_BACKUP_AGE_KEY` until Andreas takes the
+   key offline per BACKUP-KEY-STEPS.md; after that his passphrase-protected key file, so this step needs him; see
    restore-check.sh) and untar into `~/copybook-api/state`. Then bring KV up to the minute from Cloudflare:
    `node ../site/copybook/api/scripts/kv-export.mjs kv.json && node import.mjs kv kv.json && shred -u kv.json`.
 5. Install the units in `systemd/` (change `copybook-tunnel.service` to `--url http://127.0.0.1:8787`; server.mjs

@@ -73,7 +73,7 @@ step "3a r2 pull"
 step "3b r2 import"
 
 # 4. KV and Durable Objects: newest nightly backup, then KV up to the minute from Cloudflare.
-day=$(cd ops && node r2obj.mjs list backups/ | sort | tail -1 | sed -E 's|backups/([0-9-]+)\.tar\.age.*|\1|')
+day=$(cd ops && node r2obj.mjs list backups/ | grep '\.tar\.age ' | sort | tail -1 | sed -E 's|backups/([0-9-]+)\.tar\.age.*|\1|')
 (cd ops && node r2obj.mjs get "backups/$day.tar.age" "$R/b.age" >/dev/null)
 mkdir -p state; age -d -i age.key b.age | tar -C state -xzf -
 echo "backup $day restored"

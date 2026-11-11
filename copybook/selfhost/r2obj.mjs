@@ -4,7 +4,12 @@ import { AwsClient } from 'aws4fetch';
 import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 const tok = process.env.CF_API_TOKEN;
-const id = (await (await fetch('https://api.cloudflare.com/client/v4/user/tokens/verify', { headers: { authorization: `Bearer ${tok}` } })).json()).result.id;
+// Retried: a busy home link sometimes drops the first connection.
+let id;
+for (let i = 0; !id; i++) {
+  try { id = (await (await fetch('https://api.cloudflare.com/client/v4/user/tokens/verify', { headers: { authorization: `Bearer ${tok}` }, signal: AbortSignal.timeout(15000) })).json()).result.id; }
+  catch (e) { if (i === 4) throw e; await new Promise((r) => setTimeout(r, 2000 * (i + 1))); }
+}
 const aws = new AwsClient({ accessKeyId: id, secretAccessKey: createHash('sha256').update(tok).digest('hex'), service: 's3', region: 'auto', retries: 5 });
 const B = 'https://967e13dd88bb23b24662e62cbb6fd84f.r2.cloudflarestorage.com/copybook-history';
 // Masking rule (agent session logs are kept 30+ days): never print raw member data; emails in key names show as a***@domain.
@@ -34,5 +39,9 @@ if (cmd === 'put') {
   for (const o of await list(a)) console.log(mask(o.key), o.size, o.modified);
 } else if (cmd === 'prune') {
   const cutoff = Date.now() - Number(b) * 86400_000;
-  for (const o of await list(a)) if (Date.parse(o.modified) < cutoff) { await aws.fetch(`${B}/${enc(o.key)}`, { method: 'DELETE' }); console.log(mask(`pruned ${o.key}`)); }
-} else { console.error('usage: put|get|list|prune'); process.exitCode = 2; }
+  // Age by the date in the name (backups/YYYY-MM-DD.*), so re-uploading an old backup doesn't extend its retention.
+  for (const o of await list(a)) if (Date.parse(o.key.match(/\d{4}-\d{2}-\d{2}/)?.[0] ?? o.modified) < cutoff) { await aws.fetch(`${B}/${enc(o.key)}`, { method: 'DELETE' }); console.log(mask(`pruned ${o.key}`)); }
+} else if (cmd === 'del') {
+  const r = await aws.fetch(`${B}/${enc(a)}`, { method: 'DELETE' });
+  console.log(mask(`deleted ${a} ${r.status}`));
+} else { console.error('usage: put|get|list|prune|del'); process.exitCode = 2; }
