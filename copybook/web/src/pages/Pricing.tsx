@@ -188,7 +188,7 @@ export function Pricing() {
               <Link to="/winter-2025-26/#filings-13dg" className="font-medium text-accent underline underline-offset-2">
                 19
               </Link>{' '}
-              Schedule 13D/G filings by the superinvestors we follow (4 new stakes), and{' '}
+              Schedule 13D/G filings by the superinvestors we follow (4 new stakes, 15 amendments), and{' '}
               <Link to="/winter-2025-26/#insider-buys" className="font-medium text-accent underline underline-offset-2">
                 14
               </Link>{' '}

@@ -124,12 +124,12 @@ function FundTable({ list }: { list: Manager[] }) {
             const t = m.top?.[0]
             return (
               <tr key={m.slug} className="border-b border-line last:border-0 hover:bg-ink/[0.025]">
-                <td className="px-4 py-3 md:px-5">
+                <td className={`${follow ? 'px-3 sm:px-4' : 'px-4'} py-3 md:px-5`}>
                   <Link to={`/investors/${m.slug}/`} className="flex items-center gap-3">
                     <span className={follow ? 'hidden sm:block' : ''}>
                       <Monogram name={m.manager} size={30} />
                     </span>
-                    <span className={`min-w-0 ${follow ? 'max-w-[8rem] sm:max-w-none' : ''}`}>
+                    <span className={`min-w-0 ${follow ? 'max-w-[6.5rem] sm:max-w-none' : ''}`}>
                       <span className="block truncate font-medium">{m.manager}</span>
                       {m.name !== m.manager && <span className="block truncate text-[12.5px] text-ink-3">{m.name}</span>}
                     </span>
@@ -148,7 +148,7 @@ function FundTable({ list }: { list: Manager[] }) {
                 <td className="num hidden px-4 py-3 text-right text-ink-2 sm:table-cell">{m.position_count?.toLocaleString('en-US')}</td>
                 <td className="hidden px-4 py-3 text-right text-ink-2 md:table-cell md:pr-5">{quarterLabel(m.quarter)}</td>
                 {follow && (
-                  <td className="px-4 py-3 text-right md:pr-5">
+                  <td className="px-3 py-3 text-right sm:px-4 md:pr-5">
                     <FollowButton kind="investor" id={m.slug} name={m.manager} stack />
                   </td>
                 )}

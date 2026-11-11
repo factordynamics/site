@@ -113,16 +113,10 @@ export function FollowButton({ kind, id, name, size = 'sm', className = '', stac
         }`}
       >
         {saving ? <Spinner /> : on ? <CheckIcon /> : <PlusIcon />}
-        {saving ? (p.want ? 'Saving…' : 'Removing…') : on ? (owned ? 'You own this' : pend && !stack ? 'Following · confirm email' : 'Following') : 'Follow'}
+        {saving ? (p.want ? 'Saving…' : 'Removing…') : on ? (owned ? 'You own this' : pend ? 'Following · confirm email' : 'Following') : 'Follow'}
       </button>
       {on && pend && !saving &&
-        (stack ? (
-          <span className="whitespace-nowrap text-[12px] text-[#7a4b06]">
-            Confirm email · <ResendLink email={pend} />
-          </span>
-        ) : (
-          <ResendLink email={pend} />
-        ))}
+        <ResendLink email={pend} />}
       {/* At 390 a fixed note covered the next heading (trader, Nov 11): on phones the toggle itself carries "confirm email" and Resend. */}
       {confirm && pend && <ConfirmEmail email={pend} kind={confirm} className={`absolute right-0 top-full z-10 mt-1.5 w-[300px] shadow-[0_6px_16px_-6px_rgb(12_14_19/0.2)] ${confirm === 'saved' ? 'max-sm:hidden' : 'max-sm:fixed max-sm:inset-x-3 max-sm:bottom-3 max-sm:top-auto max-sm:z-50 max-sm:w-auto'}`} />}
       {p?.state === 'error' && (
