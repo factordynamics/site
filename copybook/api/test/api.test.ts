@@ -1448,6 +1448,21 @@ describe('copybook api', () => {
     expect(netRenamed({ moves: {} as never, changed: stored as never }).changed.map((x) => [x.change, x.shares - x.prev_shares])).toEqual([['added', 465409]]);
     // A filer still holding the old CUSIP alongside the new one isn't relinked: the old row stays its own position.
     expect(computeMoves([...cur, { ...prev[0] }] as never, prev as never).changed.map((x) => [x.change, x.cusip])).toEqual([['new', '30233Q108']]);
+    // By ticker or the old issuer code, XOM and TEVA resolve to the current issuer (the quant: XOM read the stale 30231G
+    // book, 447 false exits; TEVA the old ADS code); HON kept its issuer code, so nothing moves.
+    const { issuerCode } = await import('../src/v1data');
+    hist.m.set('pre/stock-codes.json', new TextEncoder().encode('{"XOM":"30231G","TEVA":"881624","HON":"438516"}'));
+    expect(await issuerCode(env, 'XOM')).toEqual({ code: '30233Q', ticker: 'XOM' });
+    expect(await issuerCode(env, 'teva')).toEqual({ code: 'M8769Q', ticker: 'TEVA' });
+    expect(await issuerCode(env, '30231G')).toEqual({ code: '30233Q', ticker: 'XOM', superseded_by: '30233Q' });
+    expect(await issuerCode(env, '881624209')).toEqual({ code: 'M8769Q', ticker: 'TEVA', superseded_by: 'M8769Q' });
+    expect(await issuerCode(env, 'HON')).toEqual({ code: '438516', ticker: 'HON' });
+    hist.m.delete('pre/stock-codes.json');
+    // A member watching XOM gets a featured fund's 13F whose only XOM line is the new CUSIP, still without a ticker.
+    const filing = { slug: 'pz', slugs: ['pz'], accession: 'A-XOM', tickers: ['AAPL'], changed: [{ cusip: '30233Q108', ticker: null, change: 'added' }] };
+    const f = { investors: [], stocks: ['XOM'], owned: [] };
+    expect(forMember({ alerts: 'followed' } as never, f as never, [filing as never], [], { pz: { featured: true } } as never).filings).toHaveLength(1);
+    expect(forMember({ alerts: 'followed' } as never, { ...f, stocks: ['CVX'] } as never, [filing as never], [], { pz: { featured: true } } as never).filings).toHaveLength(0);
   });
 
   it('launch week: test, critic and preview mail goes to the test-inbox sink, never to Resend', async () => {

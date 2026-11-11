@@ -315,6 +315,11 @@ export const REISSUED: Record<string, { to: string; ticker: string }> = {
   '811916105': { to: '811927102', ticker: 'SA' },
   '415864107': { to: '29390K102', ticker: 'NVRI' },
 };
+/**
+ * Old issuer code -> current one, where a reissue changed the 6-character issuer (XOM 30231G -> 30233Q, TEVA 881624 ->
+ * M8769Q); HON's and DD's kept theirs. Only these SEC-confirmed links: never units, rights or warrants.
+ */
+export const REISSUED_ISSUER: Record<string, string> = Object.fromEntries(Object.entries(REISSUED).filter(([o, r]) => o.slice(0, 6) !== r.to.slice(0, 6)).map(([o, r]) => [o.slice(0, 6), r.to.slice(0, 6)]));
 const REISSUED_TO = new Map(Object.values(REISSUED).map((r) => [r.to, r.ticker]));
 /** The ticker of a reissued CUSIP, old or new: rows without a ticker yet still net (stored moves, the site's cards). */
 export const reissuedTicker = (cusip?: string | null): string | null => (cusip ? (REISSUED[cusip.toUpperCase()]?.ticker ?? REISSUED_TO.get(cusip.toUpperCase()) ?? null) : null);

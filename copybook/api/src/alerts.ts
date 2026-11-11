@@ -3,7 +3,7 @@ import { refreshBooks } from './book';
 import { countAlerts, logSent, pausedFilingMail, resumeUrl, runRevenue } from './revenue';
 import { inFilingWeek } from './seasons';
 import { alertMail, digestMail, type FeedItem, feedItems, holdtermAlertMail, type Mail, sendMail, weeklyNamesMail } from './email';
-import { offFilers, bookSuspect, companyFilings, computeMoves, filingId, posKey, gateMoves, gateRow, movesOf, netRenamed, type Consensus, type HeldRow, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, prevQuarterEnd, prior13F, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
+import { offFilers, reissuedTicker, bookSuspect, companyFilings, computeMoves, filingId, posKey, gateMoves, gateRow, movesOf, netRenamed, type Consensus, type HeldRow, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, prevQuarterEnd, prior13F, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
 import { isActive, isPaused, isPro, testAddress, type Env, type Member } from './env';
 import { getFollows, getMember, listMembers, putMember, type Follows } from './members';
 import { unsubscribeUrl } from './free';
@@ -215,11 +215,13 @@ export function forMember(m: Member, f: Follows, filings: Alert13F[], events: Al
   const all = m.alerts === 'all';
   const investors = new Set(Array.isArray(m.alerts) ? [...m.alerts, ...f.investors] : f.investors);
   const stocks = new Set(f.stocks);
+  // A reissued security's new line can arrive without a ticker yet (XOM's 30233Q108): its CUSIP names it.
+  const tickersOf = (x: Alert13F) => [...x.tickers, ...(x.changed ?? []).map((r) => reissuedTicker(r.cusip)).filter((t): t is string => !!t)];
   const fl = filings.filter(
     (x) =>
       (all && !x.extra) ||
       x.slugs.some((s) => investors.has(s)) ||
-      (x.slugs.some((s) => stockAlerts(meta, s)) && x.tickers.some((t) => stocks.has(t))) ||
+      (x.slugs.some((s) => stockAlerts(meta, s)) && tickersOf(x).some((t) => stocks.has(t))) ||
       // Any curated or followed fund revealing a position in a stock the member owns.
       (!!x.reveal && x.tickers.some((t) => f.owned.includes(t))),
   );

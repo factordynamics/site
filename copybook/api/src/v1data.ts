@@ -421,7 +421,19 @@ const latestOf = (f: Filer) => (f.curated ? f.row.latest_quarter : f.row.quarter
 const MAX_RANGE = 8;
 
 /** The 6-character issuer code for a ticker or CUSIP, from the public stock list (string search, no full parse). */
-export async function issuerCode(env: Env, id: string): Promise<{ code: string; ticker: string | null } | null> {
+export async function issuerCode(env: Env, id: string): Promise<{ code: string; ticker: string | null; superseded_by?: string } | null> {
+  // A reissued security resolves to its current issuer (the old code's book is stale: Q3's holders filed under the new
+  // CUSIP, and ingest's hl/ counts the old-CUSIP holders under the new code). Asked for by the old code: `superseded_by`.
+  const { REISSUED, REISSUED_ISSUER } = await import('./edgar');
+  const up0 = id.toUpperCase();
+  const r = await issuerCodeRaw(env, up0);
+  const cur = r ? REISSUED_ISSUER[r.code] : undefined;
+  if (!r || !cur) return r;
+  const asked = /^[0-9A-Z]{6}([0-9A-Z]{2}[0-9])?$/.test(up0) && up0.slice(0, 6) === r.code && !r.ticker;
+  return { code: cur, ticker: r.ticker ?? Object.values(REISSUED).find((x) => x.to.startsWith(cur))?.ticker ?? null, ...(asked ? { superseded_by: cur } : {}) };
+}
+
+async function issuerCodeRaw(env: Env, id: string): Promise<{ code: string; ticker: string | null } | null> {
   const up = id.toUpperCase();
   if (/^[0-9A-Z]{8}[0-9]$/.test(up) || /^[0-9A-Z]{6}$/.test(up)) {
     if (/^[A-Z]{1,6}$/.test(up)) {
@@ -814,7 +826,7 @@ ROUTES.push(
     // Each filer's latest full book: periods differ by filer (a fund that filed its Q3 13F shows Q3).
     const rows = h.rows.filter((r) => keep(r) && (!quarter || r.period === quarter));
     const sp = splitHolders(rows, p.get('include_options') === 'true');
-    const data = { issuer: h.issuer, ticker: is.ticker ?? h.tickers[0] ?? null, tickers: h.tickers, display_name: h.display_name, cohort: p.get('cohort') ?? 'all', type: p.get('type') ?? null, counts: h.counts, truncated: h.truncated, holders: sp.holders.slice(offset, offset + limit), options: sp.options, exited: sp.exited };
+    const data = { issuer: h.issuer, ...(is.superseded_by ? { superseded_by: is.superseded_by } : {}), ticker: is.ticker ?? h.tickers[0] ?? null, tickers: h.tickers, display_name: h.display_name, cohort: p.get('cohort') ?? 'all', type: p.get('type') ?? null, counts: h.counts, truncated: h.truncated, holders: sp.holders.slice(offset, offset + limit), options: sp.options, exited: sp.exited };
     return v1json({ ...(h.stamp ?? {}), data, count: sp.count, filers: sp.filers, options_count: sp.options_count, exited_count: sp.exited_count, next_offset: offset + limit < sp.count ? offset + limit : null }, 200, { 'server-timing': timing.join(', ') });
   }],
   ['GET', /^\/v1\/bulk$/, async ({ env, req, url }) => {
