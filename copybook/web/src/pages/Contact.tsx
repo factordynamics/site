@@ -29,11 +29,23 @@ export function Contact() {
   // Fund only: start the 14-day trial now and pay by invoice (no card), or just ask us.
   const [trial, setTrial] = useState(params.get('trial') === 'invoice')
   const [bad, setBad] = useState<string[]>([])
+  // The API's hint for the highlighted fields (400 bad_request `error`), shown under the first of them; and whether
+  // the answer is a message rather than an error (409 trial_used and already_member: the request is in hand).
+  const [hint, setHint] = useState('')
+  const [notice, setNotice] = useState(false)
   const [started, setStarted] = useState<Started | null>(null)
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }))
   const fund = topic === 'fund'
   const invoiceTrial = fund && trial
   const invalid = (k: string) => bad.some((f) => f === k || f.startsWith(`${k} `) || f === `billing_address.${k}` || f.startsWith(`billing_address.${k} `))
+  const ORDER = ['email', 'fund', 'line1', 'line2', 'city', 'state', 'postal_code', 'country', 'ap_email']
+  const hintAt = hint ? ORDER.find(invalid) : undefined
+  const hintFor = (k: string) =>
+    hintAt === k && (
+      <span role="alert" className="mt-1 block text-[12.5px] font-normal text-down">
+        {hint}
+      </span>
+    )
 
   const submit = async () => {
     setState('sending')
@@ -57,6 +69,8 @@ export function Contact() {
           : {}),
       }
       setBad([])
+      setHint('')
+      setNotice(false)
       await apiReady
       const r = await fetch(`${api}/fund-request`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       const j = (await r.json().catch(() => null)) as ({ error?: string; code?: string; fields?: string[]; trial?: string } & Partial<Started>) | null
@@ -64,11 +78,18 @@ export function Contact() {
         if (invoiceTrial && j?.trial === 'started' && j.trial_end && j.invoice_on && j.due_on) setStarted({ trial_end: j.trial_end, invoice_on: j.invoice_on, due_on: j.due_on, sign_in_email: j.sign_in_email })
         return setState('sent')
       }
-      setBad(j?.code === 'freemail' ? ['email'] : (j?.fields ?? []))
+      const throwaway = j?.code === 'freemail' || j?.code === 'disposable'
+      setBad(throwaway ? ['email'] : (j?.fields ?? []))
+      if (j?.code === 'bad_request' && j.fields?.length && j.error) {
+        // "missing or invalid: billing_address.country must be 2 letters" reads "Must be 2 letters" under the field.
+        const h = j.error.replace(/^missing or invalid:\s*/i, '').replace(/^[a-z_]+(\.[a-z0-9_]+)*\s*(:\s*)?/i, (m) => (j.fields!.some((f) => m.trim().replace(/:$/, '') === f) ? '' : m))
+        setHint(h ? h[0].toUpperCase() + h.slice(1) : '')
+      }
+      setNotice(j?.code === 'trial_used' || j?.code === 'already_member')
       setErr(
         r.status === 429 || j?.code === 'rate_limited' ? (
           'Too many requests from here in the last hour. Please try again later.'
-        ) : j?.code === 'freemail' ? (
+        ) : throwaway ? (
           'Use your work email: an invoice trial goes to a company address.'
         ) : j?.code === 'trial_used' ? (
           'Your company has already had a Copy Fund trial. We have your request and will email you to set up an invoice.'
@@ -209,6 +230,7 @@ export function Contact() {
                 <label className="block text-[13px] font-medium text-ink-2">
                   {fund ? 'Work email' : 'Email'}
                   <input required type="email" value={form.email} onChange={set('email')} autoComplete="email" aria-invalid={invalid('email')} className={`${field} mt-1.5`} />
+                  {hintFor('email')}
                 </label>
               </div>
               {fund && (
@@ -216,6 +238,7 @@ export function Contact() {
                   <label className="block text-[13px] font-medium text-ink-2">
                     Fund or firm
                     <input required value={form.fund} onChange={set('fund')} autoComplete="organization" aria-invalid={invalid('fund')} className={`${field} mt-1.5`} />
+                    {hintFor('fund')}
                   </label>
                   <label className="block text-[13px] font-medium text-ink-2">
                     Team size (flat price, up to {FUND_SEATS})
@@ -246,6 +269,7 @@ export function Contact() {
                           aria-invalid={invalid(k)}
                           className={`${field} mt-1.5`}
                         />
+                        {hintFor(k)}
                       </label>
                     ))}
                   </div>
@@ -257,6 +281,7 @@ export function Contact() {
                     <label className="block text-[13px] font-medium text-ink-2">
                       Accounts payable email (optional)
                       <input type="email" value={form.ap_email} onChange={set('ap_email')} aria-invalid={invalid('ap_email')} className={`${field} mt-1.5`} />
+                      {hintFor('ap_email')}
                     </label>
                   </div>
                   <p className="text-[12.5px] leading-relaxed text-ink-3">Both print on the invoice. $1,990 a year at the founding price, invoiced on day 14, Net 30. Prices exclude applicable taxes. Copybook does not currently collect sales tax.</p>
@@ -279,11 +304,16 @@ export function Contact() {
                   {state === 'sending' ? 'Sending…' : invoiceTrial ? 'Start the 14-day trial' : fund ? 'Request Fund access' : topic === 'delete' ? 'Request deletion' : 'Send'}
                 </Button>
                 {fund && state !== 'error' && <p className="text-[13px] text-ink-3">{invoiceTrial ? 'Starts at once; your sign-in link comes by email.' : 'We reply within one business day.'}</p>}
-                {state === 'error' && (
-                  <p role="alert" className="text-[13.5px] text-down">
-                    {err || 'That didn’t send. Please try again in a moment.'}
-                  </p>
-                )}
+                {state === 'error' &&
+                  (notice ? (
+                    <p role="status" className="text-[13.5px] text-ink-2">
+                      {err}
+                    </p>
+                  ) : (
+                    <p role="alert" className="text-[13.5px] text-down">
+                      {err || 'That didn’t send. Please try again in a moment.'}
+                    </p>
+                  ))}
               </div>
             </form>
           )}

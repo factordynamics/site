@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { call, getToken, sharedGet } from '../lib/account'
 import { useFollows } from '../lib/follows'
-import { testResult } from './Channels'
+import { testLine, testResult } from './Channels'
 import { Button, Check } from './ui'
 
 // First-run setup for Copy, the same three steps as the day-0 email plus a test: follow funds, add
@@ -67,8 +67,7 @@ export function CopySetup({ welcome }: { welcome?: boolean }) {
       if (ok) localStorage.setItem(TESTED, '1')
       setTested(ok)
       // One line per channel the API actually tested, never a success for one it didn't.
-      const label = (k: string) => `${k[0].toUpperCase()}${k.slice(1)}`
-      const line = ([k, v]: [string, string]) => `${label(k)}: ${testResult(k, v, r.messages?.[k])}`
+      const line = ([k, v]: [string, string]) => testLine(k, testResult(k, v, r.messages?.[k]))
       setTest({ ok, msg: Object.entries(r.results).map(line).join(' · ') || 'Nothing to test yet: connect a channel or keep email first.' })
     } catch {
       setTest({ ok: false, msg: 'The test didn’t go out. Please try again.' })

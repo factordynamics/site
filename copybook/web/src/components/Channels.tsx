@@ -26,12 +26,15 @@ type Channels = {
   team?: { discord: string | null; slack: string | null; telegram: { chat_id: string } | null; webhook: { url: string; secret?: string } | null; failing?: Failing } | null
 }
 export type Failing = Partial<Record<'discord' | 'slack' | 'telegram' | 'webhook', { reason: string; since: string }>>
-/** One destination's test result in words. A test address's mail is diverted to the test inbox (`sinked`). */
+/** One destination's test result in words. A test address's mail is diverted to the test inbox (`sinked`, or
+ *  payments' state name for it, e.g. `test_inbox`), and the email line says so in full. */
 export function testResult(k: string, v: string, msg?: string) {
-  if (/^sink(ed)?$|^sunk$/i.test(v) || /\(sunk\)|\bsinked\b/i.test(msg ?? '')) return 'sent to your test inbox'
+  if (/^sink(ed)?$|^sunk$|test_inbox$/i.test(v) || /\(sunk\)|\bsinked\b/i.test(msg ?? '')) return k === 'email' ? 'Test email sent to your test inbox' : 'sent to your test inbox'
   if (msg) return msg
   return /^2\d\d$|^ok$|^sent$/.test(v) ? (k === 'feed' ? 'added' : 'delivered') : `failed (${v})`
 }
+/** "Slack: delivered"; a result that already names its channel ("Test email sent…") stands alone. */
+export const testLine = (k: string, v: string) => (/^Test /.test(v) ? v : `${k[0].toUpperCase() + k.slice(1)}: ${v}`)
 export const CHANNEL_LABEL = { discord: 'Discord', slack: 'Slack', telegram: 'Telegram', webhook: 'The webhook' } as const
 const sinceLabel = (iso: string) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 type Put = Partial<{ keep_email: boolean; discord: string | null; slack: string | null; telegram: { bot_token: string; chat_id?: string } | null; webhook: string | null; rotate_secret: boolean }>
@@ -145,7 +148,7 @@ export function Channels() {
       {test && (
         <p role="status" className="mt-3 rounded-xl bg-paper px-3.5 py-2.5 text-[13px] text-ink-2">
           {Object.entries(test)
-            .map(([k, v]) => `${k[0].toUpperCase() + k.slice(1)}: ${v}`)
+            .map(([k, v]) => testLine(k, v))
             .join(' · ')}
         </p>
       )}
