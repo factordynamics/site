@@ -494,7 +494,8 @@ export async function yearlyPeakLine(env: Env, m: Member, filings: { slug: strin
   if (!p || m.interval !== 'monthly' || m.seat_of || !isActive(m) || m.comped) return null;
   if (!filings.some((a) => !a.followup && (a.slug === 'warren-buffett' || a.slugs?.includes('warren-buffett')))) return null;
   const keep = `${API(env)}keep?t=${encodeURIComponent(await signToken(env.SESSION_SECRET, 'keep', m.customer, 14 * 86400))}`;
-  return `Switch to yearly: ${money(p.year)}, ${monthsFree(p)}: ${keep}`;
+  // Copy's founding price (the lead, Nov 11): $79 a year, locked while subscribed; $99 for new members from Feb 1.
+  return m.plan === 'copy' ? `Founding price ${money(p.year)}/yr, locked. Goes to $99 for new members Feb 1: ${keep}` : `Switch to yearly: ${money(p.year)}, ${monthsFree(p)}: ${keep}`;
 }
 
 export async function handleKeepResume(env: Env, path: '/keep' | '/resume', url: URL, method = 'GET'): Promise<Response> {
