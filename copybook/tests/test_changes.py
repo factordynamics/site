@@ -747,3 +747,51 @@ class BulkExportTest(unittest.TestCase):
         rows = build.with_changes({"quarter": "2026Q3", "holdings": []}, prev)
         self.assertEqual([(r["row_type"], r["shares"], r["value"], r["prev_shares"], r["prev_value"]) for r in rows],
                          [("exited", 0, 0, 1e5, 5e6)])
+
+
+class ShareClassHoldersTest(unittest.TestCase):
+    def test_each_class_trades_at_its_own_price(self):
+        import tempfile
+        from pathlib import Path as P
+        from ingest import moves
+        line = lambda cusip, t, sh, ps, v, pv, ch: {"cusip": cusip, "ticker": t, "title": "CL A" if t.endswith("A") else "COM",
+                                                    "put_call": None, "shares_type": "SH", "shares": sh, "prev_shares": ps,
+                                                    "value": v, "prev_value": pv, "change": ch,
+                                                    "value_delta": (sh - ps) * v / sh if sh else -pv, "value_delta_basis": "trade"}
+        # FMR 2026Q3 BRK: A 6,959 sh at $747,005 (prior 14,533), B 9,597,287 at $497.95 (prior 10,400,007).
+        brk = [line("084670108", "BRK.A", 6959, 14533, 6959 * 747005, 14533 * 700000, "trimmed"),
+               line("084670702", "BRK.B", 9597287, 10400007, 9597287 * 497.95, 10400007 * 466.0, "trimmed")]
+        goog = [line("02079K305", "GOOGL", 1000, 900, 344080, 300000, "added"),
+                line("02079K107", "GOOG", 500, 800, 170370, 270000, "trimmed")]
+        xom = [line("99999X102", "XOM", 0, 1000, 0, 110000, "exited"), line("99999X201", "XOM", 1100, 0, 125000, 0, "new")]
+        saved = (moves.DATA, dict(moves.LATEST), dict(moves.PERIOD), dict(moves.FILING))
+        with tempfile.TemporaryDirectory() as d:
+            moves.DATA = P(d)
+            try:
+                moves.LATEST.clear()
+                moves.LATEST.update({"0000315066": brk + goog, "0000000002": xom})
+                moves.PERIOD.update({"0000315066": "2026Q3", "0000000002": "2026Q3"})
+                shards = [{"cik": c, "name": c, "quarter": "2026Q3", "accession": "x", "filing_date": "2026-11-10"}
+                          for c in ("0000315066", "0000000002")]
+                moves.write_holders(shards, {}, {}, {})
+                row = lambda code, cik: (lambda b: dict(zip(b["columns"], next(r for r in b["rows"] if r[0] == cik))))(
+                    json.loads((P(d) / "hlf" / f"{code}.json").read_text()))
+                b = row("084670", "0000315066")
+                self.assertAlmostEqual(b["value_delta"], -7574 * 747005 - 802720 * 497.95, delta=2)  # ~-$6.06B
+                self.assertEqual((b["change"], b["shares_unit"], b["shares"], b["cusip"], b["issuer_cusip6"], b["net_direction"]),
+                                 ("trimmed", "BRK.B", 6959 * 1500 + 9597287, None, "084670", "sell"))
+                self.assertEqual([(c["ticker"], c["change"]) for c in b["classes"]], [("BRK.A", "trimmed"), ("BRK.B", "trimmed")])
+                self.assertEqual(b["shares_ratio"], {"084670108": 1500.0, "084670702": 1.0})
+                g = row("02079K", "0000315066")  # no conversion ratio: shares null, the classes carry the counts
+                # GOOGL bought, GOOG sold: mixed, the dollar sum's sign in net_direction; no summed share counts
+                self.assertEqual((g["shares"], g["prev_shares"], g["shares_unit"], g["change"], g["net_direction"]),
+                                 (None, None, None, "mixed", "sell"))
+                self.assertAlmostEqual(g["value_delta"], 100 * 344.08 - 300 * 340.74, delta=2)
+                x = row("99999X", "0000000002")  # an unlinked exit beside a new line: one position, net shares
+                self.assertEqual((x["change"], x["classes"], x["shares"], x["value_delta_basis"]), ("added", None, 1100, "net_shares_repriced"))
+                self.assertAlmostEqual(x["value_delta"], 100 * 125000 / 1100, delta=1)
+            finally:
+                moves.DATA = saved[0]
+                for g, v in zip((moves.LATEST, moves.PERIOD, moves.FILING), saved[1:]):
+                    g.clear()
+                    g.update(v)

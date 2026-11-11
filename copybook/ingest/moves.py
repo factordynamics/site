@@ -62,8 +62,9 @@ def filing(b: dict) -> dict:
             "accepted_at": b.get("accepted_at") or ACCEPTED.get(acc or ""), "original_accession": original(b) or acc}
 # Count blocks next to `counts` in hl/: smart = hedge funds and long-only managers, hedge_fund alone.
 LENSES = {"smart": {"hedge_fund", "long_only", "active"}, "hedge_fund": {"hedge_fund"}}
-HL_SCHEMA = 4  # bump when hl/ rows change shape or rules: a curated run then rebuilds hl/ (--schema-stale). 4: Nov 11 P1
-# rules (options band, split sides, sign_mismatch, debt CUSIPs out of holder rows)
+HL_SCHEMA = 5  # bump when hl/ rows change shape or rules: a curated run then rebuilds hl/ (--schema-stale). 4: Nov 11 P1
+# rules (options band, split sides, sign_mismatch, debt CUSIPs out of holder rows). 5: per-class trades, classes[],
+# shares_unit, shares null across classes with no conversion ratio
 HOLDERS_TOP = 25  # public rows per stock in hl/; the full list (hlf/, R2 hl/) is paid
 SITE_TOP = 500  # hlr/: rows per stock for the site's d/h pages (as before, now from full books), plus every
 SITE_PARTS = 4  # hedge-fund and long-only holder, so the lens lists and counts are complete
@@ -72,7 +73,46 @@ CONS: dict[tuple[str, str], float] = {}  # (quarter, cusip) -> median implied pr
 # the lines as filed). The fb/ copy has no cover total, so it follows that verdict (Mizuho Securities USA 2026Q3 ON, AKAM).
 REJECTED: set[tuple[str, str, str]] = set()
 DEBT_LINES: set[tuple[str, str]] = set()  # (issuer6, cik): a debt CUSIP filed as shares, once summed by prefix
-UNCLASSED: dict[str, int] = {}  # quarter -> suspect_units rows that reached write_full with no unreliable class
+UNCLASSED: dict[str, int] = {}
+CLS: dict[tuple, dict] = {}  # (issuer6, cik) -> {cusip: that share class's shares, prior, value, value_delta, changes}
+# A filed conversion ratio between share classes: shares in that class's unit (Berkshire's charter: one Class A share
+# converts into 1,500 Class B). Classes without one (GOOG/GOOGL) have no common share unit.
+CLASS_UNITS = {"084670108": ("BRK.B", 1500.0), "084670702": ("BRK.B", 1.0)}
+# The filing that states each conversion right: Berkshire Hathaway's 10-K (Class A convertible into 1,500 Class B).
+CLASS_RATIO_SOURCE = {"BRK.B": "0001193125-26-083899"}
+
+
+def both_listed(cusips: list[str]) -> bool:
+    """Every CUSIP is on the same quarter's SEC 13(f) list and not deleted there: distinct live securities (GOOG and
+    GOOGL), never one position re-coded. With no list read this run, two CUSIPs that each have a ticker count as live."""
+    for rows in LISTS.values():
+        if all(c in rows and rows[c][0] != "D" for c in cusips):
+            return True
+    return not LISTS and all((SECS.get(c) or {}).get("ticker") for c in cusips)
+
+
+def class_change(k: dict, known: bool) -> str | None:
+    """One share class's change in a multi-class row."""
+    if k["side"] in ("shares", "both") and not ({"new", "exited"} & k["changes"]):
+        return "unknown"
+    if not known:
+        return None
+    sh, ps = k["shares"], k["prev_shares"]
+    return ("exited" if sh <= 0 else "new" if ps <= 0 else "added" if sh > ps + 0.5 else "trimmed" if sh < ps - 0.5
+            else "unchanged")
+
+
+def issuer_change(clean: list[dict], known: bool) -> str | None:
+    """A multi-class row's change from its counted classes: one word when they agree (prior 0: new; all to 0: exited),
+    "mixed" when they move opposite ways (net_direction then gives the dollar sign)."""
+    if not known:
+        return None
+    if sum(k["prev_shares"] for k in clean) <= 0:
+        return "new"
+    if sum(k["shares"] for k in clean) <= 0:
+        return "exited"
+    dirs = {(k["shares"] > k["prev_shares"] + 0.5) - (k["shares"] < k["prev_shares"] - 0.5) for k in clean} - {0}
+    return "unchanged" if not dirs else "mixed" if len(dirs) > 1 else "added" if dirs == {1} else "trimmed"  # quarter -> suspect_units rows that reached write_full with no unreliable class
 FIXED = [0]
 
 
@@ -227,7 +267,7 @@ def net_parity(per_quarter: dict[str, list[list]]) -> None:
     for q in {nq for nq, _ in NETS.values() if nq}:
         for r in per_quarter.get(q, []):
             c = linked(r[5])
-            if not r[8] and len(c) >= 6 and NETS.get(c[:6], (None,))[0] == q:
+            if not r[8] and len(c) >= 6 and NETS.get(c[:6], (None,))[0] == q and not debt_cusip(c):
                 sums[c[:6]] = sums.get(c[:6], 0) + (r[14] or 0)
     off = sorted(((code, net, round(sums.get(code, 0))) for code, (nq, net) in NETS.items()
                   if abs(net - sums.get(code, 0)) > max(1e6, 0.001 * abs(net))), key=lambda x: -abs(x[1] - x[2]))
@@ -314,6 +354,7 @@ NOT_SHARE = re.compile(r"\bUNITS?\b|\bRIGHTS?\b|\bRTS?\b|\*W\b|\bWTS?\b|WARRANT"
 
 
 LIST_URLS: dict[str, str] = {}  # quarter -> the SEC 13(f) list file read
+LISTS: dict[str, dict] = {}  # quarter -> SEC 13(f) list rows read this run (write_links), for live share classes
 
 
 def sec_13f_lists(quarters: list[str]) -> dict[str, dict[str, tuple[str, str]]]:
@@ -343,6 +384,7 @@ def sec_13f_lists(quarters: list[str]) -> dict[str, dict[str, tuple[str, str]]]:
                 rows[line[:9]] = ("A" if "*A*" in rest else "D" if "*D*" in rest else "",
                                   re.split(r"\s{2,}|\*[AD]\*", rest.strip())[0])
         out[q] = rows
+        LISTS[q] = rows
         LIST_URLS[q] = href if href.startswith("http") else ARCHIVE_BASE + href
     return out
 
@@ -684,6 +726,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
     issuers with a ticker; hl/index.json maps tickers. Paid: hlf/{issuer6}.json, every holder (R2 hl/)."""
     meta = {s["cik"]: s for s in shards}
     per: dict[str, dict[str, list]] = {}
+    CLS.clear()
     tick: dict[str, dict[str, float]] = {}
     book: dict[str, float] = {}  # cik -> value of its share positions (the weight denominator)
     top10: dict[str, set] = {}  # cik -> issuer codes among its ten largest share positions
@@ -735,6 +778,19 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
             a[5] += r.get("value_delta") or 0
             by_issuer[c[:6]] = by_issuer.get(c[:6], 0) + (r.get("value") or 0)
             t = r.get("ticker") or (SECS.get(c) or {}).get("ticker")
+            k = CLS.setdefault((c[:6], cik), {}).setdefault(c, {
+                "cusip": c, "ticker": t, "shares": 0, "prev_shares": 0, "value": 0, "prev_value": 0, "value_delta": 0,
+                "changes": set(), "switch": False, "prev_cusip": None, "basis": set(), "side": None, "price_outlier": False})
+            for f in ("shares", "prev_shares", "value", "prev_value", "value_delta"):
+                k[f] += r.get(f) or 0
+            k["changes"].add(r.get("change"))
+            k["switch"] = k["switch"] or bool(r.get("class_switch"))
+            k["prev_cusip"] = k["prev_cusip"] or r.get("prev_cusip")
+            if r.get("value_delta_basis"):
+                k["basis"].add(r["value_delta_basis"])
+            if side:
+                k["side"] = side if k["side"] in (None, side) else "both"
+            k["price_outlier"] = k["price_outlier"] or bool(r.get("price_outlier"))
             if t:
                 tick.setdefault(c[:6], {})[t] = tick.setdefault(c[:6], {}).get(t, 0) + (r.get("value") or 0)
         book[cik] = EQUITY.get(cik) or sum(by_issuer.values())  # the SH book, as on stock pages
@@ -745,11 +801,12 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
     index, keep, written, site = {}, set(), set(), {}
     cols = ["cik", "name", "slug", "type", "curated", "period", "shares", "prev_shares", "value", "prev_value", "change",
             "weight", "accession", "filing_date", "accepted_at", "original_accession", "prev_cusip", "suspect_duplicate",
-            "price_outlier", "value_basis", "unreliable", "value_delta", "value_delta_basis", "held_reason"]
+            "price_outlier", "value_basis", "unreliable", "value_delta", "value_delta_basis", "held_reason", "classes",
+            "shares_unit", "shares_ratio", "ratio_source", "classes_held", "cusip", "issuer_cusip6", "net_direction"]
     for code, hs in per.items():
-        blank = lambda: {"holders": 0, "new": 0, "added": 0, "trimmed": 0, "exited": 0, "unchanged": 0, "unknown": 0,
+        blank = lambda: {"holders": 0, "new": 0, "added": 0, "trimmed": 0, "exited": 0, "unchanged": 0, "mixed": 0, "unknown": 0,
                          "no_prior": 0, "top10": 0, "over5pct": 0, "net": 0, "net_by_period": {}, "by_period": {}}
-        rows, counts, deltas = [], blank(), {}
+        rows, counts, deltas, raw = [], blank(), {}, {}
         lenses = {name: blank() for name in LENSES}
         for cik, (sh, ps, v, pv, known, delta, unsure, prev_cusip, dup, bad_value, side, reason) in hs.items():
             change = None
@@ -760,14 +817,41 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                     change, side, reason = "unknown", side or "shares", reason or "zero_shares"
                 if side in ("shares", "both") and change not in ("new", "exited"):
                     change = "unknown"  # a flagged share count: never trimmed or added
-            # A filer with several lines in the issuer (an unlinked exit of one code beside a new line of another,
-            # Ferguson Wellman XOM): its row is one position, so its trade is the net share change at the position's
-            # filed price, value / shares (as a one-line row), not the sum of line trades priced at different prices.
+            # Several share classes (BRK.A and BRK.B, GOOG and GOOGL): each class's trade at its own price, summed in
+            # dollars over the classes that are counted (a held class is left out cleanly: classes_held); shares add up
+            # only through a filed conversion ratio (CLASS_UNITS), else shares and prev_shares are null and classes[]
+            # carries the counts. FMR 2026Q3 BRK: A -7,574 at ~$747,005 and B -802,720 at ~$497.95 is ~-$6.06B;
+            # 9,604,246 summed shares at a blended $1,038.85 read -$0.84B. Classes moving opposite ways: "mixed".
+            cls = CLS.get((code, cik)) or {}
+            seen = {x for k in cls.values() for x in k["changes"]}
+            # An unlinked exit of one code beside a new line of another (Ferguson Wellman XOM) is one position: its
+            # trade is the net share change at the position's filed price (value_delta_basis net_shares_repriced).
+            # Never two share classes listed at once on SEC's 13(f) list (GOOG and GOOGL) or flagged class_switch.
+            reissue = len(cls) == 2 and {"new", "exited"} <= seen <= {"new", "exited"} \
+                and not any(k["switch"] for k in cls.values()) and not both_listed(list(cls))
+            multi = len(cls) > 1 and not reissue
+            out_sh, out_ps, unit, ratio_of, held_n, basis = sh, ps, None, None, 0, None
+            if multi:
+                for k in cls.values():
+                    k["change"] = class_change(k, known)
+                clean = [k for k in cls.values() if not k["side"]]
+                held_n = len(cls) - len(clean)
+                if clean:  # the held classes' dollars are out of the row; the row is counted on the clean ones
+                    side, reason, bad_value = None, None, False
+                    delta = sum(k["value_delta"] for k in clean)
+                    change = issuer_change(clean, known) if known and not unsure else change
+                units = [CLASS_UNITS.get(k["cusip"]) for k in cls.values()]
+                if all(units) and len({u[0] for u in units}) == 1:
+                    unit, ratio_of = units[0][0], {k["cusip"]: CLASS_UNITS[k["cusip"]][1] for k in cls.values()}
+                    out_sh = sum(k["shares"] * ratio_of[k["cusip"]] for k in cls.values())
+                    out_ps = sum(k["prev_shares"] * ratio_of[k["cusip"]] for k in cls.values())
+                else:
+                    out_sh = out_ps = None
             if change == "unchanged":
                 delta = 0  # no shares traded: a price move is never a trade (Philadelphia Investment Partners XOM)
-            elif change in ("added", "trimmed") and not side and sh > 0 \
-                    and LINES.get((code, cik), [1])[0] > 1 and "filed_value" not in BASIS.get((code, cik), ()):
-                delta = (sh - ps) * v / sh
+            elif reissue and change in ("added", "trimmed") and not side and sh > 0 \
+                    and "filed_value" not in BASIS.get((code, cik), ()):
+                delta, basis = (sh - ps) * v / sh, "net_shares_repriced"
             q = PERIOD.get(cik) or meta[cik].get("quarter")
             kind = (types.get(cik) or {}).get("type")
             weight = v / book[cik] if book.get(cik) else None
@@ -781,6 +865,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                 if change not in (None, "unknown") and not side:
                     c["net_by_period"][q] = c["net_by_period"].get(q, 0) + round(delta)
             deltas[cik] = round(delta) if change not in (None, "unknown") and not side else None
+            raw[cik] = round(sh)  # the site's holder rows (hlr/) count a holder by any shares, classes summed
             counted = round(delta) if change not in (None, "unknown") and not side else None  # exactly what net sums
             # /v1 used to price each row from its own fields ((shares - prev_shares) x value / shares); value_delta
             # is ingest's per-line figure, the one net sums. Where they differ, log the row and why.
@@ -794,15 +879,34 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                     REPRICED.setdefault(code, []).append((cik, meta[cik].get("name"), q, change, counted, tu, why))
             m = curated.get(cik) or filers.get(cik) or {}
             fl = FILING.get(cik) or filing(meta[cik])
+            if multi and counted is not None and abs(counted - round(sum(k["value_delta"] for k in cls.values() if not k["side"]))) > 1:
+                raise RuntimeError(f"holders: {code} {cik} value_delta {counted} != the sum of its counted classes")
+            if basis is None and counted is not None:
+                basis = "filed_value" if "filed_value" in BASIS.get((code, cik), ()) else "trade"
+            single = next((k["cusip"] for k in sorted(cls.values(), key=lambda k: -k["shares"])), None) if not multi else None
             rows.append([cik, meta[cik].get("name"), m.get("slug"), kind, cik in curated,
-                         q, round(sh), build.shares_out(float(ps)) if known else None, round(v), round(pv) if known else None,
+                         q, None if out_sh is None else round(out_sh),
+                         None if out_ps is None or not known else build.shares_out(float(out_ps)),
+                         round(v), round(pv) if known else None,
                          change or ("unknown" if known else None),
                          round(weight, 6) if weight is not None else None,
                          fl["accession"], fl["filing_date"], fl["accepted_at"],
                          fl.get("original_accession") or fl["accession"], prev_cusip, dup,
                          bad_value, "filed_price_outlier" if bad_value else "filed", side, counted,
-                         None if counted is None else "filed_value" if "filed_value" in BASIS.get((code, cik), ()) else "trade",
-                         reason if side else None])
+                         basis if counted is not None else None,
+                         reason if side else None,
+                         [{"cusip": k["cusip"], "ticker": k["ticker"], "put_call": None, "prev_cusip": k["prev_cusip"],
+                           "shares": round(k["shares"]), "prev_shares": build.shares_out(float(k["prev_shares"])) if known else None,
+                           "value": round(k["value"]), "prev_value": round(k["prev_value"]) if known else None,
+                           "change": k["change"],
+                           "value_delta": round(k["value_delta"]) if counted is not None and not k["side"] else None,
+                           "value_delta_basis": (sorted(k["basis"])[0] if k["basis"] else "trade")
+                           if counted is not None and not k["side"] else None,
+                           "unreliable": k["side"], "price_outlier": k["price_outlier"]}
+                          for k in sorted(cls.values(), key=lambda k: -k["value"])] if multi else None,
+                         unit, ratio_of, CLASS_RATIO_SOURCE.get(unit) if unit else None,
+                         held_n if multi else None, single, code,
+                         None if counted is None else "buy" if counted > 0 else "sell" if counted < 0 else "flat"])
         if not counts["holders"]:
             continue
         # net is one quarter's trades, as /v1: the latest quarter any holder reports (net_quarter); net_by_period
@@ -822,8 +926,8 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
         if tickers:
             keep.add(name)
             write(out / name, {**body, "rows": rows[:HOLDERS_TOP]})
-            top = {r[0] for r in [r for r in rows if r[6] > 0][:SITE_TOP]}
-            site[code] = [[r[0], r[5], r[6], r[8], r[11], r[10], deltas[r[0]], int(code in top10.get(r[0], ()))]
+            top = {r[0] for r in [r for r in rows if raw[r[0]] > 0][:SITE_TOP]}
+            site[code] = [[r[0], r[5], raw[r[0]], r[8], r[11], r[10], deltas[r[0]], int(code in top10.get(r[0], ()))]
                           for r in rows if r[0] in top or r[3] in LENSES["smart"]]
     for p in out.glob("*.json"):
         if p.name not in keep and p.name != "index.json":
