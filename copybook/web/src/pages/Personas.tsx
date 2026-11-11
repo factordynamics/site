@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { Arrow, Button, Check, Panel } from '../components/ui'
 import { FUND_SEATS, FUND_WHY, plans, TRIAL_DAYS, trialTerms, SPEED_CLAIMS } from '../config'
 import { attributed, referredCheckout } from '../lib/attribution'
-import { gapLabel, loadLatency, useApiBase } from '../lib/account'
+import { gapLabel, loadLatency } from '../lib/account'
 import { BASE, useAsync, useTitle } from '../lib/data'
 import { HOST_MOVE, HOSTING } from '../lib/hosting'
 import { loadCoverage } from '../lib/stocks'
@@ -119,7 +119,7 @@ export function ForFunds() {
         title="Know who owns what you own."
         sub={`Your book next to every 13F filer: who holds your names, how crowded they are, and how the funds you benchmark against are positioned. ${FUND_SEATS} seats, shared lists, one team channel in Slack, and an annual invoice.`}
         cta={cta}
-        note="Founding price $1,990/yr for teams that subscribe before Dec 31, kept for as long as you stay. Invoiced net 30; W-9 on request."
+        note="Founding price $1,990/yr for teams that subscribe before Dec 31, kept for as long as you stay. Invoiced net 30; W-9 on request. Prepaid and protected: pro-rata refund if we ever discontinue the plan."
       />
 
       <Facts items={[[`${filers}`, '13F filers covered, the latest filing of each'], median != null
@@ -167,7 +167,11 @@ export function ForFunds() {
             <li>{HOSTING.api}</li>
             <li>{HOSTING.shared}</li>
             <li>{HOSTING.encryption}</li>
-            <li>{HOSTING.access}</li>
+            {HOSTING.accessParts.map(([h, t]) => (
+              <li key={h}>
+                <span className="font-medium text-ink">Who can see member data, {h.charAt(0).toLowerCase() + h.slice(1)}:</span> {t}
+              </li>
+            ))}
             <li>{HOSTING.physical}</li>
             <li>{HOSTING.backups} {HOSTING.logging}</li>
           </ul>
@@ -209,7 +213,7 @@ export function ForQuants() {
       Start {TRIAL_DAYS}-day free trial <Arrow />
     </Button>
   )
-  const base = useApiBase()
+  const base = import.meta.env.VITE_API_DOCS_BASE as string
   const curl = `curl ${base}/v1/filers/warren-buffett/holdings/latest \\
   -H "Authorization: Bearer cbk_live_..." \\
   -H "User-Agent: my-research/1.0"`

@@ -4,7 +4,7 @@ import { Skeleton } from '../components/ui'
 import { apiReady } from '../config'
 import { loadLatency, type Latency } from '../lib/account'
 import { useAsync, useTick, useTitle } from '../lib/data'
-import { DATA_ALERTS, DATA_ALERTS_NOTE, DATA_MANUAL, DEPLOY_FREEZE, DEPLOY_POLICY, HOST_MOVE, HOSTING, INCIDENT_RULE, INCIDENTS } from '../lib/hosting'
+import { DATA_ALERTS, DATA_ALERTS_NOTE, DATA_MANUAL, DEPLOY_FREEZE, DEPLOY_POLICY, RESTART_POLICY, HOST_MOVE, HOSTING, INCIDENT_RULE, INCIDENTS } from '../lib/hosting'
 import { DATA, displayName } from '../lib/data'
 import { loadExpected } from '../lib/stocks'
 import { isEdgarDay } from '../lib/calendar.mjs'
@@ -134,6 +134,8 @@ export function Status() {
   const days = st.data?.probe?.daily ?? []
   // A percentage from a few dozen checks misleads: show one only once about a full day (90% of 1,440 minutes) is measured.
   const rs = st.data?.restarts
+  // Payments' after-send check of each 13F alert against the published build (latency.json reconciliation).
+  const rec = (l as { reconciliation?: { checked: number; passed: number; failed: number; held_pending?: number } } | null | undefined)?.reconciliation
   const full24 = (pr24?.checks ?? 0) >= 1296
 
   const apiTone: Tone = checking ? 'wait' : h ? 'up' : 'down'
@@ -207,6 +209,15 @@ export function Status() {
                 )}
                 {pollerHost === 'cloudflare' || pollerHost == null ? 'Checks EDGAR every minute from Cloudflare, with the API machine as backup.' : 'Cloudflare’s checks paused; the API machine is polling EDGAR as backup.'}
               </Row>
+              {rec && rec.checked > 0 && (
+                <Row name="Alert accuracy" tone={rec.failed ? 'warn' : 'up'} state={`Alerts reconciled: ${rec.passed} of ${rec.checked}`}>
+                  {rec.failed ? `${rec.failed} failed; for alerts accepted from Nov 11, 05:00 UTC, recipients get a correction email. ` : ''}
+                  {rec.held_pending ? `${rec.held_pending} held for a check. ` : ''}Each 13F alert’s moves, compared row by row with the published data.{' '}
+                  <Link to="/methodology/#alert-checks" className="font-medium text-accent hover:text-accent-2">
+                    How
+                  </Link>
+                </Row>
+              )}
               <Row name="Filing data" tone={dataTone} state={lagS == null ? 'Not known yet' : `Last data build ${ago(lagS)} ago${dataTone === 'warn' ? ', later than usual for a filing day' : ''}`}>
                 {newest13f ? `Newest 13F in the data: ${displayName(newest13f.manager)}, ${newest13f.at}. ` : ''}
                 Rebuilt about every 20 minutes on filing days; past 2 hours this turns amber.
@@ -273,6 +284,7 @@ export function Status() {
         {rs && (
           <>
             <h3 className="mt-6 text-[15px] font-semibold">Restarts, last 7 days</h3>
+            <p className="mt-1 text-[13.5px] font-medium text-ink-2">{RESTART_POLICY}</p>
             <p className="mt-1 text-[13.5px] text-ink-3">
               {rs.deploys_7d} {rs.deploys_7d === 1 ? 'deploy' : 'deploys'} · {rs.unplanned_7d} unplanned{rs.short_unconfirmed_7d ? ` · ${rs.short_unconfirmed_7d} brief ${rs.short_unconfirmed_7d === 1 ? 'restart' : 'restarts'} we couldn’t attribute` : ''}. A deploy is a new build back up in under 60 seconds.
             </p>

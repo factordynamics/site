@@ -17,6 +17,8 @@ export type Follows = {
   onboarded: boolean
   include_13g: boolean
   digest: boolean
+  /** The weekly "Your names this week" email (paid plans); absent means on. */
+  weekly_digest?: boolean
   /** Insider and 13D alerts on owned and watched stocks (all paid plans). */
   insider_buys: boolean
   insider_min_usd: number

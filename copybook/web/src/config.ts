@@ -1,7 +1,7 @@
 // Paid plan wiring (contract: factordynamics/site copybook/api/README.md).
 // checkout.*: Stripe Payment Link URLs. portal: Stripe customer portal login page (fallback).
 // api: Copybook API base URL (api.config.mjs).
-// While the checkout links are empty, every paid button falls back to the encrypted waitlist.
+// While the checkout links are empty, paid buttons say checkout is briefly unavailable (the waitlist is retired).
 export const checkout = {
   monthly: 'https://buy.stripe.com/aFa7sL1dk2Do5tE2MSgjC00',
   yearly: 'https://buy.stripe.com/7sYeVd1dkguecW6gDIgjC01',

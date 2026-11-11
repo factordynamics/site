@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Signup } from '../components/Signup'
 import { Badge, Panel, Skeleton } from '../components/ui'
@@ -53,6 +53,7 @@ export function Speed() {
   const is13G = (form: string) => /13G/.test(form)
   const optIn = timed.filter((a) => is13G(a.form)).length
   const [show13G, setShow13G] = useState(false)
+  const lateIds = new Set(((d as { before_moves_fix?: Record<string, { rows?: { accession: string }[] }> } | null | undefined)?.before_moves_fix?.['13F']?.rows ?? []).map((r) => r.accession))
   const latest = ((d?.log?.length ? d.log : alerts) as Alert[])
     .filter((a) => (f13Ready(d) || !a.form.startsWith('13F')) && (show13G || !is13G(a.form)))
     .sort((a, b) => b.sent_at.localeCompare(a.sent_at))
@@ -151,28 +152,37 @@ export function Speed() {
             <table className="w-full text-[13.5px]">
               <thead>
                 <tr className="border-b border-line text-left text-[12px] text-ink-3">
-                  <th className="px-5 py-2.5 font-medium">Filer</th>
+                  <th className="py-2.5 pl-4 pr-2 font-medium sm:px-5">Filer</th>
                   <th className="px-3 py-2.5 font-medium">Form</th>
-                  <th className="px-3 py-2.5 font-medium">Channel</th>
-                  <th className="px-3 py-2.5 font-medium">EDGAR accepted</th>
-                  <th className="px-3 py-2.5 font-medium">Delivered</th>
-                  <th className="px-5 py-2.5 text-right font-medium">Seconds</th>
+                  <th className="hidden px-3 py-2.5 font-medium sm:table-cell">Channel</th>
+                  <th className="hidden px-3 py-2.5 font-medium sm:table-cell">EDGAR accepted</th>
+                  <th className="hidden px-3 py-2.5 font-medium sm:table-cell">Delivered</th>
+                  <th className="py-2.5 pl-2 pr-4 text-right font-medium sm:px-5">Seconds</th>
                 </tr>
               </thead>
               <tbody>
                 {latest.map((a) => (
                   <tr key={a.accession + a.sent_at} className="border-b border-line last:border-0">
-                    <td className="px-5 py-2.5">
+                    <td className="py-2.5 pl-4 pr-2 sm:px-5">
                       <Link to={`/investors/${a.slug}/`} className="font-medium hover:text-accent">
                         {displayName(a.manager)}
                       </Link>
-                      {a.quarter && <span className="ml-1.5 text-[11.5px] text-ink-3">{quarterLabel(a.quarter)}</span>}
+                      {a.quarter && <span className="ml-1.5 whitespace-nowrap text-[11.5px] text-ink-3">{quarterLabel(a.quarter)}</span>}
+                      {lateIds.has(a.accession) && (
+                        <a href="#before-fix" className="ml-1.5 whitespace-nowrap rounded-full bg-[#fbecd3] px-2 py-0.5 text-[11.5px] font-medium text-[#7a4b00] hover:underline">
+                          moves late, fixed Nov 11
+                        </a>
+                      )}
+                      <span className="num block text-[11.5px] text-ink-3 sm:hidden">accepted {time(a.accepted_at)}</span>
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2.5 text-ink-2">{a.form}</td>
-                    <td className="whitespace-nowrap px-3 py-2.5 text-ink-2">{CHANNELS.find(([k]) => k === (a.channel ?? 'email'))?.[1] ?? a.channel}</td>
-                    <td className="num whitespace-nowrap px-3 py-2.5 text-ink-2">{time(a.accepted_at)}</td>
-                    <td className="num whitespace-nowrap px-3 py-2.5 text-ink-2">{time(a.sent_at)}</td>
-                    <td className="num px-5 py-2.5 text-right font-medium" title={gapLabel(a.gap_seconds)}>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-ink-2">
+                      <span className="sm:hidden">{/^4(\/A)?$/.test(a.form) ? `Form ${a.form}` : a.form.replace(/^SCHEDULE\s+/, '')}</span>
+                      <span className="hidden sm:inline">{/^4(\/A)?$/.test(a.form) ? `Form ${a.form}` : a.form}</span>
+                    </td>
+                    <td className="hidden whitespace-nowrap px-3 py-2.5 text-ink-2 sm:table-cell">{CHANNELS.find(([k]) => k === (a.channel ?? 'email'))?.[1] ?? a.channel}</td>
+                    <td className="num hidden whitespace-nowrap px-3 py-2.5 text-ink-2 sm:table-cell">{time(a.accepted_at)}</td>
+                    <td className="num hidden whitespace-nowrap px-3 py-2.5 text-ink-2 sm:table-cell">{time(a.sent_at)}</td>
+                    <td className="num py-2.5 pl-2 pr-4 text-right font-medium sm:px-5" title={gapLabel(a.gap_seconds)}>
                       {Math.round(a.gap_seconds).toLocaleString('en-US')}
                     </td>
                   </tr>
@@ -365,6 +375,11 @@ function BeforeFix({ d }: { d: Latency | null | undefined }) {
   const x = d as (Latency & { moves_fix_at?: string; before_moves_fix?: Record<string, Before> }) | null | undefined
   const b = x?.before_moves_fix?.['13F']
   const [open, setOpen] = useState(() => window.location.hash === '#before-fix')
+  useEffect(() => {
+    const on = () => window.location.hash === '#before-fix' && setOpen(true)
+    window.addEventListener('hashchange', on)
+    return () => window.removeEventListener('hashchange', on)
+  }, [])
   if (!b?.count) return null
   const day = x?.moves_fix_at ? new Date(x.moves_fix_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }) : null
   const slow = b.max_seconds != null ? `slowest ${gapLabel(b.max_seconds)}` : b.p90_seconds != null ? `90th percentile ${gapLabel(b.p90_seconds)}` : ''

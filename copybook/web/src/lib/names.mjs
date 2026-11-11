@@ -15,7 +15,8 @@ export function displayName(s) {
   if (!s) return ''
   // EDGAR's state or country suffix, with or without a space: "INC/CA", "INC. /MD/".
   const trimmed = s.replace(/\\+$/, '').replace(/\s*\/[A-Za-z]{2,3}\/?$/, '').trim()
-  if (/[a-z]/.test(trimmed)) return trimmed.split(/(\s+|-|\/)/).map(polish).join('')
+  // Mixed case: keep it, but a company suffix left in capitals reads as shouting ("Jensen Investment Management INC").
+  if (/[a-z]/.test(trimmed)) return trimmed.split(/(\s+|-|\/)/).map((w) => w.replace(/^(INC|CO|CORP|LTD)([.,]*)$/, (_, x, t) => x.charAt(0) + x.slice(1).toLowerCase() + t)).map(polish).join('')
   return trimmed
     .toLowerCase()
     .split(/(\s+|-|\/)/)

@@ -13,12 +13,12 @@ import { CsvButton } from '../components/CsvButton'
 import { resetFollows, saveFollows, useFollows } from '../lib/follows'
 import { loadExpected, shortDay, stockPath } from '../lib/stocks'
 import { useEffect, useState, type ReactNode } from 'react'
+import { Signup } from '../components/Signup'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { WaitlistForm } from '../components/Waitlist'
 import { Arrow, Badge, Button, Check, Monogram, Skeleton } from '../components/ui'
 import { api, checkout, DATA_TERMS, plans, renewalTerms, trialTerms, TRIAL_DAYS } from '../config'
 import { ApiStatus, Updating } from '../components/ApiStatus'
-import { ApiError, apiDown, cachedFresh, downloadFile, fetchMe, getToken, lastMe, needsReauth, readMe, isFree, openPortal, pausePlan, resumePlan, PLAN_NAME, requestLogin, sendCancelReason, setAlerts, signOut, startSession, type CancelReason, type Member } from '../lib/account'
+import { ApiError, signOutEverywhere, apiDown, cachedFresh, downloadFile, fetchMe, getToken, lastMe, needsReauth, readMe, isFree, openPortal, pausePlan, resumePlan, PLAN_NAME, requestLogin, sendCancelReason, setAlerts, signOut, startSession, type CancelReason, type Member } from '../lib/account'
 
 type State = { kind: 'loading' } | { kind: 'in'; member: Member; welcome: boolean; focus?: boolean; upgraded?: string; kept?: string; resumed?: boolean; stale?: boolean } | { kind: 'out'; error?: string } | { kind: 'off' } | { kind: 'down' }
 
@@ -327,10 +327,12 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
                 [
                   ['include_13g', 'Also Schedule 13G filings', 'Passive 5% stakes. Big asset managers file many of these.'],
                   ['digest', 'One daily digest', 'A single email after EDGAR closes, about 10:30 pm ET, instead of one per filing.'],
+                  // Shown once the weekly email has gone to a real member (/me digest_live).
+                  ...(member.digest_live ? ([['weekly_digest', 'Weekly “Your names this week” email', 'Saturdays, about 9 pm ET Friday: what the superinvestors did in your names that week.']] as const) : []),
                 ] as const
               ).map(([k, l, d]) => (
                 <label key={k} className="flex cursor-pointer items-start gap-3">
-                  <input type="checkbox" className="mt-0.5 size-4 accent-[var(--color-accent)]" checked={follows[k]} onChange={(e) => saveFollows({ [k]: e.target.checked }).catch(() => null)} />
+                  <input type="checkbox" className="mt-0.5 size-4 accent-[var(--color-accent)]" checked={follows[k] ?? true} onChange={(e) => saveFollows({ [k]: e.target.checked }).catch(() => null)} />
                   <span>
                     <span className="block">{l}</span>
                     <span className="block text-[12.5px] text-ink-3">{d}</span>
@@ -411,6 +413,7 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
         >
           Sign out
         </Button>
+        <SignOutEverywhere />
       </div>
     </>
   )
@@ -465,6 +468,32 @@ function Referral({ r }: { r: NonNullable<Member['referral']> }) {
 }
 
 // A free account from the Friday email signup: no paid plan, so no billing, follows or alerts here.
+// Signed sessions aren't stored, so signing out here ends only this browser's; this ends every one, copied
+// tokens included, and keeps this browser signed in.
+function SignOutEverywhere() {
+  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null)
+  return (
+    <span className="flex flex-col items-start">
+      <Button
+        variant="ghost"
+        onClick={async () => {
+          if (!confirm('Sign out everywhere? Every other browser and device is signed out at once, including a copied session. This browser stays signed in. API keys keep working until you delete them.')) return
+          setMsg(null)
+          try {
+            await signOutEverywhere()
+            setMsg({ text: 'Every other session is signed out.', ok: true })
+          } catch {
+            setMsg({ text: 'That didn’t go through. Please try again.', ok: false })
+          }
+        }}
+      >
+        Sign out everywhere
+      </Button>
+      {msg && <span role="status" className={`mt-1 px-4.5 text-[12.5px] ${msg.ok ? 'text-up' : 'text-down'}`}>{msg.text}</span>}
+    </span>
+  )
+}
+
 function Free({ member, onOut }: { member: Member; onOut: () => void }) {
   return (
     <>
@@ -508,6 +537,7 @@ function Free({ member, onOut }: { member: Member; onOut: () => void }) {
         >
           Sign out
         </Button>
+        <SignOutEverywhere />
       </div>
     </>
   )
@@ -596,11 +626,9 @@ function NotOpen() {
       <header>
         <p className="text-[13px] font-medium text-accent">Account</p>
         <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em]">Copy opens with the Q3 filings.</h1>
-        <p className="mt-3 text-[17px] text-ink-2">Quarter-over-quarter changes, 8 quarters of 13F history and CSV export, and filing-day alerts. Join and we’ll email you the moment it opens.</p>
+        <p className="mt-3 text-[17px] text-ink-2">Quarter-over-quarter changes, 8 quarters of 13F history and CSV export, and filing-day alerts. Meanwhile, the free Friday email has the week’s top moves.</p>
       </header>
-      <div className="mt-8 max-w-lg">
-        <WaitlistForm id="wl-account" />
-      </div>
+      <Signup source="account" className="mt-8" />
     </>
   )
 }

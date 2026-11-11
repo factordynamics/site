@@ -196,7 +196,7 @@ export function Methodology() {
       <div className="mt-12 grid grid-cols-[minmax(0,1fr)] gap-10 lg:grid-cols-[13rem_minmax(0,1fr)]">
         <nav aria-label="On this page" className="hidden lg:block">
           <ul className="sticky top-24 space-y-1.5 text-[14px]">
-            {[...SECTIONS, { id: 'splits', title: 'Stock splits' }, { id: 'latency', title: 'Alert latency' }, { id: 'changelog', title: 'Changelog' }].map((s) => (
+            {[...SECTIONS, { id: 'splits', title: 'Stock splits' }, { id: 'latency', title: 'Alert latency' }, { id: 'alert-checks', title: 'Alert accuracy checks' }, { id: 'changelog', title: 'Changelog' }].map((s) => (
               <li key={s.id}>
                 <a href={`#${s.id}`} className="text-ink-2 hover:text-ink">
                   {s.title}
@@ -273,7 +273,7 @@ export function Methodology() {
           <section id="latency" className="scroll-mt-24">
             <h2 className="text-[22px] font-semibold tracking-[-0.02em]">Alert latency</h2>
             <p className="mt-2 text-[15.5px] leading-relaxed text-ink-2">
-              Live alerts will be timed from EDGAR acceptance to delivery once the first ones fire; none so far. The timings, and the latest alerts, will be on the{' '}
+              Every live alert is timed from EDGAR acceptance to delivery; for a 13F, to the email that carries its moves. The timings and the latest alerts are on the{' '}
               <Link to="/speed/" className="font-medium text-accent hover:text-accent-2">
                 speed page
               </Link>
@@ -282,6 +282,20 @@ export function Methodology() {
                 /latency
               </a>
               .
+            </p>
+          </section>
+
+          <section id="alert-checks" className="scroll-mt-24">
+            <h2 className="text-[22px] font-semibold tracking-[-0.02em]">Alert accuracy checks</h2>
+            <p className="mt-2 text-[15.5px] leading-relaxed text-ink-2">
+              <span className="font-medium text-ink">Before a 13F alert’s moves go out,</span> every move row is checked. Its implied price (value ÷ shares) must be within 3× of other filers’ median for that CUSIP and quarter, and its prior shares must be on the right basis for any split in splits.json. A row that fails goes out named, without figures, as “Moves pending check”, and is left out of the totals. It is re-checked against the published build every 5 minutes and sent in a “checked position changes” email only once it passes.
+            </p>
+            <p className="mt-3 text-[15.5px] leading-relaxed text-ink-2">
+              <span className="font-medium text-ink">After it goes out,</span> every 13F alert with moves is compared row by row with the published build (what /v1 serves) once the build has the filing. A row fails on a different direction, a different sign, or a value more than 10% off. Its recipients get “Correction: [fund] [ticker] was [X], not [Y]”, and the feed copy is retitled “Corrected”. Corrections go out for alerts accepted from Nov 11, 05:00 UTC; earlier alerts are checked and logged, and the{' '}
+              <Link to="/status/#data" className="font-medium text-accent hover:text-accent-2">
+                status page
+              </Link>{' '}
+              is their notice. The running count is on the status page.
             </p>
           </section>
 

@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react'
 import { Fragment, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { WaitlistForm } from '../components/Waitlist'
 import { Button, Check } from '../components/ui'
 import { attributed, checkRef, referredCheckout, refCode } from '../lib/attribution'
 import { useMember } from '../lib/account'
@@ -213,8 +212,9 @@ export function Pricing() {
               {referred && plan && tier.id !== 'fund' ? (
                 <p className={`relative min-h-[1.5em] text-[13.5px] font-semibold ${dark ? 'text-[#7fe0a6]' : 'text-[#126b3c]'}`}>{referredDeal(tier.id, cycle)}</p>
               ) : (
-                <p className={`relative min-h-[1.5em] text-[12.5px] ${dark ? 'text-white/60' : 'text-ink-3'}`}>
+                <p className={`relative text-[12.5px] ${cycle === 'yearly' ? 'min-h-[53px]' : 'min-h-[1.5em]'} ${dark ? 'text-white/60' : 'text-ink-3'}`}>
                   {plan ? (cycle === 'yearly' ? `About $${Math.round(plan.yearly / 12)} a month · save ${save}%` : `Or $${plan.yearly.toLocaleString('en-US')} a year`) : 'No card needed'}
+                  {plan && cycle === 'yearly' && <span className="block text-[11.5px]">Prepaid and protected: pro-rata refund if we ever discontinue the plan.</span>}
                 </p>
               )}
               <div className="relative mt-5">
@@ -244,7 +244,8 @@ export function Pricing() {
                     Start {TRIAL_DAYS}-day free trial
                   </Button>
                 ) : (
-                  <WaitlistForm cta="Get early access" dark={dark} id={`wl-${tier.id}`} />
+                  // Only when Stripe checkout isn't configured (never in production): no form, no promise.
+                  <p className={`rounded-full px-4 py-2.5 text-center text-[14px] font-medium ${dark ? 'bg-white/10 text-white/80' : 'bg-ink/[0.05] text-ink-2'}`}>Checkout is briefly unavailable</p>
                 )}
                 <p className={`mt-2.5 min-h-[3.6em] text-[11.5px] leading-snug ${dark ? 'text-white/55' : 'text-ink-3'}`}>
                   {tier.id === 'fund' ? (

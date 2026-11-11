@@ -7,11 +7,14 @@ const UPDATED = 'November 9, 2026'
 // Material changes to /privacy/ and /security/, newest first. Every material edit adds a line here, and the
 // newest date is the page's "Last updated".
 const CHANGES: Partial<Record<'terms' | 'privacy' | 'security', [string, string][]>> = {
+  terms: [['November 11, 2026', 'Accounts and plans: if we discontinue a paid plan during a prepaid period, we refund the unused part pro rata.']],
   security: [
+    ['November 11, 2026', 'Backups: from November 17 the backup key’s private half is kept offline by the founder; weekly checks without the key and a monthly test restore. Limits: what administrator access the agents’ account has from November 17.'],
+    ['November 11, 2026', 'Who can see member data moved to the top and split into Today, From Nov 17, Limits and AI providers; from Nov 17 the agents’ payment key is restricted to billing support.'],
     ['November 11, 2026', 'The API’s own hostname will be api.factordynamics.com, with at least 7 days’ notice before the old host stops working.'],
-    ['November 11, 2026', 'Sign-in: sessions last 30 days from sign-in and signing out ends only that browser’s session; welcome-email links work for 7 days; the post-checkout hand-off lasts 2 minutes.'],
+    ['November 11, 2026', 'Sign-in: sessions last 30 days from sign-in; Sign out everywhere on /account/ ends every session, copied ones included; welcome-email links work for 7 days; the post-checkout hand-off lasts 2 minutes.'],
     ['November 11, 2026', 'Access logging: operator and /ops/ reads of member data are logged with who, when, route and row ID; direct shell reads are not covered until Nov 17. What else runs on it now lists member books and peer lists among the readable files.'],
-    ['November 11, 2026', 'Who can see member data: what changes on Nov 17 (a separate service account for member data, secrets and backup keys; rotated signing secrets) and the limits that remain (deployed code can read member data, deploys aren’t individually reviewed, isolation stops accidental reads only, older agent session logs).'],
+    ['November 11, 2026', 'Who can see member data: what changes on Nov 17 (a separate service account for member data and secrets; rotated signing secrets) and the limits that remain (deployed code can read member data, deploys aren’t individually reviewed, isolation stops accidental reads only, older agent session logs).'],
     ['November 11, 2026', 'Who can see member data now leads with how member data is kept out of agent sessions (counts and row IDs only, logged book reads, a separate API account from Nov 17) and says the model provider’s training setting is unconfirmed, so assume it may be on. Access logging updated to match.'],
     ['November 11, 2026', 'How credentials are stored: API keys as SHA-256 hashes, sign-in links and sessions as signed tokens we don’t store, private feed links stored and rotatable.'],
     ['November 11, 2026', 'Host description shortened; the disclosure is unchanged.'],
@@ -22,6 +25,7 @@ const CHANGES: Partial<Record<'terms' | 'privacy' | 'security', [string, string]
     ['November 9, 2026', 'Where the API runs, encryption at rest, access, backups, physical risk and deletion described.'],
   ],
   privacy: [
+    ['November 11, 2026', 'The encrypted waitlist is retired and its key deleted; the waitlist line is removed from What we store.'],
     ['November 11, 2026', 'Subprocessors: Amp (AI coding agents) and its model providers, Anthropic and SpaceXAI via personal subscriptions on consumer terms, and Amp’s session-log storage on Google Cloud in the US.'],
     ['November 11, 2026', 'What we store now lists everything: your book, peers and team, imported 13F and broker CSV contents, and channel settings including webhook URLs and signing secrets.'],
     ['November 9, 2026', 'Member records copied to a private Cloudflare R2 bucket; lawful basis, retention and deletion periods added.'],
@@ -45,7 +49,7 @@ const PAGES: Record<'terms' | 'privacy' | 'security', { title: string; lead: str
     sections: [
       ['The data', 'Copybook shows information from public SEC EDGAR filings (Forms 13F-HR, 13F-NT, 4 and Schedules 13D and 13G), as filed, with the processing described on our methodology page. Filings can be late, amended or wrong, and our processing can be wrong too. Everything is provided as is, with no warranty of accuracy, completeness or timeliness.'],
       ['Not investment advice', 'Nothing on Copybook is a recommendation to buy or sell a security. A 13F leaves out short positions, most non-US holdings, cash and more, and is filed up to 45 days after the quarter ends. Make your own decisions.'],
-      ['Accounts and plans', 'Paid plans renew automatically until you cancel from Manage billing. A free trial converts to a paid plan at its end unless you cancel before then. After a paid period starts, you keep access until it ends; we don’t refund partial periods unless the law requires it.'],
+      ['Accounts and plans', 'Paid plans renew automatically until you cancel from Manage billing. A free trial converts to a paid plan at its end unless you cancel before then. After a paid period starts, you keep access until it ends; we don’t refund partial periods unless the law requires it. If we discontinue a paid plan during a prepaid period, we refund the unused part pro rata.'],
       ['API use', 'API keys are for you, or for your organization’s internal research, models and tools. You may use the results in your own work and share individual findings with attribution. You may not resell, sublicense or redistribute the API’s data in bulk, build a competing data service from it, or share keys outside your plan’s seats. Respect the rate limits.'],
       ['Data after you cancel', 'Data you downloaded or fetched through the API while your subscription was active may be kept and used for your internal purposes after you cancel, under the same limits. New requests stop when the subscription ends.'],
       ['API changes', <>We version the API. Breaking changes are announced at least 90 days ahead on the <Link to="/api/#changelog" className="font-medium text-accent hover:text-accent-2">API changelog</Link>; additive changes, such as new fields or endpoints, can ship at any time.</>],
@@ -70,7 +74,6 @@ const PAGES: Record<'terms' | 'privacy' | 'security', { title: string; lead: str
           <li>Your alert and channel settings, including Slack and Discord webhook URLs (which work as credentials) and the signing secrets for webhooks we send you.</li>
           <li>Your Stripe customer ID and plan status. Card details go straight to Stripe; we never see or store them.</li>
           <li>API key names, creation dates and request counts, if you create keys.</li>
-          <li>If you join the waitlist, your email, encrypted in your browser before it’s sent.</li>
         </ul>,
       ],
       ['What we don’t do', 'We don’t sell or rent your data, share it with advertisers, or use advertising cookies. Your follows and owned stocks are never shown to other members or used in public aggregates.'],
@@ -99,15 +102,25 @@ const PAGES: Record<'terms' | 'privacy' | 'security', { title: string; lead: str
     title: 'Security',
     lead: 'Where Copybook keeps data and how it’s protected.',
     sections: [
+      [
+        'Who can see member data',
+        <>
+          {HOSTING.accessParts.map(([h, t]) => (
+            <span key={h} className="mt-3 block first:mt-0">
+              <span className="block font-semibold text-ink">{h}</span>
+              {t}
+            </span>
+          ))}
+        </>,
+      ],
       ['Where data lives', `${HOSTING.api} ${HOSTING.sync} ${HOSTING.files}`],
       ['Encryption', HOSTING.encryption],
-      ['Who can see member data', HOSTING.access],
       ['Where the machine is', HOSTING.physical],
       ['What else runs on it', HOSTING.shared],
       ['Backups', HOSTING.backups],
       ['Access logging', HOSTING.logging],
       ['Availability', <>{HOSTING.availability} Live status and incidents are on the <Link to="/status/" className="font-medium text-accent hover:text-accent-2">status page</Link>.</>],
-      ['Sign-in', 'Sign-in is by emailed one-time links; there are no passwords to leak. A sign-in link you ask for works once, within 15 minutes; links in the welcome email and Copy Fund seat invites work once, within 7 days; the hand-off right after checkout lasts 2 minutes. Sessions last 30 days from sign-in and aren’t extended by use. Sessions are signed tokens we don’t store, so signing out ends the session in that browser only; a copied token keeps working until it expires. A Copy Fund owner can sign a seat out everywhere at once; a self-serve “sign out everywhere” for every member isn’t built yet. Session tokens are never put in URLs. CSV downloads use single-use links that expire in 60 seconds.'],
+      ['Sign-in', 'Sign-in is by emailed one-time links; there are no passwords to leak. A sign-in link you ask for works once, within 15 minutes; links in the welcome email and Copy Fund seat invites work once, within 7 days; the hand-off right after checkout lasts 2 minutes. Sessions last 30 days from sign-in and aren’t extended by use; Sign out everywhere on your account page ends every session at once, including one copied from another browser; signing out in one browser ends only that browser’s session. API keys stay valid until you delete them. A Copy Fund owner can also sign a seat out everywhere. Session tokens are never put in URLs. CSV downloads use single-use links that expire in 60 seconds.'],
       ['Your book is private', <>A list of holdings you upload or enter is private to you, or to your team on Copy Fund. It is never shared, except as described under <Link to="/security/#who-can-see-member-data" className="font-medium text-accent hover:text-accent-2">Who can see member data</Link>; it is never shown to other members, and never used in aggregates, rankings or anything we publish.</>],
       ['API keys', 'A key’s secret is shown once, when you create it. Revoke a key from your account page and requests with it fail immediately.'],
       ['How credentials are stored', 'API keys are stored only as SHA-256 hashes and shown once; sign-in links and sessions are signed, expiring tokens we don’t store; private feed links are stored so your account page can show them, and you can rotate one anytime.'],

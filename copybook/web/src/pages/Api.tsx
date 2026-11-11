@@ -2,7 +2,7 @@ import { HOST_MOVE } from '../lib/hosting'
 import { Link } from 'react-router-dom'
 import { Badge, Button, Panel, Skeleton } from '../components/ui'
 import { ApiStatus } from '../components/ApiStatus'
-import { probe, useApiBase } from '../lib/account'
+import { probe } from '../lib/account'
 import { useAsync, useTitle } from '../lib/data'
 import { loadCoverage } from '../lib/stocks'
 
@@ -36,8 +36,8 @@ export function ApiDocs() {
   const spec = useAsync(() => fetch(SPEC).then((r) => (r.ok ? (r.json() as Promise<Spec>) : Promise.reject(new Error(String(r.status))))), [])
   const log = useAsync(loadChangelog, [])
   const s = spec.data
-  // The live base from api.json, not the spec's servers entry, which names whichever host built it.
-  const base = useApiBase()
+  // The published /v1 base (api.config.mjs API_DOCS_BASE), never the quick tunnel member pages use.
+  const base = import.meta.env.VITE_API_DOCS_BASE as string
   const info = parseInfo(s?.info.description)
   // Parameters are often $refs into components.parameters; resolve them so the table has names.
   const resolve = (x: Param | { $ref?: string }): Param | null => {

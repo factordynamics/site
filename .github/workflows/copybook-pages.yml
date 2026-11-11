@@ -40,8 +40,8 @@ env:
   VITE_DATA_BASE: https://refcell.github.io/gust/copybook/data/
   # Deploy freeze, Thu Nov 12 to Mon Nov 16 on EDGAR weekdays, 11:00-03:00 UTC (6am-10pm ET): runs in the
   # window still rebuild the data, but from the copybook/web code on main when the window opened, so
-  # filing-day pages aren't caught by a front-end change. A P0 fix ships anyway: put [P0] in its commit
-  # message (after a local build and boot check), and the freeze builds from it.
+  # filing-day pages aren't caught by a front-end change. A P0 fix ships anyway: start its commit subject
+  # with [P0] (after a local build and boot check), and the freeze builds from it.
   FREEZE_DAYS: "2026-11-12 2026-11-13 2026-11-16"
 
 jobs:
@@ -81,7 +81,8 @@ jobs:
             if [ "$now" -ge "$s" ] && [ "$now" -lt $((s + 16 * 3600)) ]; then start="${d}T11:00:00Z"; fi
           done
           [ -n "$start" ] || exit 0
-          p0=$(git log -1 --format=%H --since="$start" --grep='\[P0\]' HEAD -- copybook/web)
+          # Only a commit whose subject starts with [P0] (as gene's deployer counts it), not one that mentions it.
+          p0=$(git log --since="$start" --format='%H %s' HEAD -- copybook/web | awk '$2 ~ /^\[P0\]/ { print $1; exit }')
           ref=${p0:-$(git rev-list -1 --before="$start" HEAD)}
           echo "::notice::Deploy freeze (window from ${start}): copybook/web from ${ref:0:7}${p0:+ (P0)}"
           rm -rf copybook/web && git checkout "$ref" -- copybook/web
