@@ -45,14 +45,19 @@ class MemKV implements KV {
 class MemR2 implements R2 {
   m = new Map<string, Uint8Array>();
   meta = new Map<string, Record<string, string>>();
+  /** Upload order, as R2's `uploaded` (a counter: two puts in one millisecond still order); only where a test asks. */
+  up = new Map<string, number>();
+  seq = 0;
+  uploads = false;
   async get(k: string) {
     const v = this.m.get(k);
     if (!v) return null;
     // Deliver in two chunks with the header line split, as R2 may.
-    return { size: v.length, customMetadata: this.meta.get(k), body: new ReadableStream<Uint8Array>({ start(c) { c.enqueue(v.subarray(0, 20)); c.enqueue(v.subarray(20)); c.close(); } }) };
+    return { size: v.length, ...(this.uploads ? { uploaded: new Date(this.up.get(k) ?? 0) } : {}), customMetadata: this.meta.get(k), body: new ReadableStream<Uint8Array>({ start(c) { c.enqueue(v.subarray(0, 20)); c.enqueue(v.subarray(20)); c.close(); } }) };
   }
   async put(k: string, v: ReadableStream | ArrayBuffer | ArrayBufferView | string | null, opts?: { customMetadata?: Record<string, string> }) {
     this.m.set(k, new Uint8Array(await new Response(v as BodyInit).arrayBuffer()));
+    this.up.set(k, ++this.seq);
     if (opts?.customMetadata) this.meta.set(k, opts.customMetadata);
     else this.meta.delete(k);
   }
@@ -870,6 +875,18 @@ describe('copybook api', () => {
     await cfStore.delete('legacy:k');
     expect([await cfStore.get('legacy:k'), (await cfStore.list({ prefix: 'legacy:' })).keys]).toEqual([null, []]); // a tombstone: KV's value doesn't come back
     await cf.DB.delete('legacy:k');
+    // A request Cloudflare answers itself during failover reads the newer of its own copy and gene's published one, a
+    // tombstone included: a seat's API key deleted on gene (applied here as a tombstone; gene's old copy stays in
+    // sync/gene/) is revoked here too, and a key gene re-creates after the tombstone reads as live.
+    const { writeThrough } = await import('../src/failover');
+    const readCf = (k: string) => writeThrough(cf as Env, (e) => e.DB.get(k));
+    r2.uploads = true;
+    await r2.put('sync/gene/apikey:seat', '{"customer":"seat_x"}');
+    await cfStore.delete('apikey:seat');
+    expect(await readCf('apikey:seat')).toBe(null);
+    await r2.put('sync/gene/apikey:seat', '{"customer":"seat_y"}');
+    expect(await readCf('apikey:seat')).toBe('{"customer":"seat_y"}');
+    r2.uploads = false;
     let geneBlind = false; // gene can't reach Cloudflare's R2 (its link, or Cloudflare's API)
     let geneRace = false; // gene read Cloudflare's heartbeat and changes just before Cloudflare's minute wrote them
     const base = globalThis.fetch;

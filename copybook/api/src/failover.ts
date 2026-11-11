@@ -318,8 +318,11 @@ export async function writeThrough<T>(env: Env, fn: (env: Env) => Promise<T>): P
     async get(k) {
       const [own, gene] = await Promise.all([env.HIST.get(`kv/${k}`), env.HIST.get(`sync/gene/${k}`)]);
       const live = (o: typeof own) => !!o && !o.customMetadata?.deleted && !(o.customMetadata?.expires && Number(o.customMetadata.expires) < Date.now());
-      const pick = live(own) && (!gene || Number(own!.uploaded ?? 0) >= Number(gene.uploaded ?? 0)) ? own : gene;
-      for (const o of [own, gene]) if (o && o !== pick) await o.body.cancel?.();
+      // The newer copy wins, and our own tombstone counts: gene publishes a deletion only in its index, so its old copy
+      // stays in sync/gene/ (a seat's key deleted on gene read as live here from that copy during failover).
+      const pick = own && (!gene || Number(own.uploaded ?? 0) >= Number(gene.uploaded ?? 0)) ? own : gene;
+      for (const o of [own, gene]) if (o && (o !== pick || !live(o))) await o.body.cancel?.();
+      if (pick === own && own && !live(own)) return null;
       if (pick) return new Response(pick.body).text();
       return env.DB.get(k);
     },
