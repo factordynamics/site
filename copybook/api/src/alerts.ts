@@ -279,8 +279,17 @@ export const FILING_HOLD = 20;
 export const CAP_NOTE = 'Email limit reached today; this alert is in your feed';
 
 /**
- * Over the day's email room (both providers; Mailgun counts when configured, so failover needs no change here): the
- * email is skipped, never queued for after the reset. The alert already went to the member's feed, chat and webhooks;
+ * A paid or trialing member's email with a 13F in it, over the day's room: queued for the 00:00 UTC reset, marked
+ * "Delayed by our daily email limit", first in the next day's room (the lead, Nov 11). Every other email over the room
+ * is skipped (capSkipped).
+ */
+const queuesOverCap = (m: Member, filings: number) => filings > 0 && m.plan !== 'free' && (m.status === 'active' || m.status === 'trialing');
+const DELAY_LINE = 'Delayed by our daily email limit: this email waited for the 00:00 UTC reset. The alert reached your feed, chat and webhooks when it was filed.\n\n';
+const markDelayed = <T extends Mail>(mail: T): T => ({ ...mail, text: DELAY_LINE + mail.text, ...(mail.html ? { html: mail.html.replace(/^(<div[^>]*>)/, `$1<p style="color:#b45309;font-size:13px">${DELAY_LINE.trim()}</p>`) } : {}) });
+
+/**
+ * Over the day's email room (both providers; Mailgun counts when configured, so failover needs no change here): an
+ * email without a member's 13F is skipped (a 13F one is queued, queuesOverCap). The alert already went to the member's feed, chat and webhooks;
  * the feed gets one note a day saying why there was no email, and the day's count feeds /status/ (the lead, Nov 11).
  */
 async function capSkipped(env: Env, m: Member, ch: { feed_token?: string | null }, now: number): Promise<void> {
@@ -364,6 +373,7 @@ export async function flushHeld(env: Env, now: number): Promise<Record<string, u
   const sentWith: { filings: Alert13F[]; events: AlertEvent[] }[] = [];
   let room: number | undefined;
   let skipped = 0;
+  const late: Mail[] = [];
   for (const c of due) {
     const w = JSON.parse((await env.DB.get(`mailwin:${c}`)) ?? 'null') as Held | null;
     await env.DB.delete(`mailwin:${c}`);
@@ -377,6 +387,11 @@ export async function flushHeld(env: Env, now: number): Promise<Record<string, u
     if (!test) {
       room ??= await (await import('./email')).mailRoom(env);
       if (room - mails.length - (w.filings.length ? 0 : FILING_HOLD) <= 0) {
+        if (queuesOverCap(m, w.filings.length)) {
+          const u = await unmailed(env, c, w.filings, w.events, now);
+          if (u.filings.length || u.events.length) late.push(markDelayed({ ...alertMail(env, m.email, u.filings, u.events, f, m), filing: true, ids: [...u.filings.map((a) => a.accession), ...u.events.map((e) => e.id)] }));
+          continue;
+        }
         await capSkipped(env, m, await getChannels(env, c), now);
         skipped++;
         continue;
@@ -389,7 +404,8 @@ export async function flushHeld(env: Env, now: number): Promise<Record<string, u
     sentWith.push(u);
   }
   await env.DB.put(HELD, JSON.stringify(index));
-  if (!mails.length) return { held_flushed: 0, ...(skipped ? { cap_skipped: skipped } : {}) };
+  if (late.length) await (await import('./email')).delay(env, late);
+  if (!mails.length) return { held_flushed: 0, ...(skipped ? { cap_skipped: skipped } : {}), ...(late.length ? { cap_delayed: late.length } : {}) };
   const status = await sendMail(env, mails, { bulk: true });
   await logSent(env, mails.length, now);
   // Coalesced emails are timed as they went: a row per item at this send, tagged coalesced.
@@ -541,6 +557,7 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
   let testCapped = 0;
   let chatOnly = 0;
   let capSkips = 0;
+  const capLate: Mail[] = [];
   let pressure: { room: number; projected: number } | undefined;
   let heldIndex: Record<string, number> | undefined;
   // Paused members' followed funds that filed a 13F: one "resume now" note per member per ET day.
@@ -636,6 +653,11 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
       if (!only && !test) {
         pressure ??= await emailPressure(env, now);
         if (pressure.room - mails.length - (send.filings.length ? 0 : FILING_HOLD) <= 0) {
+          if (queuesOverCap(m, send.filings.length)) {
+            const u = await unmailed(env, m.customer, send.filings, send.events, now);
+            if (u.filings.length || u.events.length) capLate.push(markDelayed({ ...alertMail(env, m.email, u.filings, u.events, f, m), test, filing: true, ids: [...u.filings.map((a) => a.accession), ...u.events.map((e) => e.id)] }));
+            continue;
+          }
           await capSkipped(env, m, ch, now);
           capSkips++;
           continue;
@@ -658,13 +680,14 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
     }
   }
   if (heldIndex) await env.DB.put(HELD, JSON.stringify(heldIndex));
+  if (capLate.length) await (await import('./email')).delay(env, capLate);
   // An operator's replay or preview (`only`) counts against the day's preview cap.
   const mail = await sendMail(env, mails, { bulk: true, preview: !!only });
   await logSent(env, mails.length, now);
   await flushChannelLatency(env, !only);
   if (mail.split(',').every((s) => s === '200')) for (const m of notes) await noted(env, m);
   for (const p of pausedNotes) await env.DB.put(p.key, '1', { expirationTtl: 2 * 86400 });
-  return { emails: mails.length, digest, mail, ...(held ? { held } : {}), ...(testCapped ? { test_capped: testCapped } : {}), ...(chatOnly ? { chat_only: chatOnly } : {}), ...(capSkips ? { cap_skipped: capSkips } : {}), ...(pausedNotes.length ? { paused_notes: pausedNotes.length } : {}), ...(chats.length ? { chats: chats.join(', ') } : {}), ...(late.length ? { late: late.length } : {}) };
+  return { emails: mails.length, digest, mail, ...(held ? { held } : {}), ...(testCapped ? { test_capped: testCapped } : {}), ...(chatOnly ? { chat_only: chatOnly } : {}), ...(capLate.length ? { cap_delayed: capLate.length } : {}), ...(capSkips ? { cap_skipped: capSkips } : {}), ...(pausedNotes.length ? { paused_notes: pausedNotes.length } : {}), ...(chats.length ? { chats: chats.join(', ') } : {}), ...(late.length ? { late: late.length } : {}) };
 }
 
 type Delivered = { day: string; ids: string[] }[];

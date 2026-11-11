@@ -110,7 +110,7 @@ function allowedOrigin(origin: string | null, env: Env): string | null {
 
 function cors(origin: string | null): Record<string, string> {
   return origin
-    ? { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Access-Control-Allow-Headers': 'content-type, authorization', 'Access-Control-Max-Age': '86400', Vary: 'Origin' }
+    ? { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Access-Control-Allow-Headers': 'content-type, authorization, x-copybook-gate', 'Access-Control-Max-Age': '86400', Vary: 'Origin' }
     : {};
 }
 
@@ -631,7 +631,12 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     if (n >= 30) return json({ ok: false, error: 'too many requests, try again in an hour', code: 'rate_limited', retry_after: 3600, retry_after_seconds: 3600, retry_at: new Date(Date.now() + 3600_000).toISOString().replace(/\.\d{3}Z$/, 'Z') }, 429, { ...h, 'retry-after': '3600', 'access-control-expose-headers': 'retry-after' });
     await env.DB.put(k, String(n + 1), { expirationTtl: 3600 });
     const { createCheckout } = await import('./referrals');
-    const r = await createCheckout(env, await body(req), clientClass(req));
+    // The launch gate's line 6 (the lead, Nov 11): an operator-signed x-copybook-gate token (POST /ops/gate-token) turns off
+    // the test-address exemption from the one-trial rule for this request; it changes nothing else.
+    const gateTok = req.headers.get('x-copybook-gate');
+    const enforce = !!gateTok && (await verifyToken(env.SESSION_SECRET, gateTok, 'gate'))?.c === 'enforce-trial';
+    if (gateTok && !enforce) return json({ ok: false, error: 'x-copybook-gate: not a valid gate token (POST /ops/gate-token)', code: 'bad_gate' }, 400, h);
+    const r = await createCheckout(env, await body(req), clientClass(req), enforce);
     return json(r.body, r.status, h);
   }
 
@@ -764,7 +769,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const track: Record<string, unknown> = {};
     for (let d = 0; d < days; d++) {
       const day = new Date(Date.now() - 5 * 3600_000 - d * 86_400_000).toISOString().slice(0, 10);
-      const t = await env.DB.get(`track:${day}`);
+      const t = await (await import('./hot')).readTrack(env, `track:${day}`);
       if (t) track[day] = JSON.parse(t);
     }
     // Totals over the window by post ("utm_source|utm_content"): page counts from /track, signups and the rest from the funnel.
@@ -782,7 +787,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const track_hourly: Record<string, unknown> = {};
     for (let d = 0; d < days; d++) {
       const day = new Date(Date.now() - d * 86_400_000).toISOString().slice(0, 10);
-      const t = await env.DB.get(`trackh:${day}`);
+      const t = await (await import('./hot')).readTrack(env, `trackh:${day}`);
       if (t) track_hourly[day] = JSON.parse(t);
     }
     // Checkout sessions in the window from Stripe: open, complete or expired, our own (test) apart from real, by post.
@@ -1086,6 +1091,15 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const q = (await body(req)).quarter;
     if (q !== undefined && !/^\d{4}Q[1-4]$/.test(String(q))) return json({ ok: false, error: 'quarter like 2026Q3', code: 'bad_request' }, 400, h);
     return json({ ok: true, ...(await (await import('./parquet')).buildParquet(env, q as string | undefined)) }, 200, h);
+  }
+
+  // Operator: a gate token for x-copybook-gate (enforce-trial), valid `days` (1-14, default 7). Its only power is to apply
+  // the one-trial rule to copybook-test- addresses on POST /checkout, so it can be handed to the gate's testers.
+  if (req.method === 'POST' && path === '/ops/gate-token') {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    const days = Math.min(14, Math.max(1, Number((await body(req)).days ?? 7) || 7));
+    const token = await signToken(env.SESSION_SECRET, 'gate', 'enforce-trial', days * 86400);
+    return json({ ok: true, header: 'x-copybook-gate', token, expires_at: new Date(Date.now() + days * 86400_000).toISOString().replace(/\.\d{3}Z$/, 'Z') }, 200, h);
   }
 
   if (req.method === 'GET' && path === '/ops/moves-replays') {

@@ -121,7 +121,9 @@ function positionRow(h: any, equityTotal: number, allTotal: number) {
     value_as_filed: h.value_as_filed ?? null,
     value_adjusted: h.value_adjusted ?? null,
     zero_value: h.zero_value ?? (h.row_type !== 'exited' && h.change !== 'exited' && h.value === 0),
-    change: h.change ?? null,
+    // A held line in a filer book (ingest: unreliable set, change null unless new or exited) reads "unknown", as in hl/.
+    change: h.change ?? (unreliableOf(h) ? 'unknown' : null),
+    ...(unreliableOf(h) ? { unreliable: unreliableOf(h)!, ...(reasonOf(h) ? { unreliable_reason: reasonOf(h)! } : {}) } : {}),
     prev_shares: h.prev_shares ?? null,
     // As in the CSV: split only when a split adjusted prev_shares; prev_shares_as_filed on every row with a prior.
     split: h.split?.ratio ? { ratio: h.split.ratio, from_quarter: h.split.from_quarter ?? null, to_quarter: h.split.to_quarter ?? null } : null,
@@ -814,6 +816,9 @@ export function tradeUsd(r: { change: string | null; shares: number | null; prev
 /** A holder-index row's flag side: ingest's `unreliable` column (books, hl/ and d/stocks rows from run 43049731351). */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const unreliableOf = (h: any): 'value' | 'shares' | 'both' | null => (h.unreliable === 'value' || h.unreliable === 'shares' || h.unreliable === 'both' ? h.unreliable : null);
+/** Why a line is held: changes/ and filer books publish it as held_reason (ingest, Nov 11); /v1 serves unreliable_reason. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const reasonOf = (h: any): string | null => (typeof h.unreliable_reason === 'string' ? h.unreliable_reason : typeof h.held_reason === 'string' ? h.held_reason : null);
 
 /**
  * A row from a pre-schema-3 holder index, marked as ingest now would: its own flags (unreliableSide), else an add or
@@ -1017,7 +1022,7 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
       // Null on a flagged or withheld line: its price is the bad part (Aware Super XOM at $1,854/sh read +$79.4M).
       trade_usd_implied: unreliableOf(h) || h.price_outlier || h.suspect_units || (h.value_delta === null && (h.suspect_reason || h.value_basis)) ? null : h.change && h.change !== 'unchanged' ? tradeUsd({ ...h, value_usd: h.value, prev_value_usd: h.prev_value }) : h.change === 'unchanged' ? 0 : null,
       // A held row (ingest's rule): its class and reason as published; nothing here re-derives a direction or dollars.
-      ...(unreliableOf(h) ? { unreliable: unreliableOf(h)!, ...(typeof h.unreliable_reason === 'string' ? { unreliable_reason: h.unreliable_reason } : {}), value_change_usd: h.value_change ?? null } : {}),
+      ...(unreliableOf(h) ? { unreliable: unreliableOf(h)!, ...(reasonOf(h) ? { unreliable_reason: reasonOf(h)! } : {}), value_change_usd: h.value_change ?? null } : {}),
       // The data run's labels, as published: what value_delta measures, and contract-filed option lines (shares x100).
       value_delta_basis: ['trade', 'filed_value', 'net_shares_repriced'].includes(h.value_delta_basis) ? h.value_delta_basis : null,
       ...(typeof h.shares_basis === 'string' ? { shares_basis: h.shares_basis } : {}),
@@ -1407,7 +1412,7 @@ ROUTES.push(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const fl = book.filer as any;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      rows = [...(book.holdings as any[]), ...(book.exited as any[])].filter((h) => h.change).map((h) => ({ ...classFields(h), filer: { cik: fl.cik, slug: fl.slug, name: fl.name, curated: fl.curated }, ...h }));
+      rows = [...(book.holdings as any[]), ...(book.exited as any[])].filter((h) => h.change || unreliableOf(h)).map((h) => ({ ...classFields(h), filer: { cik: fl.cik, slug: fl.slug, name: fl.name, curated: fl.curated }, ...h, ...(unreliableOf(h) ? { change: h.change ?? 'unknown', value_delta: null, ...(reasonOf(h) ? { unreliable_reason: reasonOf(h)! } : {}) } : {}) }));
       stamp = STAMP.get(book);
       source = 'filer';
     } else if (stock) {
@@ -1432,7 +1437,7 @@ ROUTES.push(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const c = (await new Response(obj.body).json()) as any;
       const types = await filerTypes(env);
-      rows = rowsOf(c).map((h) => ({ ...classFields(h), filer: { cik: pad(String(h.cik)), slug: h.slug ?? null, name: h.filer_name ?? null, curated: h.curated ?? null, type: normType(types.get(pad(String(h.cik))) ?? h.type) }, cusip: h.cusip, ticker: h.ticker ?? null, issuer: h.issuer ?? null, put_call: h.put_call ? String(h.put_call).toUpperCase() : null, shares: h.shares, prev_shares: h.prev_shares, share_change: h.share_change ?? (h.prev_shares == null ? null : h.shares - h.prev_shares), value_usd: h.value, value_delta_usd: unreliableOf(h) ? null : h.value_delta, ...(unreliableOf(h) ? { unreliable: unreliableOf(h)!, ...(typeof h.unreliable_reason === 'string' ? { unreliable_reason: h.unreliable_reason } : {}), value_change_usd: h.value_change ?? null } : {}), change: h.change, accession: h.accession ?? null, accepted_at: noMs(h.accepted_at) }));
+      rows = rowsOf(c).map((h) => ({ ...classFields(h), filer: { cik: pad(String(h.cik)), slug: h.slug ?? null, name: h.filer_name ?? null, curated: h.curated ?? null, type: normType(types.get(pad(String(h.cik))) ?? h.type) }, cusip: h.cusip, ticker: h.ticker ?? null, issuer: h.issuer ?? null, put_call: h.put_call ? String(h.put_call).toUpperCase() : null, shares: h.shares, prev_shares: h.prev_shares, share_change: h.share_change ?? (h.prev_shares == null ? null : h.shares - h.prev_shares), value_usd: h.value, value_delta_usd: unreliableOf(h) ? null : h.value_delta, ...(unreliableOf(h) ? { unreliable: unreliableOf(h)!, ...(reasonOf(h) ? { unreliable_reason: reasonOf(h)! } : {}), value_change_usd: h.value_change ?? null } : {}), change: h.change, accession: h.accession ?? null, accepted_at: noMs(h.accepted_at) }));
       source = 'all';
     }
     const curatedCiks = cohort === 'curated' ? new Set((await filers(env)).map((f) => f.cik)) : null;

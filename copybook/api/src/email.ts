@@ -46,7 +46,8 @@ const LOW_HOLD = 50;
 /** Weekends: what each provider keeps for account mail while the Friday email uses the rest. */
 export const WEEKEND_RESERVE = 10;
 export const isWeekend = (t: number) => [0, 6].includes(new Date(t).getUTCDay());
-const DELAY_MARK = '(delayed: email limit) ';
+/** The subject mark of an email held for the 00:00 UTC reset (the lead, Nov 11). */
+export const DELAY_MARK = 'Delayed by our daily email limit: ';
 /** Usage from Resend's x-resend-daily-quota and x-resend-monthly-quota headers (emails sent, account-wide). */
 export const mailQuota: { day: string; used: number; month: string; monthly: number; delayed: number; mailgun: number; refused?: string; kinds?: MailKinds } = { day: '', used: 0, month: '', monthly: 0, delayed: 0, mailgun: 0 };
 /** This host's sends today by kind (both providers): real members, test and critic members, account mail; `preview` (part of test) is previews, replays and samples. */
@@ -159,7 +160,7 @@ export async function mailRoom(env: Env): Promise<number> {
 }
 
 /** Mail that doesn't fit today's budget waits for the reset, marked; its filings aren't timed as fast. */
-async function delay(env: Env, mails: Mail[]): Promise<void> {
+export async function delay(env: Env, mails: Mail[]): Promise<void> {
   if (!mails.length) return;
   const today = new Date().toISOString().slice(0, 10);
   const q = JSON.parse((await env.DB.get(DELAYED)) ?? '[]') as (Mail & { day: string })[];
@@ -177,7 +178,7 @@ async function delay(env: Env, mails: Mail[]): Promise<void> {
 export const SINK_UNTIL = Date.parse('2026-11-17T00:00:00Z');
 /** The cap rules in plain words, for /health, status.json and /status/. */
 export const MAIL_POLICY =
-  "Account emails (sign-in, welcome) are sent even past the alert cap, until Resend itself refuses them; then they go out after the 00:00 UTC reset. Alert emails over the cap wait until 00:00 UTC, marked delayed; chat, feed and webhook alerts go at once. Test and preview mail goes to a test inbox, not by email, through Nov 16.";
+  'Account emails (sign-in, welcome) are sent even past the alert cap, until Resend itself refuses them; then they go out after the 00:00 UTC reset. Paid and trialing members\' 13F alert emails over the cap wait for the 00:00 UTC reset, marked "Delayed by our daily email limit", and go first then. Other alert emails over the cap (Form 4 and 13D/G alerts, free members\' alerts) are skipped, with a note in the member\'s feed. Chat, feed and webhook alerts go at once either way. Test and preview mail goes to a test inbox, not by email, through Nov 16.';
 const isTestMail = (m: Mail) => !!m.preview || !!m.test || testAddress(m.to);
 /** The sink's object for one address: unguessable (HMAC of the address), readable at PUBLIC_URL + this key. */
 /** Each critic's aliases (copybook-test-<critic>-<anything>) share the critic's own test inbox. */
@@ -369,7 +370,7 @@ async function notice80(env: Env): Promise<void> {
     if (await env.DB.get(k)) continue;
     await env.DB.put(k, '1', { expirationTtl: 40 * 86400 });
     const [used, cap] = what.startsWith('day') ? [mailQuota.used, MAIL_DAILY_CAP] : [mailQuota.monthly, MAIL_MONTHLY_CAP];
-    await sendMail(env, [{ to: env.CONTACT_EMAIL ?? 'hello@factordynamics.com', subject: `Copybook: ${Math.round((used / cap) * 100)}% of this ${what.split(' ')[0]}'s email sends used (${used} of ${cap})`, text: `Resend's free plan: ${used} of ${cap} emails sent this ${what}. Past ${cap - MAIL_RESERVE}, alerts are queued and sent after the reset, marked "(delayed: email limit)"; chat, feed and webhook alerts still go out at once. Sign-in, receipts, pause and resume always go out.` }]);
+    await sendMail(env, [{ to: env.CONTACT_EMAIL ?? 'hello@factordynamics.com', subject: `Copybook: ${Math.round((used / cap) * 100)}% of this ${what.split(' ')[0]}'s email sends used (${used} of ${cap})`, text: `Resend's free plan: ${used} of ${cap} emails sent this ${what}. Past ${cap - MAIL_RESERVE}, members' 13F alert emails wait for the reset, marked "Delayed by our daily email limit", and other alert emails are skipped with a feed note; chat, feed and webhook alerts still go out at once. Sign-in, receipts, pause and resume always go out.` }]);
   }
 }
 
@@ -378,7 +379,8 @@ export async function retryMail(env: Env): Promise<Record<string, unknown>> {
   const out: Record<string, unknown> = {};
   const today = new Date().toISOString().slice(0, 10);
   const waiting = JSON.parse((await env.DB.get(DELAYED)) ?? '[]') as (Mail & { day: string })[];
-  const due = waiting.filter((m) => m.day < today);
+  // 13F alert emails first in the new day's room (the lead, Nov 11), then the rest in the order they waited.
+  const due = waiting.filter((m) => m.day < today).sort((a, b) => Number(!!b.filing) - Number(!!a.filing));
   if (due.length) {
     await env.DB.put(DELAYED, JSON.stringify(waiting.filter((m) => m.day >= today)));
     // What still doesn't fit goes back on the queue (sendMail does that) for the next reset.

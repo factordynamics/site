@@ -64,6 +64,9 @@ export interface Env {
   MOVED_TO?: string;
   /** "on" (wrangler.toml): gene serves the data stores from memory and buffers /track counts (hot.ts). */
   MEMORY_CACHE?: string;
+  /** Optional KV for non-member writes (/track counts, its rate limit): gene binds its own local file, kept off the members'
+   * fsyncs (the runner, Nov 11). Unbound: DB. */
+  OPS_KV?: KV;
   /** The base for members' private feed URLs (gene's Funnel): feed readers poll every few minutes, off the shared Workers quota. */
   FEED_URL?: string;
   /** The mailing address marketing email must carry (the Friday email, Email 2). Empty: no Copy ask, and Email 2 isn't sent. */

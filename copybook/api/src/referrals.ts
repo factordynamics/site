@@ -138,7 +138,7 @@ async function hadSubscription(env: Env, email: string, existing: Member | null)
   return false;
 }
 
-export async function createCheckout(env: Env, b: Record<string, unknown>, client?: 'bot' | 'browser' | 'unknown'): Promise<Reply> {
+export async function createCheckout(env: Env, b: Record<string, unknown>, client?: 'bot' | 'browser' | 'unknown', enforceTrial = false): Promise<Reply> {
   const plan = String(b.plan ?? '');
   const interval = String(b.interval ?? '');
   if (!MONTH[plan] || (interval !== 'monthly' && interval !== 'yearly')) return { status: 400, body: { ok: false, error: 'plan: copy, pro or fund; interval: monthly or yearly', code: 'bad_request' } };
@@ -163,8 +163,10 @@ export async function createCheckout(env: Env, b: Record<string, unknown>, clien
   const tag = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
   const isTest = b.test === true || (!!email && testAddress(email)) || /^test/i.test(source ?? '') || gate;
   // One free trial per person (the lead, Nov 11): an address that has had a Copybook subscription before (any plan, a
-  // trial included) gets plain checkout, so lapsing and re-trialling each season isn't free. Test addresses are exempt.
-  const trial = !(email && !isTest && (await hadSubscription(env, email, existing)));
+  // trial included) gets plain checkout, so lapsing and re-trialling each season isn't free. Test addresses are exempt,
+  // except under an operator-signed gate header (enforceTrial: x-copybook-gate), so the launch gate runs the real check.
+  const had = !!email && (!isTest || enforceTrial) && (await hadSubscription(env, email, existing));
+  const trial = !had;
   const touch = { utm_source: tag(b.utm_source, 60), utm_content: tag(b.utm_content, 60), landing: tag(b.landing, 120) };
   const cs = await stripe(env, 'POST', 'checkout/sessions', {
     ...(isTest ? { 'metadata[test]': 'true' } : {}),
@@ -197,7 +199,7 @@ export async function createCheckout(env: Env, b: Record<string, unknown>, clien
   // The first charge, after the trial, with the referral month off: what the pricing page shows next to the button.
   const list = Number(price.unit_amount ?? 0);
   const first = { interval, list_usd: list / 100, discount_usd: MONTH[plan] / 100, first_charge_usd: Math.max(0, list - MONTH[plan]) / 100, charged_after_trial_days: TRIAL_DAYS };
-  return { status: 200, body: { ok: true, url: cs.url, trial_days: trial ? TRIAL_DAYS : 0, referral: ref ? { applied: true, months_free: 1, ...(list ? first : {}) } : code ? { applied: false } : null } };
+  return { status: 200, body: { ok: true, url: cs.url, trial_days: trial ? TRIAL_DAYS : 0, ...(enforceTrial ? { gate: { enforce_trial: true, had_subscription: had } } : {}), referral: ref ? { applied: true, months_free: 1, ...(list ? first : {}) } : code ? { applied: false } : null } };
 }
 
 /** Records a referred subscription under its referrer, once. */

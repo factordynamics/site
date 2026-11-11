@@ -7,6 +7,10 @@
 import type { Env, R2, R2Object } from './env';
 
 export const memoryOn = (env: Env) => env.MEMORY_CACHE === 'on' && !env.MOVED_TO;
+/** Where /track counts and its rate limit live: OPS_KV when bound (gene), else DB. */
+const scratch = (env: Env) => env.OPS_KV ?? env.DB;
+/** A /track key: OPS_KV's copy, else the one written to DB before OPS_KV was bound (that day's earlier counts). */
+export const readTrack = async (env: Env, key: string) => (await scratch(env).get(key)) ?? (env.OPS_KV ? await env.DB.get(key) : null);
 
 const HOT = /^(hl\/|changes\/|h\/|fb\/|meta\/builds\.json$)/;
 /** A copy is read again after a minute; a write through this host drops it at once. */
@@ -100,9 +104,9 @@ export async function trackAllowed(env: Env, ip: string): Promise<boolean> {
     return true;
   }
   const k = `rl:track:${ip}`;
-  const n = Number((await env.DB.get(k)) ?? 0);
+  const n = Number((await scratch(env).get(k)) ?? 0);
   if (n >= 120) return false;
-  await env.DB.put(k, String(n + 1), { expirationTtl: 3600 });
+  await scratch(env).put(k, String(n + 1), { expirationTtl: 3600 });
   return true;
 }
 
@@ -121,9 +125,9 @@ export async function flushTrack(env: Env): Promise<void> {
   flushedAt = Date.now();
   flushing = (async () => {
     const write = async (key: string, ttl: number, fns: ((d: Record<string, Record<string, Record<string, number>>>) => void)[]) => {
-      const d = JSON.parse((await env.DB.get(key)) ?? '{}');
+      const d = JSON.parse((await readTrack(env, key)) ?? '{}');
       for (const f of fns) f(d);
-      await env.DB.put(key, JSON.stringify(d), { expirationTtl: ttl });
+      await scratch(env).put(key, JSON.stringify(d), { expirationTtl: ttl });
     };
     const group = (k: (h: TrackHit) => string, f: (h: TrackHit) => TrackHit['apply']) => {
       const m = new Map<string, TrackHit['apply'][]>();

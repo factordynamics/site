@@ -138,7 +138,7 @@ export function openapi() {
             weight: { type: ['number', 'null'], description: 'Share of the filer\'s whole 13F book that period, 6 decimals; null when that total isn\'t known.' },
             value_delta_usd: { type: ['integer', 'null'], description: 'The row\'s dollar change: the data run\'s per-line value_delta, which `counts.net` sums (share rows of `net_quarter`). Null when unknown or the line is flagged (`unreliable`).' },
             value_delta_basis: { type: ['string', 'null'], enum: ['trade', 'filed_value', 'net_shares_repriced', null], description: 'What value_delta_usd measures: `trade`, shares traded x this filing\'s value per share; `filed_value`, the change in reported value (a line whose share counts don\'t support a trade). Null on rows from builds before the label.' },
-            shares_basis: { type: 'string', enum: ['contracts'], description: 'Present on an option line the filer reported in contracts: the data run multiplied its shares by 100, and it counts normally.' },
+            shares_basis: { type: 'string', enum: ['as_filed', 'contracts', 'principal', 'converted'], description: 'What `shares` counts, as the data run publishes it: as_filed (the filed count), contracts (an option line filed in contracts, multiplied by 100; counts normally), principal (a PRN line: principal amount, not shares), converted (an hl/ row whose count the data run converted). Absent when the data does not label it.' },
             trade_usd_implied: { type: ['integer', 'null'], description: 'Shares traded x this filing\'s value per share, for reference: not summed into net.' },
             classes: {
               type: 'array',

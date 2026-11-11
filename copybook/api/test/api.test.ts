@@ -531,7 +531,7 @@ describe('copybook api', () => {
     expect(sent).toHaveLength(1);
   });
 
-  it("the day's email limit: 13F alerts first, deadline week one email an hour, past the room a feed note and /status/, never a queue", async () => {
+  it("the day's email limit: 13F alerts first, deadline week one email an hour; past the room a member's 13F waits for the reset, marked, and goes first; the rest is skipped with a feed note and /status/", async () => {
     const { deliver, flushHeld, CAP_NOTE } = await import('../src/alerts');
     const { mailQuota } = await import('../src/email');
     const f13 = (slug: string, manager: string, acc: string, t: number) => ({ slug, slugs: [slug], manager, name: manager, quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-16', accession: acc, sec_url: 'https://www.sec.gov/x', accepted: new Date(t).toISOString(), tickers: [], moves: { bought_usd: 1e6, sold_usd: 0, new: [], added: [], trimmed: [], exited: [] } });
@@ -553,8 +553,8 @@ describe('copybook api', () => {
     await flushHeld(env, t0 + 61 * 60_000);
     const cap1 = sent.filter((m) => m.to[0] === 'cap1@example.com').map((m) => m.subject);
     expect([cap1.length, /^2 funds you follow filed: /.test(cap1[1])]).toEqual([2, true]);
-    // Two emails of room left (100 less the 15 kept for account mail, less 83): two members get the next 13F, the third
-    // gets it in its feed with the day's note, and /status/ says so. Nothing waits for the reset.
+    // Two emails of room left (100 less the 15 kept for account mail, less 83): two members get the next 13F now; the
+    // other two paying members' emails wait for the 00:00 UTC reset, marked (the lead, Nov 11), with no feed note.
     const t1 = t0 + 3 * 3600_000;
     resendUsed = 83;
     mailQuota.used = 83;
@@ -566,18 +566,27 @@ describe('copybook api', () => {
     await deliver(env, [f13('warren-buffett', 'Berkshire', '0000950123-26-000778', t1 + 3 * 3600_000) as never], [], t1 + 3 * 3600_000);
     const notes = await Promise.all(['cap1', 'cap2', 'cap3', 'cap4'].map(async (c) => JSON.parse((await env.DB.get(`feed:${c}`)) ?? '[]').some((i: { title: string }) => i.title === CAP_NOTE)));
     const day = new Date(t1).toISOString().slice(0, 10);
-    const cap = JSON.parse((await env.DB.get(`mail:capskip:${day}`))!);
-    expect([sent.length, notes.filter(Boolean).length, cap.count, JSON.parse((await env.DB.get('host:mail-delayed')) ?? '[]').length]).toEqual([2, 2, 2, 0]);
+    const queued = JSON.parse((await env.DB.get('host:mail-delayed')) ?? '[]') as { subject: string; text: string; filing?: boolean }[];
+    expect([sent.length, notes.filter(Boolean).length, await env.DB.get(`mail:capskip:${day}`), queued.length, queued.every((q) => q.subject.startsWith('Delayed by our daily email limit: ') && q.text.startsWith('Delayed by our daily email limit: this email waited') && q.filing)]).toEqual([2, 0, null, 2, true]);
     // 15 left: a Form 4 alone takes none of it (20 kept for 13F alerts): skipped for every member.
     resendUsed = 70;
     mailQuota.used = 70;
     sent = [];
     const t2 = t1 + 4 * 3600_000;
     await deliver(env, [], [{ id: '0001193125-26-123456', slug: 'warren-buffett', manager: 'Warren Buffett', form: '4', kind: 'form4', action: 'buy', filing_date: '2026-11-16', url: 'https://www.sec.gov/y', issuer: 'OCCIDENTAL', display_name: null, ticker: 'OXY', shares: 1000, value_usd: 50_000, avg_price: 50, shares_after: 1000, percent_of_class: null, accepted: new Date(t2).toISOString() } as never], t2);
-    expect([sent.length, JSON.parse((await env.DB.get(`mail:capskip:${day}`))!).count]).toEqual([0, 6]);
+    expect([sent.length, JSON.parse((await env.DB.get(`mail:capskip:${day}`))!).count, notes.length]).toEqual([0, 4, 4]);
+    expect((await Promise.all(['cap1', 'cap2', 'cap3', 'cap4'].map(async (c) => JSON.parse((await env.DB.get(`feed:${c}`)) ?? '[]').some((i: { title: string }) => i.title === CAP_NOTE)))).every(Boolean)).toBe(true);
     const { alertHealth } = await import('../src/status');
     const ah = await alertHealth(env, t2);
-    expect([ah.email_limit?.skipped_emails, ah.reasons.some((r: string) => /daily email limit was reached at \d\d:\d\d UTC: 6 alert emails to 4 members were skipped/.test(r))]).toEqual([6, true]);
+    expect([ah.email_limit?.skipped_emails, ah.reasons.some((r: string) => /daily email limit was reached at \d\d:\d\d UTC: 4 alert emails to 4 members were skipped/.test(r))]).toEqual([4, true]);
+    // After the reset: the waiting 13F emails go first, ahead of other mail that waited.
+    const { retryMail } = await import('../src/email');
+    await env.DB.put('host:mail-delayed', JSON.stringify([{ to: 'other@example.com', subject: 'Delayed by our daily email limit: other', text: 'x', day: '2026-01-01' }, ...queued.map((q) => ({ ...q, day: '2026-01-01' }))]));
+    resendUsed = 0;
+    mailQuota.used = 0;
+    sent = [];
+    await retryMail(env);
+    expect(sent.map((m) => m.subject.startsWith('Delayed by our daily email limit: ') && m.to[0] !== 'other@example.com')).toEqual([true, true, false]);
     resendUsed = 0;
     mailQuota.used = 0;
   });
@@ -2562,7 +2571,7 @@ describe('copybook api', () => {
     mailQuota.used = 0;
     sent = [];
     await retryMail(env);
-    expect(sent.map((m) => [m.to[0], m.subject])).toEqual([['e@example.com', '(delayed: email limit) alert E']]);
+    expect(sent.map((m) => [m.to[0], m.subject])).toEqual([['e@example.com', 'Delayed by our daily email limit: alert E']]);
     expect(JSON.parse((await env.DB.get('host:mail-delayed-ids'))!)).toEqual(['acc-e']);
     resendUsed = 0;
     mailQuota.used = 0;
@@ -3158,6 +3167,13 @@ describe('copybook api', () => {
     expect(await stored()).toBe(1);
     const f = await (await handleRequest(new Request('https://api.test/ops/funnel?days=1', { headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), genv)).json();
     expect([await stored(), f.track[day.slice(6)].visit.source.hottest]).toEqual([3, 3]);
+    // With OPS_KV bound (gene's own file, off the members' fsyncs) counts go there, carrying on from the day's DB copy.
+    const sm = new Map<string, string>();
+    const senv = { ...genv, OPS_KV: { get: async (k: string) => sm.get(k) ?? null, put: async (k: string, v: string) => void sm.set(k, v) } } as unknown as Env;
+    await handleRequest(new Request('https://api.test/track', { method: 'POST', body: JSON.stringify({ kind: 'visit', page: '/hot/', utm_source: 'hottest' }), headers: { 'cf-connecting-ip': '198.51.100.9' } }), senv);
+    await flushTrack(senv);
+    const f2 = await (await handleRequest(new Request('https://api.test/ops/funnel?days=1', { headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), senv)).json();
+    expect([await stored(), JSON.parse(sm.get(day)!).visit.source.hottest, f2.track[day.slice(6)].visit.source.hottest]).toEqual([3, 4, 4]);
   });
 
   it('a retired copy (MOVED_TO) sends every request to the same path on the live host', async () => {
@@ -3659,6 +3675,15 @@ describe('copybook api', () => {
     // One free trial per person (the lead, Nov 11): an address that has had a subscription gets plain checkout.
     const rb = calls.find((c) => c.path === 'checkout/sessions')!.body;
     expect([rb.includes('discounts'), rb.includes('trial_period_days'), rb.includes('payment_method_collection=if_required'), rb.includes('metadata[returning]=true')]).toEqual([false, false, false, true]);
+    // A copybook-test- address is exempt (critics walk the trial again), except under the gate's operator-signed header.
+    await env.DB.put('cus:cus_gt', JSON.stringify({ customer: 'cus_gt', email: 'copybook-test-gate-1@example.com', status: 'canceled', plan: 'copy', interval: 'monthly', subscription: 'sub_gt', alerts: [] }));
+    await env.DB.put('email:copybook-test-gate-1@example.com', 'cus_gt');
+    const gt = (gate?: string) => handleRequest(new Request('https://api.test/checkout', { method: 'POST', body: JSON.stringify({ plan: 'copy', interval: 'monthly', email: 'copybook-test-gate-1@example.com' }), headers: { 'content-type': 'application/json', 'cf-connecting-ip': '192.0.2.50', ...(gate ? { 'x-copybook-gate': gate } : {}) } }), env);
+    const gtok = (await (await handleRequest(new Request('https://api.test/ops/gate-token', { method: 'POST', body: '{"days":3}', headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), env)).json()).token;
+    expect((await handleRequest(new Request('https://api.test/ops/gate-token', { method: 'POST', body: '{}' }), env)).status).toBe(404);
+    const [free, enforced] = [await (await gt()).json(), await (await gt(gtok)).json()];
+    expect([free.trial_days, free.gate, enforced.trial_days, enforced.gate]).toEqual([14, undefined, 0, { enforce_trial: true, had_subscription: true }]);
+    expect([(await gt('enforce-trial')).status, (await gt(await signToken(env.SESSION_SECRET, 'keep', 'enforce-trial', 60))).status]).toEqual([400, 400]);
     expect((await call('/checkout', { body: { plan: 'gold', interval: 'monthly' } })).status).toBe(400);
     // The visitor's first touch and landing page ride on the session; our own checks are tagged test (the lead).
     calls.length = 0;
@@ -5527,17 +5552,19 @@ describe('copybook api', () => {
     // Changes for one filer: its book's change rows, largest first.
     hist.m.set('h/warren-buffett/2026Q2.json', new TextEncoder().encode(JSON.stringify({
       quarter: '2026Q2', report_date: '2026-06-30', accession: 'A2', form: '13F-HR', total_value: 2000, position_count: 2,
-      holdings: [{ cusip: '037833100', ticker: 'AAPL', issuer: 'APPLE INC', shares: 10, value: 1500, change: 'trimmed', prev_shares: 20, share_change: -10, value_delta: -1500 }, { cusip: '674599105', ticker: 'OXY', issuer: 'OCCIDENTAL', shares: 5, value: 500, change: 'unchanged', prev_shares: 5, share_change: 0, value_delta: 20 }],
+      holdings: [{ cusip: '037833100', ticker: 'AAPL', issuer: 'APPLE INC', shares: 10, value: 1500, change: 'trimmed', prev_shares: 20, share_change: -10, value_delta: -1500 }, { cusip: '674599105', ticker: 'OXY', issuer: 'OCCIDENTAL', shares: 5, value: 500, change: 'unchanged', prev_shares: 5, share_change: 0, value_delta: 20 }, { cusip: '191216100', ticker: 'KO', issuer: 'COCA COLA', shares: 4, value: 100, change: null, prev_shares: 40000, value_delta: null, unreliable: 'shares', held_reason: 'share count 1,000x the prior' }],
       exited: [{ cusip: '060505104', ticker: 'BAC', issuer: 'BANK OF AMERICA', shares: 0, value: 0, change: 'exited', prev_shares: 5, share_change: -5, value_delta: -2500 }],
     })));
     r = await v1('/v1/changes/2026Q2?filer=warren-buffett');
-    expect(r.body.data.map((x: { ticker: string; change: string }) => [x.ticker, x.change])).toEqual([['BAC', 'exited'], ['AAPL', 'trimmed']]);
+    // A held line in the filer book (ingest: unreliable set, change null) is listed as unknown with its reason.
+    expect(r.body.data.map((x: { ticker: string; change: string }) => [x.ticker, x.change])).toEqual([['BAC', 'exited'], ['AAPL', 'trimmed'], ['KO', 'unknown']]);
+    expect(r.body.data[2]).toMatchObject({ unreliable: 'shares', unreliable_reason: 'share count 1,000x the prior' });
     expect((await v1('/v1/changes/2026Q2?filer=warren-buffett&change=exited')).body.count).toBe(1);
     // Across filers: the data run's file; cohort by filer type.
     expect((await v1('/v1/changes/2026Q2')).status).toBe(501);
     // Ingest's trailing columns, read by name: a held row (unreliable both, change unknown, no dollar change) is listed by
     // default, and a merged CUSIP pair (Mizuho's ORCL, Q2 filed under the preferred's 68389X204) keeps its filed facts.
-    hist.m.set('changes/2026Q2.json', new TextEncoder().encode(JSON.stringify({ columns: ['cik', 'slug', 'filer_name', 'curated', 'type', 'cusip', 'ticker', 'issuer', 'put_call', 'change', 'shares', 'prev_shares', 'value', 'value_delta', 'unreliable', 'unreliable_reason', 'value_change', 'cusip_pair', 'filed_cusip', 'filed_price', 'matched_cusip'], rows: [
+    hist.m.set('changes/2026Q2.json', new TextEncoder().encode(JSON.stringify({ columns: ['cik', 'slug', 'filer_name', 'curated', 'type', 'cusip', 'ticker', 'issuer', 'put_call', 'change', 'shares', 'prev_shares', 'value', 'value_delta', 'unreliable', 'held_reason', 'value_change', 'cusip_pair', 'filed_cusip', 'filed_price', 'matched_cusip'], rows: [
       ['1067983', 'warren-buffett', 'Berkshire', true, 'active', '037833100', 'AAPL', 'APPLE', null, 'trimmed', 10, 20, 1500, -1500, null, null, null, null, null, null, null],
       ['1387322', null, 'Whale Rock', false, 'hedge_fund', '67066G104', 'NVDA', 'NVIDIA', null, 'new', 50, 0, 9000, 9000, null, null, null, null, null, null, null],
       ['0000102909', null, 'Vanguard', false, 'index', '037833100', 'AAPL', 'APPLE', null, 'added', 1000, 990, 300000, 400, null, null, null, null, null, null, null],
