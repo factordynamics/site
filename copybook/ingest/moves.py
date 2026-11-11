@@ -286,6 +286,36 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
     return len(keep)
 
 
+FALL_PARTS = 4
+
+
+def write_combined_shards() -> int:
+    """fall/{i}.json.gz: every f/ shard in FALL_PARTS gzipped files, for the site build, which otherwise
+    fetches ~9,000 shards one by one from Pages and gets rate-limited. Each part is
+    {"shards": {cik: shard}}; fall/index.json lists the parts. The f/{cik}.json files stay as they are."""
+    import gzip
+
+    out = DATA / "fall"
+    out.mkdir(exist_ok=True)
+    paths = sorted((DATA / "f").glob("*.json"))
+    parts = []
+    for i in range(FALL_PARTS):
+        body = {}
+        for path in paths[i::FALL_PARTS]:
+            shard = read(path)
+            if shard is not None:
+                body[path.stem] = shard
+        name = f"{i}.json.gz"
+        raw = json.dumps({"shards": body}, separators=(",", ":")).encode()
+        (out / name).write_bytes(gzip.compress(raw, 9, mtime=0))
+        parts.append({"file": name, "shards": len(body), "bytes": (out / name).stat().st_size})
+    write(out / "index.json", {
+        "generated_at": (read(DATA / "index.json") or {}).get("generated_at"),
+        "note": "Every f/{cik}.json shard, gzipped, in parts: {\"shards\": {cik: shard}} each. Built with the all-filer data.",
+        "parts": parts, "shards": sum(x["shards"] for x in parts)})
+    return sum(x["shards"] for x in parts)
+
+
 def main() -> int:
     build.SPLITS.clear()
     build.SPLITS.update(sp.table())
@@ -370,6 +400,7 @@ def main() -> int:
             PERIOD[cik] = b["quarter"]
             FILING[cik] = filing(b)
     print(f"moves: holder index for {write_holders(shards, types, curated, filers)} issuers", flush=True)
+    print(f"moves: {write_combined_shards()} shards in fall/ for the site build", flush=True)
     print(f"moves: {with_prev}/{n} filers have a prior quarter on file; {FIXED[0]} lines rescaled by the "
           f"cross-filer unit check; changes for "
           + ", ".join(f"{q} {len(v)} rows" for q, v in sorted(per_quarter.items())))
