@@ -351,7 +351,63 @@ export function computeMoves(cur: Position[], prev: Position[], limit = MOVE_ROW
   return { moves: movesOf(rows, limit), changed: rows };
 }
 
-function movesOf(rows: MoveRow[], limit = MOVE_ROWS): Moves {
+/** An alert's ID in delivery logs, feeds and chats: the first email, its moves follow-up, or its checked rows. */
+export const filingId = (a: { accession: string; followup?: boolean; checked?: boolean }) => `${a.accession}${a.checked ? ':checked' : a.followup ? ':moves' : ''}`;
+
+/** Ingest's cross-filer rule (copybook/ingest/build.py OFF_MEDIAN): a line priced over 3x off the CUSIP's median is mis-scaled. */
+export const OFF_MEDIAN = 3;
+/** Other filers' median value per share for one CUSIP (ingest's consensus.json): this quarter and the one before. */
+export interface Consensus {
+  cur?: number | null;
+  prev?: number | null;
+}
+/** A move row the publish gate held back: named in the alert as "pending check", its figures left out. */
+export interface HeldRow {
+  cusip: string;
+  ticker: string | null;
+  issuer: string;
+  display_name: string | null;
+  put_call: string | null;
+  change?: string;
+  reason: 'price_vs_filers' | 'split_basis';
+}
+
+/**
+ * The publish gate for one move row, before it is sent: null when it passes, else why it is held.
+ * - price_vs_filers: this line's value per share, or the prior line's (either side of a split on file), is over 3x
+ *   off other filers' median for that CUSIP and quarter (ingest's rule, on ingest's consensus.json).
+ * - split_basis: a split is on file (splits.json) and the row's prior shares aren't in today's units. The prior's own
+ *   price says which basis it was filed on: nearer the prior quarter's median (pre-split) or that over the ratio.
+ * Options are not checked (their value is the underlying's).
+ */
+export function gateRow(r: MoveRow, prior: { shares: number; value: number } | undefined, k: number, c: Consensus = {}): HeldRow['reason'] | null {
+  if (r.put_call) return null;
+  const off = (x: number, m: number) => x / m > OFF_MEDIAN || m / x > OFF_MEDIAN;
+  const ps = r.shares > 0 && r.value > 0 ? r.value / r.shares : null;
+  if (ps && c.cur && off(ps, c.cur)) return 'price_vs_filers';
+  if (!prior || !(prior.shares > 0) || !(prior.value > 0)) return null;
+  const pps = prior.value / prior.shares;
+  if (c.prev && [1, k].every((s) => off(pps, c.prev! / s))) return 'price_vs_filers';
+  const near = (x: number, m: number) => Math.abs(Math.log(x / m));
+  const ref = c.prev ? [c.prev, c.prev / k] : ps ? [ps * k, ps] : null;
+  const f = k !== 1 && ref && near(pps, ref[0]) <= near(pps, ref[1]) ? k : 1;
+  if (k !== 1 && ref && Math.abs(r.prev_shares - prior.shares * f) > 0.005 * prior.shares * f) return 'split_basis';
+  return null;
+}
+
+/** computeMoves' result through the publish gate: rows that fail it leave the moves and totals and come back as `held`. */
+export function gateMoves(r: { moves: Moves; changed: MoveRow[] }, prev: Position[], splits: Map<string, number>, consensus: Map<string, Consensus>, limit = MOVE_ROWS): { moves: Moves; changed: MoveRow[]; held: HeldRow[] } {
+  const before = new Map(prev.map((p) => [`${p.cusip}|${p.put_call ?? ''}`, p]));
+  const held: HeldRow[] = [];
+  const changed = r.changed.filter((x) => {
+    const reason = gateRow(x, before.get(`${x.cusip}|${x.put_call ?? ''}`), splits.get(x.cusip) ?? 1, consensus.get(x.cusip));
+    if (reason) held.push({ cusip: x.cusip, ticker: x.ticker, issuer: x.issuer, display_name: x.display_name, put_call: x.put_call, change: x.change, reason });
+    return !reason;
+  });
+  return held.length ? { moves: movesOf(changed, limit), changed, held } : { ...r, held };
+}
+
+export function movesOf(rows: MoveRow[], limit = MOVE_ROWS): Moves {
   const top = (c: string) =>
     rows
       .filter((r) => r.change === c)

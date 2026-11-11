@@ -1,5 +1,5 @@
 import type { Alert13F, AlertEvent } from './alerts';
-import { cleanItem4, UNUSUAL, type MoveRow, type Moves } from './edgar';
+import { cleanItem4, filingId, UNUSUAL, type MoveRow, type Moves } from './edgar';
 import type { Env, Member } from './env';
 import type { Follows } from './members';
 import { firmName } from '../../../holdterm/src/names';
@@ -405,8 +405,41 @@ function yourMoves(a: Alert13F, f: Follows): MoveRow[] {
 }
 const verb = (r: MoveRow) => (!r.prev_shares ? 'new' : !r.shares ? 'exited' : r.shares > r.prev_shares ? 'added' : 'trimmed');
 
+/** Rows the publish gate held back, named without figures. */
+function heldLine(a: Alert13F): string {
+  const names = (a.held ?? []).map((h) => `${h.ticker || h.display_name || h.issuer}${h.put_call ? ` ${h.put_call.toLowerCase()}s` : ''}${h.change ? ` (${h.change})` : ''}`);
+  return `Moves pending check: ${names.join(', ')}. Their figures failed a price check and are left out of this email and its totals; they follow once the full build of the filing confirms them.`;
+}
+
+/** What the alert said, or what the build has, for one row of a correction. */
+const said = (x: { change: string; value_delta: number }) =>
+  x.change === 'unchanged' ? 'unchanged' : `${x.change === 'new' ? 'a new position' : x.change === 'exited' ? 'sold out' : x.change} ${usd(x.value_delta)}`;
+const corrLine = (r: CorrectionRow) => `${r.ticker || r.name}${r.put_call ? ` ${r.put_call.toLowerCase()}s` : ''} was ${said(r.v1)}, not ${said(r.emailed)}.`;
+
+/** One wrong row in a sent 13F alert: what the email said and what the data run's build (and /v1) has. */
+export interface CorrectionRow {
+  cusip: string;
+  ticker: string | null;
+  name: string;
+  put_call: string | null;
+  emailed: { change: string; value_delta: number };
+  v1: { change: string; value_delta: number };
+}
+
+/** "Correction: Jensen (Jensen Investment Management) APH was trimmed -$15.3M, not added +$36.5M". */
+export function correctionMail(env: Env, to: string, a: Alert13F, rows: CorrectionRow[]): Mail {
+  const who = `${a.manager}${a.name && a.name !== a.manager ? ` (${a.name})` : ''}`;
+  const first = rows[0];
+  const subject = `Correction: ${who} ${first.ticker || first.name} was ${said(first.v1)}, not ${said(first.emailed)}${rows.length > 1 ? ` (+${rows.length - 1} more)` : ''}`;
+  const intro = `Our alert for ${who}'s ${quarterLabel(a.quarter)} 13F (accession ${a.accession}) had ${rows.length === 1 ? 'a wrong figure' : `${rows.length} wrong figures`}. Copybook checks every emailed move against the full build of the filing, which is what fund pages, the CSV and /v1 serve. ${rows.length === 1 ? 'This one' : 'These'} didn't match:`;
+  const page = filingUrl(env, a);
+  const text = [intro, rows.map((r) => `- ${corrLine(r)}`).join('\n'), `The filing's moves on Copybook: ${page}`, `SEC filing: ${a.sec_url}`].join('\n\n') + FOOTER;
+  const html = `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:600px"><p>${esc(intro)}</p><ul>${rows.map((r) => `<li><b>${esc(r.ticker || r.name)}</b>${r.put_call ? ` ${esc(r.put_call.toLowerCase())}s` : ''} was <b>${esc(said(r.v1))}</b>, not ${esc(said(r.emailed))}.</li>`).join('')}</ul><p>${link(page, "The filing's moves on Copybook")} · ${link(a.sec_url, 'SEC filing')}</p><p style="font-size:12px;color:#6b7280">${esc(FOOTER.trim()).replace(/\n/g, '<br>')}</p></div>`;
+  return { to, subject, text, html };
+}
+
 function filingBlock(env: Env, a: Alert13F, f: Follows): string {
-  const head = `${a.manager}${a.name && a.name !== a.manager ? ` (${a.name})` : ''}: ${quarterLabel(a.quarter)} 13F, filed ${a.filing_date}${a.followup ? ' (position changes)' : ''}`;
+  const head = `${a.manager}${a.name && a.name !== a.manager ? ` (${a.name})` : ''}: ${quarterLabel(a.quarter)} 13F, filed ${a.filing_date}${a.checked ? ' (checked position changes)' : a.followup ? ' (position changes)' : ''}`;
   const lines = [head];
   const mv = a.moves;
   if (a.reveal) {
@@ -424,6 +457,7 @@ function filingBlock(env: Env, a: Alert13F, f: Follows): string {
       });
       lines.push(`  ${label}: ${parts.join(', ')}`);
     }
+    if (a.held?.length) lines.push(`  ${heldLine(a)}`);
     const mine = yourMoves(a, f);
     if (mine.length) lines.push(`  In your names: ${mine.map((r) => `${rowName(r)} ${verb(r)} ${usd(r.value_delta)}${shareTrade(r) ? `, ${shareTrade(r)}` : ''} (${f.owned.includes(r.ticker!) ? 'you own' : 'watchlist'})`).join('; ')}`);
   } else if (a.top?.length) {
@@ -647,6 +681,7 @@ function filingHtml(env: Env, a: Alert13F, f: Follows): string {
     out.push(`<p style="margin:2px 0">Bought ${usd(mv.bought_usd, false)}, sold ${usd(mv.sold_usd, false)} this quarter.</p>`);
     const rows = MOVE_LABELS.flatMap(([label, k]) => mv[k].map((r) => [esc(label), `<b>${esc(rowName(r))}</b>${esc(flag(r.ticker, f))}${r.unusual ? `<br><span style="color:#b45309;font-size:12px">${UNUSUAL}</span>` : ''}`, usd(r.value_delta), `<span style="white-space:nowrap">${esc(positionChange(label, r))}</span>`, bookPct(r)]));
     out.push(table(['Move', 'Stock', 'Value change', 'Position', 'Trade, % of book'], rows, [2, 4]));
+    if (a.held?.length) out.push(`<p style="margin:6px 0 2px;color:#b45309">${esc(heldLine(a))}</p>`);
     const mine = yourMoves(a, f);
     if (mine.length) out.push(`<p style="margin:6px 0 2px"><b>In your names:</b> ${mine.map((r) => `${esc(rowName(r))} ${verb(r)} ${usd(r.value_delta)}${shareTrade(r) ? `, ${esc(shareTrade(r))}` : ''} (${f.owned.includes(r.ticker!) ? 'you own' : 'watchlist'})`).join('; ')}</p>`);
   } else if (a.top?.length) {
@@ -806,7 +841,7 @@ export function feedItems(env: Env, filings: Alert13F[], events: AlertEvent[], n
   // EDGAR's acceptance, else its filing day, so readers don't show it as new.
   const sentAt = (x: { sent_at?: string; accepted?: string; filing_date: string }) => x.sent_at ?? (seeded ? (x.accepted ?? `${x.filing_date}T21:00:00Z`) : new Date(now).toISOString());
   return [
-    ...filings.map((a) => ({ id: `${a.accession}${a.followup ? ':moves' : ''}`, title: filingHeadline(a), text: filingBlock(env, a, none), url: filingUrl(env, a), published: a.accepted ?? sentAt(a), sent: sentAt(a) })),
+    ...filings.map((a) => ({ id: `${filingId(a)}`, title: `${a.corrected ? 'Corrected · ' : ''}${filingHeadline(a)}`, text: `${filingBlock(env, a, none)}${a.corrected ? `\n  Corrected ${a.corrected.at.slice(0, 10)}: ${a.corrected.rows.map(corrLine).join(' ')}` : ''}`, url: filingUrl(env, a), published: a.accepted ?? sentAt(a), sent: sentAt(a) })),
     ...events.map((e) => ({ id: `${e.id}${e.followup ? ':details' : ''}`, title: eventHeadline(e), text: eventLine(env, e, none), url: e.slug ? `${env.SITE_URL}investors/${e.slug}` : e.url, published: e.accepted ?? sentAt(e), sent: sentAt(e) })),
   ];
 }

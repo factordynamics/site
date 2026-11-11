@@ -317,7 +317,8 @@ export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDeliver
 export async function buildLatency(env: Env, now: number) {
   const log = JSON.parse((await env.DB.get('alerts:latency')) ?? '[]') as LatencyRow[];
   const ch = JSON.parse((await env.DB.get('alerts:latency:ch')) ?? '[]') as ChannelDelivery[];
-  const r = latencyReport(log, now, ch);
+  const r: ReturnType<typeof latencyReport> & { reconciliation?: Record<string, unknown> } = latencyReport(log, now, ch);
+  r.reconciliation = await (await import('./alerts')).reconciliation(env);
   // The 13F rows are complete once the pre-tag rows were re-timed (/speed/ shows the 13F card from then).
   if (r.by_form['13F'] && (await env.DB.get('latency:retimed:v1'))) Object.assign(r.by_form['13F'], { complete: true });
   return r;
@@ -690,6 +691,18 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return json({ ok: true, queued: [...want].filter((a) => have.has(a)), not_found: [...want].filter((a) => !have.has(a)), ...(replayTo ? { replay_at: replayAt } : {}) }, 200, h);
   }
   // Operator audit: an alert's stored copy and who it reached (row IDs only); each member listed gets an access entry.
+  // Operator: reconcile one sent 13F alert against ingest's build now; `to` (test inboxes only) gets its correction.
+  if (req.method === 'POST' && path === '/ops/reconcile') {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    const b = (await req.json().catch(() => ({}))) as { accession?: string; to?: string[] };
+    if (!/^\d{10}-\d{2}-\d{6}$/.test(b.accession ?? '')) return json({ ok: false, error: 'accession: 0000000000-00-000000', code: 'bad_request' }, 400, h);
+    const { previewInbox } = await import('./email');
+    if (b.to && (!Array.isArray(b.to) || !b.to.length || !b.to.every((t) => typeof t === 'string' && previewInbox(t)))) return json({ ok: false, error: 'to: test inboxes only', code: 'bad_request' }, 400, h);
+    const r = await (await import('./alerts')).reconcileAlerts(env, Date.now(), { accession: b.accession!, to: b.to });
+    await logAccess(env, req, 'POST /ops/reconcile', [], `reconcile ${b.accession}${b.to ? ` to ${b.to.length} test inbox(es)` : ''}`);
+    return json({ ok: true, ...r }, 200, h);
+  }
+
   if (req.method === 'GET' && path === '/ops/delivery') {
     if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
     const id = (url.searchParams.get('id') ?? '').trim();

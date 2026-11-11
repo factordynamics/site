@@ -3,7 +3,7 @@ import { refreshBooks } from './book';
 import { countAlerts, logSent, pausedFilingMail, resumeUrl, runRevenue } from './revenue';
 import { inFilingWeek } from './seasons';
 import { alertMail, digestMail, type FeedItem, feedItems, holdtermAlertMail, type Mail, sendMail, weeklyNamesMail } from './email';
-import { bookSuspect, companyFilings, computeMoves, netRenamed, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, prevQuarterEnd, prior13F, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
+import { bookSuspect, companyFilings, computeMoves, filingId, gateMoves, gateRow, movesOf, netRenamed, type Consensus, type HeldRow, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, prevQuarterEnd, prior13F, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
 import { isActive, isPaused, testAddress, type Env, type Member } from './env';
 import { getFollows, getMember, listMembers, putMember, type Follows } from './members';
 import { unsubscribeUrl } from './free';
@@ -52,6 +52,12 @@ export interface Alert13F {
   reveal?: { confidential: boolean; amendment_no: number | null; book_total: number | null; rows: MoveRow[] };
   /** The site has a public filing card at /f/{accession}/ for this filing. */
   card?: boolean;
+  /** Rows the publish gate held back (named "pending check", figures left out); gene re-checks them against ingest's build. */
+  held?: HeldRow[];
+  /** A follow-up with held rows that passed against ingest's build. */
+  checked?: boolean;
+  /** Reconciliation found emailed rows that differ from the build: the stored, feed and archive copies say so. */
+  corrected?: { at: string; rows: import('./email').CorrectionRow[] };
 }
 
 /** Marks the filings that have a public card; cards are rebuilt every 3 hours, so new ones may not yet. */
@@ -263,7 +269,7 @@ async function emailPressure(env: Env, now: number): Promise<{ room: number; pro
 }
 
 /** An alert's id for a member's mailed record: a 13F's moves follow-up and an event's details follow-up are their own sends. */
-const mailId = (x: Alert13F | AlertEvent) => ('accession' in x ? `${x.accession}${x.followup ? ':moves' : ''}` : `${x.id}${x.followup ? ':details' : ''}`);
+const mailId = (x: Alert13F | AlertEvent) => ('accession' in x ? filingId(x) : `${x.id}${x.followup ? ':details' : ''}`);
 /**
  * What this member hasn't been emailed yet (KV mailed:{customer}, ids with the time, 7 days), recorded as mailed now:
  * whatever path sends it (minute poll, a retry, the coalesced flush, two hosts in a hand-off), one alert is one email.
@@ -510,7 +516,7 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
     if (ch.feed_token) await addToFeed(env, m, ch, mine.filings, mine.events, now);
     // Without a feed, what was delivered is remembered (ids by day, 30 days) so a feed created later
     // starts with exactly what the member got, whatever their scope is by then.
-    else if (!only) await rememberDelivered(env, m.customer, now, [...mine.filings.map((a) => `${a.accession}${a.followup ? ':moves' : ''}`), ...mine.events.map((e) => `${e.id}${e.followup ? ':details' : ''}`)]);
+    else if (!only) await rememberDelivered(env, m.customer, now, [...mine.filings.map((a) => `${filingId(a)}`), ...mine.events.map((e) => `${e.id}${e.followup ? ':details' : ''}`)]);
     if (f.digest) digest++;
     else {
       const test = !!m.test || testAddress(m.email);
@@ -620,7 +626,7 @@ export async function recentFeed(env: Env, raw: Member, now: number, days = 30):
     if (!day) continue;
     const { filings, events } = JSON.parse(day) as DigestDay;
     const mine = forMember(m, f, filings, events, meta);
-    const fl = filings.filter((a) => got.has(`${a.accession}${a.followup ? ':moves' : ''}`) || mine.filings.includes(a));
+    const fl = filings.filter((a) => got.has(`${filingId(a)}`) || mine.filings.includes(a));
     const ev = events.filter((e) => got.has(`${e.id}${e.followup ? ':details' : ''}`) || mine.events.includes(e));
     out.push(...feedItems(env, fl, ev, now, true).filter((i) => !out.some((x) => x.id === i.id)));
   }
@@ -1067,6 +1073,7 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
       let tickers: string[] = [];
       let top: MoveRow[] | undefined;
       let changed: MoveRow[] | undefined;
+      let held: HeldRow[] = [];
       if (f.holdings) {
         for (const s of slugs) {
           const book = isExtra ? await filerShardBook(env, e.cik, prev[s]) : await priorBook(env, s, prev[s]);
@@ -1079,6 +1086,10 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
           const exitedNamed = r.changed.some((x) => x.change === 'exited' && x.ticker);
           await lookupTickers(env, exitedNamed ? [...r.moves.new, ...r.changed.filter((x) => x.change === 'new').sort((a, b) => b.value - a.value).slice(0, 30)] : r.moves.new);
           r = netRenamed(r);
+          // The publish gate: a row whose price doesn't check out is named "pending check" and left out.
+          const g = gateMoves(r, book, await splitsFor(env, q), await consensusFor(env, q, r.changed.map((x) => x.cusip)));
+          r = g;
+          held = g.held;
           moves = r.moves;
           changed = keepChanged(r.changed);
           tickers = [...new Set(r.changed.map((x) => x.ticker).filter((t): t is string => !!t))];
@@ -1111,6 +1122,7 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
         ...(!moves && !top ? { moves_pending: true } : {}),
         ...(isExtra ? { extra: true } : {}),
         ...(top ? { top } : {}),
+        ...(held.length ? { held } : {}),
         ...(f.holdings && bookSuspect(f.holdings, f.cover_total ?? null) ? { suspect_book: true } : {}),
       });
     } catch (err) {
@@ -1126,6 +1138,7 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
   const later = fresh.filter((f) => f.moves_pending);
   if (later.length) await env.DB.put('alerts:pending-moves', JSON.stringify([...JSON.parse((await env.DB.get('alerts:pending-moves')) ?? '[]'), ...later]));
   const sent = await deliver(env, fresh, [], now);
+  await queueHeld(env, fresh);
   // A curated filer filed: refresh the data now, so pages, history and moves follow within ~15 minutes.
   const filed = done.filter((e) => curated[e.cik]);
   const refresh = filed.length && rawPeriods ? await dispatchRefresh(env, 'curated', `filing by ${curated[filed[0].cik][0].slug}`, now, filed[0].accession) : undefined;
@@ -1286,8 +1299,8 @@ export async function geneMoves(env: Env, now: number, budgetMs = 45_000): Promi
       // EDGAR tables carry no tickers: look up every changed row, so owned and watched names match and a CUSIP
       // change nets into one share-based move.
       await lookupTickers(env, raw.changed);
-      const r = netRenamed(raw);
-      ready.push({ ...p, moves: r.moves, changed: keepChanged(r.changed), tickers: [...new Set(r.changed.map((x) => x.ticker).filter((t): t is string => !!t))], followup: true, moves_pending: undefined });
+      const r = gateMoves(netRenamed(raw), book, await splitsFor(env, q), await consensusFor(env, q, raw.changed.map((x) => x.cusip)));
+      ready.push({ ...p, moves: r.moves, changed: keepChanged(r.changed), tickers: [...new Set(r.changed.map((x) => x.ticker).filter((t): t is string => !!t))], followup: true, moves_pending: undefined, held: r.held.length ? r.held : undefined });
     } catch (e) {
       failed.push(`${p.accession}: ${e}`);
     }
@@ -1301,7 +1314,208 @@ export async function geneMoves(env: Env, now: number, budgetMs = 45_000): Promi
   const left = (JSON.parse((await env.DB.get('alerts:pending-moves')) ?? '[]') as Alert13F[]).filter((x) => !done.has(key(x)));
   if (left.length) await env.DB.put('alerts:pending-moves', JSON.stringify(left));
   else await env.DB.delete('alerts:pending-moves');
-  return { pending: pending.length, ...(await sendFollowups(env, ready, now)), ...(failed.length ? { failed } : {}) };
+  const sent = await sendFollowups(env, ready, now);
+  await queueHeld(env, ready.filter((x) => !x.replay_to?.length));
+  return { pending: pending.length, ...sent, ...(failed.length ? { failed } : {}) };
+}
+
+/** Ingest's consensus.json (other filers' median value per share by quarter and CUSIP), read at most hourly. */
+let CONSENSUS: { at: number; quarters: Record<string, Record<string, number>> } | null = null;
+export async function consensusFor(env: Env, quarter: string, cusips: string[]): Promise<Map<string, Consensus>> {
+  if (!CONSENSUS || Date.now() - CONSENSUS.at > 3600_000) {
+    try {
+      const r = await fetch(`${env.DATA_URL}consensus.json`);
+      CONSENSUS = { at: Date.now(), quarters: r.ok ? (((await r.json()) as { quarters?: Record<string, Record<string, number>> }).quarters ?? {}) : {} };
+    } catch {
+      CONSENSUS = { at: Date.now(), quarters: {} };
+    }
+  }
+  const cur = CONSENSUS.quarters[quarter] ?? {};
+  const prev = CONSENSUS.quarters[prevQuarter(quarter)] ?? {};
+  return new Map(cusips.map((c) => [c, { cur: cur[c] ?? null, prev: prev[c] ?? null }]));
+}
+
+/** Alerts sent with rows held by the gate: gene re-checks them against ingest's build (KV alerts:pending-check). */
+async function queueHeld(env: Env, sent: Alert13F[]): Promise<void> {
+  const add = sent.filter((a) => a.held?.length);
+  if (!add.length) return;
+  const queue = JSON.parse((await env.DB.get('alerts:pending-check')) ?? '[]') as Alert13F[];
+  const keep = queue.filter((x) => !add.some((a) => a.accession === x.accession));
+  await env.DB.put('alerts:pending-check', JSON.stringify([...keep, ...add.map((a) => ({ ...a, sent_at: new Date().toISOString() }))]));
+}
+
+/** An ingest book row, as /v1 serves it: the move the data run computed for one position. */
+type BuildRow = Omit<MoveRow, 'split'> & { split?: number | { ratio?: number } | null };
+
+/**
+ * Ingest's build of a 13F (R2 h/{slug}/{quarter}.json, or fb/{quarter}/{cik}.json for other filers): its changed rows by
+ * CUSIP, once the build serves this accession (as the book, or as its base before a merged amendment). Null until then,
+ * or when the book carries no per-row moves.
+ */
+async function buildRows(env: Env, a: Alert13F): Promise<{ build: string | null; rows: Map<string, BuildRow> } | null> {
+  const cik = a.sec_url.match(/\/data\/(\d+)\//)?.[1]?.padStart(10, '0') ?? '';
+  const obj = (!a.extra ? await env.HIST.get(`h/${a.slug}/${a.quarter}.json`) : null) ?? (cik ? await env.HIST.get(`fb/${a.quarter}/${cik}.json`) : null);
+  if (!obj) return null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const q: any = await new Response(obj.body).json();
+  const serves = q.accession === a.accession || (Array.isArray(q.filings) && q.filings.some((x: { accession?: string; role?: string }) => x.accession === a.accession && x.role === 'base'));
+  const holdings = (q.holdings ?? []) as BuildRow[];
+  if (!serves || !holdings.some((h) => 'value_delta' in h)) return null;
+  const rows = new Map(holdings.filter((h) => h.change && h.change !== 'unchanged').map((h) => [`${h.cusip}|${h.put_call ?? ''}`, h]));
+  return { build: obj.customMetadata?.['build-id'] ?? obj.customMetadata?.build_id ?? q.build_id ?? null, rows };
+}
+const ratioOf = (r: BuildRow) => (typeof r.split === 'object' ? Number(r.split?.ratio) || 1 : Number(r.split) || 1);
+
+/**
+ * gene, every 5 minutes: rows the gate held, against ingest's build. A held row that the build has, with no unit flag,
+ * and that now passes the same gate goes out in a "checked" follow-up; one the build shows unchanged is dropped; the rest
+ * wait, for up to 7 days.
+ */
+export async function checkHeld(env: Env, now: number): Promise<Record<string, unknown>> {
+  const queue = JSON.parse((await env.DB.get('alerts:pending-check')) ?? '[]') as Alert13F[];
+  if (!queue.length) return { pending: 0 };
+  const ready: Alert13F[] = [];
+  const wait: Alert13F[] = [];
+  const log: Record<string, unknown>[] = [];
+  for (const a of queue) {
+    const b = await buildRows(env, a);
+    if (!b) {
+      if (now - Date.parse(a.accepted ?? a.filing_date) < 7 * DAY) wait.push(a);
+      else log.push({ accession: a.accession, result: 'expired', rows: a.held!.length });
+      continue;
+    }
+    const cons = await consensusFor(env, a.quarter, a.held!.map((h) => h.cusip));
+    const ok: MoveRow[] = [];
+    const still: HeldRow[] = [];
+    for (const h of a.held!) {
+      const r = b.rows.get(`${h.cusip}|${h.put_call ?? ''}`);
+      if (!r) continue; // the build shows no move here
+      const prior = r.prev_shares ? { shares: r.prev_shares_as_filed ?? r.prev_shares, value: r.prev_value ?? 0 } : undefined;
+      const row: MoveRow = { ...r, split: undefined, ticker: r.ticker ?? h.ticker, delta_pct_of_book: r.delta_pct_of_book ?? null };
+      if (!r.suspect_units && !gateRow(row, prior, ratioOf(r), cons.get(r.cusip))) ok.push(row);
+      else still.push(h);
+    }
+    log.push({ accession: a.accession, build: b.build, passed: ok.length, held: still.length, dropped: a.held!.length - ok.length - still.length });
+    if (ok.length) ready.push({ ...a, moves: movesOf(ok), changed: ok, tickers: [...new Set(ok.map((x) => x.ticker).filter((t): t is string => !!t))], followup: true, checked: true, held: undefined, moves_pending: undefined, sent_at: undefined });
+    if (still.length && now - Date.parse(a.accepted ?? a.filing_date) < 7 * DAY) wait.push({ ...a, held: still });
+  }
+  const done = new Set(queue.map((x) => x.accession));
+  const added = (JSON.parse((await env.DB.get('alerts:pending-check')) ?? '[]') as Alert13F[]).filter((x) => !done.has(x.accession));
+  if (wait.length || added.length) await env.DB.put('alerts:pending-check', JSON.stringify([...wait, ...added]));
+  else await env.DB.delete('alerts:pending-check');
+  const { claimOnce } = await import('./failover');
+  const mine: Alert13F[] = [];
+  for (const f of ready) if (await claimOnce(env, `checked/${f.accession}`, now)) mine.push(f);
+  const sent = mine.length ? await deliver(env, mine, [], now) : null;
+  return { pending: queue.length, checked: log, ...(sent ? { sent } : {}) };
+}
+
+/** One reconciliation check, newest first in KV alerts:reconciled (latency.json's `reconciliation`). */
+export interface Reconciled {
+  accession: string;
+  slug: string;
+  quarter: string;
+  accepted: string | null;
+  checked_at: string;
+  build: string | null;
+  result: 'pass' | 'fail';
+  rows: number;
+  failed: import('./email').CorrectionRow[];
+  recipients: number;
+  /** Correction emails sent (0 for alerts sent before reconciliation began: the /status/ Data entry is their notice). */
+  mailed: number;
+}
+
+/** Alerts accepted from here get correction emails; earlier ones are checked and logged only. */
+export const RECONCILE_MAIL_FROM = '2026-11-11T05:00:00Z';
+const MISMATCH = 0.1;
+
+/**
+ * gene, every 5 minutes: each 13F alert with moves, once ingest's build serves its filing, row by row against the build
+ * (what fund pages, the CSV and /v1 serve). A row fails on a different direction (new, added, trimmed, exited, or
+ * unchanged), a different sign, or a value over 10% off. On a failure the alert's recipients get a correction email and
+ * the stored copy (feed and archive) is marked corrected. Every check is logged pass or fail.
+ * `only`: an operator's run for one accession; `to`: send its correction to these test inboxes instead.
+ */
+export async function reconcileAlerts(env: Env, now: number, only?: { accession: string; to?: string[] }): Promise<Record<string, unknown>> {
+  const log = JSON.parse((await env.DB.get('alerts:reconciled')) ?? '[]') as Reconciled[];
+  const done = new Set(log.map((x) => x.accession));
+  const found = new Map<string, { a: Alert13F; rows: Map<string, MoveRow>; days: string[] }>();
+  for (let d = 0; d < (only ? 31 : 3); d++) {
+    const day = etDay(now - d * DAY);
+    const raw = await env.DB.get(`digest:${day}`);
+    if (!raw) continue;
+    for (const a of (JSON.parse(raw) as DigestDay).filings) {
+      if (!a.moves || a.reveal || a.replay_to?.length || (only ? a.accession !== only.accession : done.has(a.accession))) continue;
+      const x = found.get(a.accession) ?? { a, rows: new Map<string, MoveRow>(), days: [] };
+      for (const [change, rows] of [['new', a.moves.new], ['added', a.moves.added], ['trimmed', a.moves.trimmed], ['exited', a.moves.exited]] as const) for (const r of rows) x.rows.set(`${r.cusip}|${r.put_call ?? ''}`, { ...r, change });
+      if (!x.days.includes(day)) x.days.push(day);
+      found.set(a.accession, x);
+    }
+  }
+  const out: Reconciled[] = [];
+  let pending = 0;
+  for (const { a, rows, days } of found.values()) {
+    const b = await buildRows(env, a);
+    if (!b) {
+      pending++;
+      continue;
+    }
+    const failed: import('./email').CorrectionRow[] = [];
+    for (const r of rows.values()) {
+      let v: BuildRow | undefined = b.rows.get(`${r.cusip}|${r.put_call ?? ''}`);
+      // A CUSIP change the alert netted into one move (XOM's Q3 reorganisation): the build keeps the exit and the new line.
+      if (!v && r.ticker && [...b.rows.values()].some((x) => x.ticker === r.ticker && x.change === 'exited')) continue;
+      if (v?.change === 'new' && r.change !== 'new' && r.ticker && [...b.rows.values()].some((x) => x.ticker === r.ticker && x.change === 'exited')) continue;
+      const got = v ? { change: v.change!, value_delta: Math.round(v.value_delta) } : { change: 'unchanged', value_delta: 0 };
+      const bad = got.change !== r.change || Math.sign(got.value_delta) !== Math.sign(r.value_delta) || Math.abs(r.value_delta - got.value_delta) > MISMATCH * Math.abs(got.value_delta);
+      if (bad) failed.push({ cusip: r.cusip, ticker: r.ticker ?? v?.ticker ?? null, name: r.display_name || r.issuer, put_call: r.put_call, emailed: { change: r.change!, value_delta: r.value_delta }, v1: got });
+      v = undefined;
+    }
+    failed.sort((x, y) => Math.abs(y.emailed.value_delta - y.v1.value_delta) - Math.abs(x.emailed.value_delta - x.v1.value_delta));
+    // Who got it: the delivery log, as /ops/delivery reads it.
+    const rec = await deliveryRecord(env, a.accession, now);
+    const members = new Map((await listMembers(env)).map((m) => [m.customer, m]));
+    const to = only?.to ?? (failed.length && (a.accepted ?? '') >= RECONCILE_MAIL_FROM ? rec.recipients.map((x) => members.get(x.customer)?.email).filter((e): e is string => !!e) : []);
+    let mailed = 0;
+    if (failed.length) {
+      const { correctionMail, sendMail } = await import('./email');
+      const uniq = [...new Set(to)];
+      if (uniq.length) {
+        await sendMail(env, uniq.map((t) => correctionMail(env, t, a, failed)));
+        mailed = uniq.length;
+      }
+      if (!only?.to) {
+        const corrected = { at: new Date(now).toISOString().replace(/\.\d{3}Z$/, 'Z'), rows: failed };
+        for (const day of days) {
+          const raw = await env.DB.get(`digest:${day}`);
+          if (!raw) continue;
+          const store = JSON.parse(raw) as DigestDay;
+          for (const x of store.filings) if (x.accession === a.accession) x.corrected = corrected;
+          await env.DB.put(`digest:${day}`, JSON.stringify(store), { expirationTtl: 31 * 86400 });
+        }
+      }
+    }
+    out.push({ accession: a.accession, slug: a.slug, quarter: a.quarter, accepted: a.accepted ?? null, checked_at: new Date(now).toISOString().replace(/\.\d{3}Z$/, 'Z'), build: b.build, result: failed.length ? 'fail' : 'pass', rows: rows.size, failed, recipients: rec.counts.members, mailed });
+  }
+  if (out.length && !only?.to) {
+    const keep = log.filter((x) => !out.some((o) => o.accession === x.accession));
+    await env.DB.put('alerts:reconciled', JSON.stringify([...out, ...keep].slice(0, 500)));
+  }
+  return { checked: out.map((x) => ({ accession: x.accession, result: x.result, rows: x.rows, failed: x.failed.length, mailed: x.mailed })), pending };
+}
+
+/** latency.json's `reconciliation`: "alerts reconciled: N of N" on /status/. */
+export async function reconciliation(env: Env): Promise<Record<string, unknown>> {
+  const log = JSON.parse((await env.DB.get('alerts:reconciled')) ?? '[]') as Reconciled[];
+  return {
+    checked: log.length,
+    passed: log.filter((x) => x.result === 'pass').length,
+    failed: log.filter((x) => x.result === 'fail').length,
+    held_pending: (JSON.parse((await env.DB.get('alerts:pending-check')) ?? '[]') as unknown[]).length,
+    since: log.length ? log.reduce((m, x) => (x.checked_at < m ? x.checked_at : m), log[0].checked_at) : null,
+    recent: log.slice(0, 20).map((x) => ({ accession: x.accession, slug: x.slug, quarter: x.quarter, checked_at: x.checked_at, result: x.result, rows: x.rows, failed_rows: x.failed.length, corrections_sent: x.mailed })),
+  };
 }
 
 export async function runBackstop(env: Env, now: number): Promise<Record<string, unknown>> {

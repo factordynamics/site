@@ -296,6 +296,13 @@ export async function presignGet(env: Env, key: string, ttl: number, query: Reco
   return `https://${hostname}${path}?${qs}&X-Amz-Signature=${sig}`;
 }
 
+/** gene, every 5 minutes: held rows re-checked and sent 13F alerts reconciled against ingest's build. */
+async function checks(env: Env, now: number): Promise<Record<string, unknown>> {
+  if (new Date(now).getUTCMinutes() % 5 !== 1) return {};
+  const a = await import('./alerts');
+  return { held: await a.checkHeld(env, now).catch((e) => `error: ${e}`), reconciled: await a.reconcileAlerts(env, now).catch((e) => `error: ${e}`) };
+}
+
 /** Per invocation on Cloudflare: whether gene polled in the last 15 minutes (only then can both send). */
 let claimsFor: { at: number; on: boolean } | null = null;
 
@@ -399,6 +406,7 @@ export async function syncedMinute(env: Env, now: number, run: (env: Env) => Pro
     out.poller = 'backup (cloudflare polls)';
     // 13Fs Cloudflare sent without moves: gene computes them from EDGAR and sends the follow-up.
     out.moves = await (await import('./alerts')).geneMoves(env, now).catch((e) => `error: ${e}`);
+    Object.assign(out, await checks(env, now));
     // Hourly: members re-read from Stripe (a missed webhook can't leave a stale record).
     if (new Date(now).getUTCMinutes() === 23) out.reconcile = await (await import('./members')).reconcileMembers(env).catch((e) => `error: ${e}`);
     // While Cloudflare polls, gene's spare minute fills holder rows' EDGAR acceptance times.
@@ -410,6 +418,7 @@ export async function syncedMinute(env: Env, now: number, run: (env: Env) => Pro
   await r2Put(env, GENE_POLLED, JSON.stringify({ last_run_at: iso(now) })).catch((e) => (out.gene_polled = `error: ${e}`));
   Object.assign(out, await run(env));
   out.moves = await (await import('./alerts')).geneMoves(env, now).catch((e) => `error: ${e}`);
+  Object.assign(out, await checks(env, now));
   if (new Date(now).getUTCMinutes() === 23) out.reconcile = await (await import('./members')).reconcileMembers(env).catch((e) => `error: ${e}`);
   await env.DB.put('host:poller', JSON.stringify({ host: 'gene', last_run_at: iso(now) } satisfies PollerLine));
   // What this minute wrote goes to Cloudflare now, not next minute.

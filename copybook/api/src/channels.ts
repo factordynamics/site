@@ -3,7 +3,7 @@ import { channelFailMail, chatText, feedItems, sendMail, teamDuplicateMail, type
 import { isPro, type Env, type Member } from './env';
 import { getMember, type Follows } from './members';
 import { listSeats } from './seats';
-import { cleanItem4 } from './edgar';
+import { cleanItem4, filingId } from './edgar';
 import { hmacHex } from './tokens';
 
 /**
@@ -316,13 +316,13 @@ export async function sendChats(env: Env, customer: string, c: Channels, filings
     if (!where) continue;
     // One post per alert per destination, across members: a Fund team's channel connected by the
     // owner and by seats gets each alert once.
-    const fl = filings.filter((a) => !posted.has(`${where}|${a.accession}${a.followup ? ':moves' : ''}`));
+    const fl = filings.filter((a) => !posted.has(`${where}|${filingId(a)}`));
     const ev = events.filter((e) => !posted.has(`${where}|${e.id}${e.followup ? ':details' : ''}`));
     if (!fl.length && !ev.length) {
       out[dest] = 'already posted';
       continue;
     }
-    for (const a of fl) posted.add(`${where}|${a.accession}${a.followup ? ':moves' : ''}`);
+    for (const a of fl) posted.add(`${where}|${filingId(a)}`);
     for (const e of ev) posted.add(`${where}|${e.id}${e.followup ? ':details' : ''}`);
     const text = chatText(env, fl, ev, f);
     const id = [...fl.map((a) => a.accession), ...ev.map((e) => e.id)].join(',').slice(0, 200);
@@ -370,7 +370,7 @@ export function webhookPayloads(env: Env, filings: Alert13F[], events: AlertEven
   return [
     ...filings.map((a) => ({
       type: '13f',
-      id: `${a.accession}${a.followup ? ':moves' : ''}`,
+      id: `${filingId(a)}`,
       accession: a.accession,
       form: '13F-HR',
       accepted_at: a.accepted ?? null,

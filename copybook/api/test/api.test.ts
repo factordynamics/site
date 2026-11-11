@@ -15,7 +15,7 @@ import sc13gSiri from './fixtures/sc13ga-siri-vanguard.xml?raw';
 import form4BuffettGift from './fixtures/form4-brk-buffett-gift.txt?raw';
 import sc13dBrkA from './fixtures/sc13da-brk-class-a.xml?raw';
 import { quarterStart } from '../src/seasons';
-import { computeMoves, displayCase } from '../src/edgar';
+import { computeMoves, displayCase, gateMoves } from '../src/edgar';
 import { runSeasonal } from '../src/revenue';
 import { signToken } from '../src/tokens';
 import { pauseResumesAt, deadlineMs, deadlineLabel } from '../src/seasons';
@@ -83,6 +83,7 @@ let chatReplies: Record<string, { status: number; body?: unknown }[]>;
 let shards: Record<string, unknown>;
 let events: unknown[];
 let recentMoves: unknown[];
+let consensusQ: Record<string, Record<string, number>>;
 let resendUsed = 0;
 let gh: { method: string; url: string; body?: string }[];
 let ghQueued: number;
@@ -142,6 +143,7 @@ beforeEach(async () => {
   await env.DB.put('alerts:ciks', JSON.stringify(Object.fromEntries([['0001067983', 'warren-buffett'], ['0001040273', 'dan-loeb'], ['0001336528', 'bill-ackman'], ['0001061768', 'seth-klarman']].map(([cik, slug]) => [cik, [{ slug, manager: slug, name: slug, cik, featured: true }]]))));
   events = [];
   recentMoves = [];
+  consensusQ = {};
   resendUsed = 0;
   (await import('../src/email')).mailQuota.day = '';
   gh = [];
@@ -187,6 +189,7 @@ beforeEach(async () => {
     if (url === `${SITE}data/filer_types.json`) return Response.json({ types: ['hedge_fund'], filers: { '0001423053': { type: 'hedge_fund', basis: 'name' } } });
     if (url === `${SITE}data/stock_holders.json`) return new Response('{"stocks":[{"issuer":"67066G","ticker":"NVDA","display_name":"NVIDIA"},{"issuer":"037833","ticker":"AAPL"}]}');
     if (url === `${SITE}data/alerts.json`) return Response.json({ recent: recentMoves });
+    if (url === `${SITE}data/consensus.json`) return Response.json({ quarters: consensusQ });
     if (url === `${SITE}data/events.json`) return Response.json({ events });
     if (url === `${SITE}data/securities.json`) return new Response('{"037833100":{"ticker":"AAPL","name":"Apple"},"23331A109":{"ticker":"DHI","name":"D.R. Horton","sector":"Consumer Discretionary"}}');
     if (url.startsWith('https://data.sec.gov/submissions/')) return url.slice('https://data.sec.gov/'.length) in secFiles ? new Response(secFiles[url.slice('https://data.sec.gov/'.length)]) : new Response('not found', { status: 404 });
@@ -1832,6 +1835,73 @@ describe('copybook api', () => {
     expect([am.change, am.prev_shares, am.split]).toEqual(['added', 1_280_592, undefined]);
     // Equal after the split: no move at all.
     expect(all(computeMoves([pos('APH', '032095101', 1_229_320, 103_632_676), jq3[1]], jq2, undefined, new Map([['032095101', 2]])).moves)).toEqual([]);
+
+    // The publish gate on the pre-fix path (the split kept the rows from the unit check, but no ratio was applied): the
+    // season's four wrong rows, as filed, are each held by splits.json and ingest's consensus.json prices, with or
+    // without the medians; computed with the ratio, they pass.
+    const SPL = new Map([['032095101', 2], ['22788C105', 4]]);
+    const CONS = new Map([['032095101', { cur: 84.3, prev: 176.32 }], ['22788C105', { cur: 264.75, prev: 763.14 }]]);
+    const season: [string, ReturnType<typeof pos>, ReturnType<typeof pos>][] = [
+      ['ICICI Prudential APH', pos('APH', '032095101', 11_300, 1_992_416), pos('APH', '032095101', 70_968, 5_982_602)],
+      ['Mizuho Securities CRWD', pos('CRWD', '22788C105', 19_927, 15_207_091), pos('CRWD', '22788C105', 83_130, 19_203_030)],
+      ['FMR CRWD', pos('CRWD', '22788C105', 7_847_117, 5_988_448_225), pos('CRWD', '22788C105', 40_141_659, 10_627_504_388)],
+      ['Jensen APH', jq2[0], jq3[0]],
+    ];
+    for (const [who, q2, q3] of season) {
+      const prev = [q2, jq2[1]];
+      const cur = [q3, jq3[1]];
+      const old = computeMoves(cur, prev, undefined, new Set([q2.cusip, q2.ticker!]));
+      expect([who, all(old.moves).map((r) => r.change)]).toEqual([who, ['added']]); // what was sent: a buy
+      for (const medians of [CONS, new Map()]) {
+        const g = gateMoves(old, prev, SPL, medians);
+        expect([who, g.held.map((h) => [h.ticker, h.change, h.reason]), all(g.moves), g.moves.bought_usd]).toEqual([who, [[q2.ticker, 'added', 'split_basis']], [], 0]);
+      }
+      expect([who, gateMoves(computeMoves(cur, prev, undefined, SPL), prev, SPL, CONS).held]).toEqual([who, []]);
+    }
+  });
+
+  it('alert accuracy: held rows go out once the build confirms them; a sent row that disagrees with the build gets a correction email and a corrected feed copy', async () => {
+    const { checkHeld, reconcileAlerts, reconciliation, etDay, RECONCILE_MAIL_FROM } = await import('../src/alerts');
+    // Corrections are mailed for alerts accepted from RECONCILE_MAIL_FROM on (earlier ones are logged only).
+    const now = Math.max(Date.now(), Date.parse(RECONCILE_MAIL_FROM) + 2 * 3600_000);
+    const accepted = new Date(now - 3600_000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+    await putMember('cus_j', 'copybook-test-j@fldubai.com', 'active', ['jensen']);
+    await putFollows('cus_j', { investors: ['jensen'] });
+    consensusQ = { '2026Q3': { '032095101': 84.3 }, '2026Q2': { '032095101': 176.32 } };
+    const ACC = '0001171200-26-000023';
+    const base = { slug: 'jensen', slugs: ['jensen'], manager: 'Jensen', name: 'Jensen Investment Management', quarter: '2026Q3', report_date: '2026-09-30', filing_date: accepted.slice(0, 10), accession: ACC, sec_url: 'https://www.sec.gov/Archives/edgar/data/1171200/x-index.html', accepted, tickers: [] };
+    const row = (ticker: string, cusip: string, change: string, shares: number, prev_shares: number, value: number, value_delta: number) => ({ change, ticker, display_name: null, issuer: ticker, cusip, put_call: null, shares, prev_shares, value, value_delta, delta_pct_of_book: value_delta / 3.2e9 });
+    // Ingest's build (h/), as /v1 serves it: APH split-adjusted to a trim, MSFT as sent.
+    hist.m.set('h/jensen/2026Q3.json', new TextEncoder().encode(JSON.stringify({ accession: ACC, quarter: '2026Q3', holdings: [
+      { ...row('APH', '032095101', 'trimmed', 1_047_486, 1_229_320, 88_303_070, -15_328_606), prev_shares_as_filed: 614_660, prev_value: 108_376_851, split: { ratio: 2, from_quarter: '2026Q2', to_quarter: '2026Q3' } },
+      { ...row('MSFT', '594918104', 'added', 519_677, 500_000, 266_542_333, 10_092_000), prev_value: 240_000_000 },
+      { ...row('KO', '191216100', 'unchanged', 10, 10, 700, 0) },
+    ] })));
+
+    // A: the gate held APH. Once the build has it and it passes the same gate, a "checked" follow-up carries it.
+    await env.DB.put('alerts:pending-check', JSON.stringify([{ ...base, moves: { bought_usd: 10_092_000, sold_usd: 0, new: [], added: [row('MSFT', '594918104', 'added', 519_677, 500_000, 266_542_333, 10_092_000)], trimmed: [], exited: [] }, held: [{ cusip: '032095101', ticker: 'APH', issuer: 'APH', display_name: null, put_call: null, change: 'added', reason: 'split_basis' }] }]));
+    const held = await checkHeld(env, now);
+    expect(held).toMatchObject({ checked: [{ accession: ACC, passed: 1, held: 0, dropped: 0 }] });
+    expect(sent.map((m) => [m.to[0], m.subject])).toEqual([['copybook-test-j@fldubai.com', 'Jensen Q3 changes: APH -$15.3M']]);
+    expect(sent[0].text).toContain('(checked position changes)');
+    expect(sent[0].text).toContain('Trimmed: APH -$15.3M');
+    expect(await env.DB.get('alerts:pending-check')).toBeNull();
+
+    // B: the alert as it went out before the fix (APH "added +$36.5M") reconciles against the build: a correction.
+    sent = [];
+    const day = etDay(now);
+    await env.DB.put(`digest:${day}`, JSON.stringify({ filings: [{ ...base, moves: { bought_usd: 46_579_232, sold_usd: 0, new: [], added: [row('APH', '032095101', 'added', 1_047_486, 614_660, 88_303_070, 36_487_232), row('MSFT', '594918104', 'added', 519_677, 500_000, 266_542_333, 10_200_000)], trimmed: [], exited: [] } }], events: [] }));
+    await env.DB.put('delivered:cus_j', JSON.stringify([{ day, ids: [ACC] }]));
+    const r = await reconcileAlerts(env, now);
+    expect(r).toEqual({ checked: [{ accession: ACC, result: 'fail', rows: 2, failed: 1, mailed: 1 }], pending: 0 }); // MSFT within 10%: passes
+    expect(sent.map((m) => [m.to[0], m.subject])).toEqual([['copybook-test-j@fldubai.com', 'Correction: Jensen (Jensen Investment Management) APH was trimmed -$15.3M, not added +$36.5M']]);
+    const store = JSON.parse((await env.DB.get(`digest:${day}`))!);
+    expect(store.filings[0].corrected.rows.map((x: { ticker: string }) => x.ticker)).toEqual(['APH']);
+    // Checked once: the next run doesn't mail again; the log feeds latency.json's reconciliation.
+    sent = [];
+    expect((await reconcileAlerts(env, now)).checked).toEqual([]);
+    expect(sent).toHaveLength(0);
+    expect(await reconciliation(env)).toMatchObject({ checked: 1, passed: 0, failed: 1, held_pending: 0, recent: [{ accession: ACC, result: 'fail', failed_rows: 1, corrections_sent: 1 }] });
   });
 
   it('quota check: one warning a day past 70% of the daily Workers requests, Workers and Pages Functions together', async () => {
