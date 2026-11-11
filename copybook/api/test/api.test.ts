@@ -1455,9 +1455,12 @@ describe('copybook api', () => {
     expect(capped).toEqual({ ok: true, following: true, follow: 'cap_reached', limit: 10, dropped: [{ kind: 'investor', id: 'wally-weitz' }], sign_in_email: 'not_needed' });
     expect(sent).toHaveLength(0);
     expect((await (await call('/follows', { token: s.token })).json()).follows.investors).not.toContain('wally-weitz');
-    // The site's Follow button posts /follows/{slug}: a free member gets the cap (409 cap_reached), never 402.
-    const eleventh = await call('/follows/wally-weitz', { method: 'POST', token: s.token });
-    expect([eleventh.status, await eleventh.json()]).toEqual([409, expect.objectContaining({ follow: 'cap_reached', code: 'cap_reached', limit: 10 })]);
+    // The old Follow button posts /follows/{slug}: the same as /follows/investors/{slug}, so a free member gets the cap,
+    // never "Copy subscription required".
+    for (const path of ['/follows/wally-weitz', '/follows/investors/wally-weitz']) {
+      const eleventh = await call(path, { method: 'POST', token: s.token });
+      expect([eleventh.status, await eleventh.json()]).toEqual([402, expect.objectContaining({ follow: 'cap_reached', code: 'cap_reached', limit: 10 })]);
+    }
     // Free members unfollow from /account/: then the next follow fits.
     expect(await (await call('/follows/fund-a', { method: 'DELETE', token: s.token })).json()).toMatchObject({ ok: true, follow: 'removed' });
     expect(await (await signedIn({ email: 'reader@reader.test', follow: { kind: 'investor', id: 'wally-weitz' } }, '6.6.6.6')).json()).toMatchObject({ follow: 'added', sign_in_email: 'not_needed' });

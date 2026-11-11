@@ -1145,8 +1145,8 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       if (!(list === 'investors' ? SLUG : TICKER).test(value)) return json({ ok: false, error: list === 'investors' ? 'not a filer slug' : 'not a ticker like BRK.B', code: 'bad_request' }, 400, h);
       const had = (await getFollows(env, m))[list].includes(value);
       const r = await changeFollows(env, m, req.method === 'POST' ? { add: { list, value, max: FREE_INVESTORS } } : { remove: { list, value } });
-      // At the cap: 409 with follow cap_reached (not 402: nothing is for sale on this call, and the follow wasn't stored).
-      if (!r.ok && r.error.startsWith('limit:')) return json({ ok: false, follow: 'cap_reached', error: `Free accounts follow up to ${FREE_INVESTORS} investors. Remove one, or start Copy for unlimited follows.`, code: 'cap_reached', limit: FREE_INVESTORS }, 409, h);
+      // At the cap: 402 with code and follow cap_reached (site bundles, cached ones included, show the cap message on it).
+      if (!r.ok && r.error.startsWith('limit:')) return json({ ok: false, follow: 'cap_reached', error: `Free accounts follow up to ${FREE_INVESTORS} investors. Remove one, or start Copy for unlimited follows.`, code: 'cap_reached', limit: FREE_INVESTORS }, 402, h);
       const follow = req.method === 'POST' ? (had ? 'already' : 'added') : had ? 'removed' : 'not_following';
       return r.ok ? json({ ok: true, follow, follows: r.follows, limit: FREE_INVESTORS }, 200, h) : json({ ok: false, error: r.error }, 400, h);
     }
