@@ -338,10 +338,13 @@ def classify(cik: str, name: str, s: dict, form_d: tuple[set[str], dict[str, int
         kind, adv_ev = verdict(adviser)
         ev |= {"adv": adv_ev}
         # The reclass adds hedge_fund freely but removes a published hedge_fund only when the matched adviser's Form ADV
-        # clearly shows it isn't one: hedge funds under 5% of its book, and private funds of other kinds (Cresset,
-        # Patient Square) or a book of individuals or registered funds (Stone House). Carlson, Tensile and NEXTBio run
-        # hedge funds below the reclass share; JAT and Vennlight report no private funds at all. They stay.
-        clearly_not = (adv_ev.get("hedge_share") or 0) < 0.05 and (adviser["private_funds"] or kind in ("wealth", "long_only"))
+        # clearly shows it isn't one: hedge funds under 5% of its book, and either private funds that are mostly of
+        # other kinds (Cresset: 14 of 145; Patient Square: private equity) or no private funds and a book of individuals
+        # or registered funds (Stone House). Carlson, Tensile and NEXTBio run hedge funds below the reclass share;
+        # Keywise's private funds are mostly hedge funds; JAT and Vennlight report no private funds and no client mix.
+        pf, hf = adviser["private_funds"], adviser["hedge_funds"]
+        clearly_not = (adv_ev.get("hedge_share") or 0) < 0.05 and (
+            (pf and hf < 0.5 * pf) or (not pf and kind in ("wealth", "long_only")))
         if kind != "hedge_fund" and prior == "hedge_fund" and not clearly_not:
             return "hedge_fund", "kept: Form ADV doesn't show it isn't a hedge fund", ev
         if kind:

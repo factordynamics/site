@@ -83,6 +83,11 @@
    "name": "Credit Industriel Et Commercial",
    "type": "bank"
   },
+  "0001290162": {
+   "name": "QVT Financial LP",
+   "type": "hedge_fund",
+   "evidence": "Multi-strategy hedge fund; its Form ADV types most of its 39 private funds as other, so the ADV rule alone misses it"
+  },
   "0001346824": {
    "name": "RA CAPITAL MANAGEMENT, L.P.",
    "type": "hedge_fund"
