@@ -26,7 +26,7 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
     body: (
       <ul>
         <li>New 13F filings: the alert service checks EDGAR’s latest-filings feed every minute.</li>
-        <li>Holdings data: rebuilt every 3 hours. GitHub’s scheduler can delay or occasionally skip a run.</li>
+        <li>Holdings data: the funds we track closely are rebuilt about every 20 minutes, and again when one of them files; every other 13F filer, every 3 hours. GitHub’s scheduler can delay or occasionally skip a run.</li>
         <li>Form 4 and Schedule 13D/G: alerts for the funds we track closely and the filers you follow go out after our every-minute EDGAR check picks them up (measured timings are on /speed/ as alerts go out); pages pick them up with each refresh.</li>
       </ul>
     ),
@@ -288,14 +288,14 @@ export function Methodology() {
           <section id="alert-checks" className="scroll-mt-24">
             <h2 className="text-[22px] font-semibold tracking-[-0.02em]">Alert accuracy checks</h2>
             <p className="mt-2 text-[15.5px] leading-relaxed text-ink-2">
-              <span className="font-medium text-ink">Before a 13F alert’s moves go out,</span> every move row is checked. A row is held, and the alert says “Moves pending check”, if any of these is true:
+              <span className="font-medium text-ink">Before a 13F alert’s moves go out,</span> every move row is checked. The units, split-basis and own-prior checks run before every send. A row is held, and the alert says “Moves pending check”, if any of these is true:
             </p>
             <ul className="mt-2 list-disc space-y-1.5 pl-5 text-[15.5px] leading-relaxed text-ink-2">
               <li>
                 <span className="font-medium text-ink">Units.</span> Its implied price (value ÷ shares) is more than 100× off other filers’ median for that CUSIP, or off its own prior quarter.
               </li>
               <li>
-                <span className="font-medium text-ink">Price vs other filers.</span> Its implied price is more than 1.25× off the median that other filers report for the same CUSIP this quarter. Filers report the same quarter-end price, so they agree to rounding. This applies to lines or priors of $50K and up.
+                <span className="font-medium text-ink">Price vs other filers.</span> Its implied price is more than 1.25× off the median that other filers report for the same CUSIP this quarter. Filers report the same quarter-end price, so they agree to rounding. This applies to lines or priors of $50K and up. It runs before send on our main server; Cloudflare’s poller, which sends most alerts first, skips it because of its CPU limits. Held rows are re-checked against other filers’ prices before they go out.
               </li>
               <li>
                 <span className="font-medium text-ink">Split basis.</span> splits.json lists a split, and the prior quarter’s shares weren’t adjusted by it.
@@ -304,9 +304,9 @@ export function Methodology() {
                 <span className="font-medium text-ink">Own prior.</span> On lines of $50K or more, the implied price moved by about a whole number k ≥ 2 and the share count moved by about the same k the other way (a split nobody has listed yet). Bond lines are checked only for a 100× jump against their own prior, because their value per dollar of principal isn’t a share price.
               </li>
             </ul>
-            <p className="mt-3 text-[15.5px] leading-relaxed text-ink-2">A held row is left out of the totals and recomputed through the data build. It is sent once the build agrees, or after 24 hours marked “Filer’s reported value looks wrong; shown as filed”.</p>
+            <p className="mt-3 text-[15.5px] leading-relaxed text-ink-2">A held row is left out of the totals. Held rows go out once the check clears, usually within 30 minutes and at most 24 hours later. A row whose figures still look wrong after 24 hours is shown as filed and marked “Filer’s reported value looks wrong; shown as filed”.</p>
             <p className="mt-3 text-[15.5px] leading-relaxed text-ink-2">
-              <span className="font-medium text-ink">After it goes out,</span> within 15 minutes of the data build publishing the filing, every emailed row is compared with /v1. A row fails if it is more than 10% off in value or has the wrong sign or direction. Each failure is classed:
+              <span className="font-medium text-ink">After sending,</span> every alert is checked against the published data (what /v1 serves) within about 15 minutes: every emailed row and both totals. A row fails if it is more than 10% off in value or has the wrong sign or direction. Each failure is classed:
             </p>
             <ul className="mt-2 list-disc space-y-1.5 pl-5 text-[15.5px] leading-relaxed text-ink-2">
               <li>

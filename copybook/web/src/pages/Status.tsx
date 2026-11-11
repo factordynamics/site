@@ -140,7 +140,7 @@ export function Status() {
   // mostly counted bugs in the check itself.
   type Rec = { checked: number; matched?: number; disclosed?: number; explained?: number; wrong?: number; disclosed_totals?: number; wrong_totals?: number; no_rows?: number }
   const rawRec = (l as { reconciliation?: Rec } | null | undefined)?.reconciliation
-  const rec = rawRec && rawRec.checked > 0 && [rawRec.matched, rawRec.disclosed, rawRec.explained, rawRec.wrong].every((n) => typeof n === 'number') ? (rawRec as Required<Pick<Rec, 'checked' | 'matched' | 'disclosed' | 'explained' | 'wrong'>> & Rec) : null
+  const rec = rawRec && typeof rawRec.checked === 'number' && [rawRec.matched, rawRec.disclosed, rawRec.explained, rawRec.wrong].every((n) => typeof n === 'number') ? (rawRec as Required<Pick<Rec, 'checked' | 'matched' | 'disclosed' | 'explained' | 'wrong'>> & Rec) : null
   const full24 = (pr24?.checks ?? 0) >= 1296
 
   const apiTone: Tone = checking ? 'wait' : h ? 'up' : 'down'
@@ -218,8 +218,8 @@ export function Status() {
                 {pollerHost === 'cloudflare' || pollerHost == null ? 'Checks EDGAR every minute from Cloudflare, with the API machine as backup.' : 'Cloudflare’s checks paused; the API machine is polling EDGAR as backup.'}
               </Row>
               {rec && (
-                <Row name="Alert accuracy" tone={rec.wrong + (rec.wrong_totals ?? 0) ? 'warn' : 'up'} state={`Alerts reconciled: ${rec.checked} checked`}>
-                  {[
+                <Row name="Alert accuracy" tone={rec.wrong + (rec.wrong_totals ?? 0) ? 'warn' : 'up'} state={rec.checked ? `Alerts reconciled: ${rec.checked} checked` : 'Alerts reconciled: not checked yet'}>
+                  {rec.checked > 0 && [
                     <span key="m">{rec.matched} matched</span>,
                     rec.disclosed > 0 && <DataLink key="d">{rec.disclosed} disclosed</DataLink>,
                     (rec.disclosed_totals ?? 0) > 0 && <DataLink key="t">{rec.disclosed_totals} disclosed (totals)</DataLink>,
@@ -248,7 +248,7 @@ export function Status() {
               )}
               <Row name="Filing data" tone={dataTone} state={lagS == null ? 'Not known yet' : `Last data build ${ago(lagS)} ago${dataTone === 'warn' ? ', later than usual for a filing day' : ''}`}>
                 {newest13f ? `Newest 13F in the data: ${displayName(newest13f.manager)}, ${newest13f.at}. ` : ''}
-                Rebuilt about every 20 minutes on filing days; past 2 hours this turns amber.
+                Tracked funds are rebuilt about every 20 minutes, every other 13F filer every 3 hours; past 2 hours this turns amber.
               </Row>
               <Row name="Filing pages" tone="up" state="Up">
                 Stock, fund and filing pages are static files, so they stay up when the member API is down.

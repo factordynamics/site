@@ -65,6 +65,7 @@ export const signOut = () => {
   try {
     localStorage.removeItem(ME_LAST)
     localStorage.removeItem('copybook-follows-last')
+    localStorage.removeItem('copybook-channels-last')
     localStorage.removeItem(EV_LAST)
   } catch {
     // Storage blocked.

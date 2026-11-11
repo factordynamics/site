@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import { call, sharedGet } from '../lib/account'
+import { call, getToken, sharedGet } from '../lib/account'
 import { useFollows } from '../lib/follows'
 import { Button, Check } from './ui'
 
@@ -12,17 +12,37 @@ export const TESTED = 'copybook.testOk'
 const FUNDS = 3
 
 type Ch = { discord: string | null; slack: string | null; telegram: unknown; webhook: unknown; feed: unknown; tested_at?: string | null; keep_email?: boolean }
+// The last /channels answer for this session, so an API outage doesn't undo a finished step.
+export const CH_LAST = 'copybook-channels-last'
+const lastCh = (): Ch | null => {
+  try {
+    const c = JSON.parse(localStorage.getItem(CH_LAST) ?? 'null') as { token: string; channels: Ch } | null
+    return c && c.token === getToken() ? c.channels : null
+  } catch {
+    return null
+  }
+}
 
 export function CopySetup({ welcome }: { welcome?: boolean }) {
   const { follows, status } = useFollows()
-  const [ch, setCh] = useState<Ch | null>(null)
+  const [ch, setCh] = useState<Ch | null>(lastCh)
   const [hidden, setHidden] = useState(() => !welcome && localStorage.getItem(HIDE) === '1')
   const [keptEmail, setKeptEmail] = useState(false)
   const [tested, setTested] = useState(() => localStorage.getItem(TESTED) === '1')
   const [test, setTest] = useState<{ busy?: boolean; msg?: string; ok?: boolean }>({})
 
   const load = useCallback(() => {
-    sharedGet<{ channels: Ch }>('/channels').then((r) => setCh(r.channels), () => setCh(null))
+    sharedGet<{ channels: Ch }>('/channels').then(
+      (r) => {
+        setCh(r.channels)
+        try {
+          localStorage.setItem(CH_LAST, JSON.stringify({ token: getToken(), channels: r.channels }))
+        } catch {
+          // Storage blocked: no cache.
+        }
+      },
+      () => setCh(lastCh()),
+    )
     setTested(localStorage.getItem(TESTED) === '1')
   }, [])
   useEffect(() => {
