@@ -1,6 +1,6 @@
 import { linkBase, type Env } from './env';
 import { lookupTickers } from './alerts';
-import { cleanItem4, easternToUtc, fetch13F, fetchFilingMeta, filings13F, SEC_UA, type Filed13F, type FilingMeta } from './edgar';
+import { cleanItem4, easternToUtc, posKey, fetch13F, fetchFilingMeta, filings13F, SEC_UA, type Filed13F, type FilingMeta } from './edgar';
 import { ROUTES, v1error, v1json, noMs, stampOf, type Stamp } from './v1';
 
 /** Smallest bulk file served: a real quarter is tens of MB gzipped (2026Q2: 69 MB); smaller ones are stubs from a failed run. */
@@ -79,7 +79,7 @@ function position(h: any, equityTotal: number, allTotal: number) {
     value_scale: h.value_scale ?? (h.value_adjusted === true && h.value_as_filed ? Math.round((h.value / h.value_as_filed) * 1000) / 1000 : null),
     value_as_filed: h.value_as_filed ?? null,
     value_adjusted: h.value_adjusted ?? null,
-    zero_value: h.zero_value ?? (h.change !== 'exited' && h.value === 0),
+    zero_value: h.zero_value ?? (h.row_type !== 'exited' && h.change !== 'exited' && h.value === 0),
     change: h.change ?? null,
     prev_shares: h.prev_shares ?? null,
     // As in the CSV: split only when a split adjusted prev_shares; prev_shares_as_filed on every row with a prior.
@@ -309,7 +309,17 @@ async function bookFor(env: Env, f: Filer, quarter: string): Promise<Record<stri
     if (!q) return null;
     stamp = q.__stamp;
   }
-  const holdings = q.holdings ?? (q.columns ? rowsOf(q) : []);
+  // holdings[] is current positions only and exited[] the positions sold out this quarter, whichever way the data
+  // run shaped the book (exits inside its holdings, with row_type or change `exited`, are moved to exited[]).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const isExit = (h: any) => h?.row_type === 'exited' || (h?.row_type == null && h?.change === 'exited');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows0: any[] = q.holdings ?? (q.columns ? rowsOf(q) : []);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const holdings = rows0.filter((h) => !isExit(h)).map((h) => ({ ...h, row_type: 'holding' }));
+  const exitKeys = new Set((q.exited ?? []).map(posKey));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const exitedRows = [...(q.exited ?? []), ...rows0.filter((h) => isExit(h) && !exitKeys.has(posKey(h)))].map((h: any) => ({ ...h, row_type: 'exited' }));
   const cik = cikOf(q.sec_url, f.row.cik);
   const out: Record<string, unknown> = {};
   if (stamp) STAMP.set(out, stamp);
@@ -353,7 +363,7 @@ async function bookFor(env: Env, f: Filer, quarter: string): Promise<Record<stri
     // A public shard holds the top 500 positions by value until the full book is in R2.
     truncated: Boolean(q.truncated ?? (q.position_count != null && q.position_count > holdings.length)),
     holdings: holdings.map((h: unknown) => position(h, equityTotal, allTotal)),
-    exited: (q.exited ?? []).map((h: unknown) => position(h, equityTotal, allTotal)),
+    exited: exitedRows.map((h: unknown) => position(h, equityTotal, allTotal)),
   });
 }
 

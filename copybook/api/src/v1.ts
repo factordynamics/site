@@ -17,6 +17,7 @@ export const CHANGELOG: { id: string; date: string; schema_version: string; brea
     status: 'shipped',
     changes: [
       'The spec adds components.schemas.BulkRow: every bulk CSV column\'s type, nullability, enum and units, the file format (UTF-8, RFC 4180, one header row, empty field = null), sort order, uniqueness of (cik, cusip, put_call), and which filing version each filer has in the file.',
+      'Holdings: `holdings[]` holds current positions only and `exited[]` the positions sold out this quarter, both with `row_type` set (`holding` / `exited`), whichever way a data run shapes the book. Some builds served exits inside holdings[] with exited[] empty.',
       'Positions add `prev_value_usd` (the bulk CSV\'s prev_value): an exited row\'s old value no longer has to be read as -value_delta_usd. Bulk `value`, `title` and `prev_value` are Position\'s value_usd, title_of_class and prev_value_usd; names are unchanged in this version.',
       'Announced: bulk CSVs append value_scale, value_as_filed, value_adjusted, zero_value, suspect_units, suspect_units_basis and suspect_reason after prev_value from ingest\'s next full run; `row_type` is non-null in bulk from that run and in /v1 positions by Nov 30, 2026. Read columns by header name.',
     ],

@@ -300,7 +300,26 @@ export function displayCase(name: string): string {
  * New, exited, added and trimmed positions against the prior quarter, sized by the trade at this
  * filing's own value per share (a price move alone is no trade), as the data run computes them.
  */
+/**
+ * CUSIPs reissued for the same security, share for share (old -> new). Exxon's Q3 2026 holding-company
+ * reorganisation: 30231G102 -> 30233Q108. Without the link every Q3 holder reads as "exited XOM" plus a new position.
+ */
+export const REISSUED: Record<string, string> = { '30231G102': '30233Q108' };
+/**
+ * The prior book with reissued CUSIPs renamed to the new one, when this filing holds the new CUSIP and not the old,
+ * so the diff, the price gate and alerts see one continuing position (no ticker lookup needed). Else unchanged.
+ */
+export function linkReissued<T extends { cusip: string }>(prev: T[], cur: { cusip: string }[]): T[] {
+  const now = new Set(cur.map((c) => c.cusip.toUpperCase()));
+  const to = (p: T) => {
+    const n = REISSUED[p.cusip.toUpperCase()];
+    return n && now.has(n) && !now.has(p.cusip.toUpperCase()) ? n : null;
+  };
+  return prev.some(to) ? prev.map((p) => (to(p) ? { ...p, cusip: to(p)! } : p)) : prev;
+}
+
 export function computeMoves(cur: Position[], prev: Position[], limit = MOVE_ROWS, splits?: Set<string> | Map<string, number>, medians?: Map<string, PerShare>): { moves: Moves; changed: MoveRow[] } {
+  prev = linkReissued(prev, cur);
   const prevTotal = prev.reduce((s, p) => s + p.value, 0);
   let total = cur.reduce((s, p) => s + p.value, 0);
   // A filer that reports in thousands by mistake: scale to dollars like the data run's unit fix.
@@ -447,7 +466,7 @@ export function gateRow(r: MoveRow, prior: { shares: number; value: number } | u
 
 /** computeMoves' result through the publish gate: rows that fail it leave the moves and totals and come back as `held`. */
 export function gateMoves(r: { moves: Moves; changed: MoveRow[] }, prev: Position[], splits: Map<string, number>, consensus: Map<string, Consensus>, limit = MOVE_ROWS): { moves: Moves; changed: MoveRow[]; held: HeldRow[] } {
-  prev = prev.map((p) => (p.shares ? p : { ...p, shares: Number((p as { principal_amount?: number }).principal_amount) || 0 }));
+  prev = linkReissued(prev.map((p) => (p.shares ? p : { ...p, shares: Number((p as { principal_amount?: number }).principal_amount) || 0 })), r.changed.filter((x) => x.change !== 'exited'));
   const before = new Map(prev.map((p) => [posKey(p), p]));
   const held: HeldRow[] = [];
   const changed = r.changed.filter((x) => {

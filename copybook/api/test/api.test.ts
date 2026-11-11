@@ -1394,6 +1394,19 @@ describe('copybook api', () => {
     const r = netRenamed(raw);
     expect(r.changed.map((x) => [x.change, x.ticker, x.shares - x.prev_shares, x.value_delta])).toEqual([['added', 'XOM', 465409, 75745316]]);
     expect([r.moves.new, r.moves.exited, r.moves.bought_usd]).toEqual([[], [], 75745316]);
+
+    // The reissued CUSIP is linked before the diff, with no ticker on the new CUSIP (a small holder's row outside the
+    // minute poll's ticker lookups): no exit, no new position, through the price gate too.
+    const linked = computeMoves(cur as never, prev as never);
+    expect(linked.changed.map((x) => [x.change, x.cusip, x.shares - x.prev_shares])).toEqual([['added', '30233Q108', 465409]]);
+    const { gateMoves } = await import('../src/edgar');
+    const g = gateMoves(linked, prev as never, new Map(), new Map());
+    expect([g.moves.exited, g.moves.new, g.held, g.changed.map((x) => x.change)]).toEqual([[], [], [], ['added']]);
+    // Same shares under the new CUSIP: no move at all.
+    const same = computeMoves([{ ...cur[0], shares: 31468114 }, other] as never, prev as never);
+    expect(same.changed).toEqual([]);
+    // A filer still holding the old CUSIP alongside the new one isn't relinked: the old row stays its own position.
+    expect(computeMoves([...cur, { ...prev[0] }] as never, prev as never).changed.map((x) => [x.change, x.cusip])).toEqual([['new', '30233Q108']]);
   });
 
   it('latency rows from before the moves tag are re-timed once from the day stores', async () => {
@@ -3576,6 +3589,15 @@ describe('copybook api', () => {
     expect(full.truncated).toBe(false);
     expect(full.holdings).toHaveLength(3);
     expect(full.holdings[2]).toMatchObject({ ticker: 'XYZ', value_usd: 700, weight: 700 / 23700, weight_equity: 700 / 23700 });
+    // A book whose exits sit inside its rows (row_type or change `exited`): holdings[] keeps current positions only,
+    // exited[] gets the exits, both with row_type, and an exit carries its old value as prev_value_usd.
+    const ex = ['ZZ', 'ZZ CORP', 'COM', '98422D999', null, 0, 0, 'Zz', null];
+    hist.m.set('fb/2026Q2/0002045724.json', new TextEncoder().encode(JSON.stringify({ ...(shards['0002045724.json'] as object), columns: [...cols, 'change', 'row_type', 'prev_shares', 'prev_value', 'value_delta'], rows: [[...nvda, 'added', 'holding', 90, 15000, 1800], [...be, null, null, null, null, null], [...small, 'unchanged', null, 7, 700, 0], [...ex, 'exited', 'exited', 40, 3000, -3000]] })));
+    const split = (await v1('/v1/filers/2045724/holdings/2026Q2')).body.data;
+    expect(split.holdings.map((h: { ticker: string; row_type: string }) => [h.ticker, h.row_type])).toEqual([['NVDA', 'holding'], ['BE', 'holding'], ['XYZ', 'holding']]);
+    expect(split.exited.map((h: { ticker: string; row_type: string; prev_shares: number; prev_value_usd: number; zero_value: boolean }) => [h.ticker, h.row_type, h.prev_shares, h.prev_value_usd, h.zero_value])).toEqual([['ZZ', 'exited', 40, 3000, false]]);
+    expect(split.total_value_usd).toBe(23700);
+    hist.m.set('fb/2026Q2/0002045724.json', new TextEncoder().encode(JSON.stringify({ ...(shards['0002045724.json'] as object), rows: [nvda, be, small] })));
 
     const range = (await v1('/v1/filers/2045724/holdings?from=2025Q4&to=2026Q2')).body;
     expect(range.data.map((b: { quarter: string }) => b.quarter)).toEqual(['2026Q2']);
