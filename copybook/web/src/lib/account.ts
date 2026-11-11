@@ -8,6 +8,8 @@ export type Member = {
   /** The product: copy, pro or fund. Older records read as copy. */
   plan: 'copy' | 'pro' | 'fund' | string
   interval?: 'monthly' | 'yearly' | 'unknown'
+  /** `send_invoice` when the plan is billed by invoice (Net 30) instead of a card. */
+  collection?: 'charge_automatically' | 'send_invoice' | null
   trial_end?: number | null
   period_end?: number | string | null
   /** Cancelled in the billing portal: access continues until cancel_at (unix seconds). */

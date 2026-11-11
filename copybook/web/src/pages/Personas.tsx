@@ -152,10 +152,18 @@ export function ForFunds() {
   // The speed claim shows the live median once real alerts have gone out, and links to the log.
   const lat = useAsync(loadLatency, [])
   const median = SPEED_CLAIMS && lat.data?.count ? lat.data.median_seconds : null
+  const card = attributed(plans.fund.links.yearly || plans.fund.links.monthly)
   const cta = (
-    <Button to="/contact/?topic=fund" size="md">
-      Request Fund access <Arrow />
-    </Button>
+    <span className="flex flex-wrap items-center gap-3">
+      <Button to="/contact/?topic=fund&trial=invoice" size="md">
+        Start a 14-day trial, pay by invoice <Arrow />
+      </Button>
+      {card && (
+        <Button href={card} onClick={referredCheckout('fund', 'yearly', card)} variant="outline" size="md">
+          Or start on a card
+        </Button>
+      )}
+    </span>
   )
   return (
     <div className="container-x pt-12 md:pt-16">
