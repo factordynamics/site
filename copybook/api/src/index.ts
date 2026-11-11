@@ -841,6 +841,16 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return json({ ok: true, rows: log.length, by_host: counts }, 200, h);
   }
 
+  // Operator: each test address's sink URL (launch week: test mail is stored there, not sent), for briefing testers.
+  if (req.method === 'POST' && path === '/ops/test-inbox') {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    const b = await body(req);
+    const { sinkKey, SINK_UNTIL } = await import('./email');
+    const list = (Array.isArray(b.emails) ? b.emails : []).filter((e): e is string => typeof e === 'string' && testAddress(e.trim().toLowerCase())).slice(0, 50);
+    const inboxes = await Promise.all(list.map(async (e) => ({ email: e.trim().toLowerCase(), url: `${env.PUBLIC_URL ?? ''}${await sinkKey(env, e.trim())}` })));
+    return json({ ok: true, until: new Date(SINK_UNTIL).toISOString(), inboxes }, 200, h);
+  }
+
   // Operator: bulk files listed against what their download links serve, re-mirroring any that differ.
   if (req.method === 'POST' && path === '/ops/bulk-check') {
     if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);

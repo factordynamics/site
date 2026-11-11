@@ -150,10 +150,51 @@ async function delay(env: Env, mails: Mail[]): Promise<void> {
   console.log(`email limit: ${mails.length} delayed to after the reset`);
 }
 
+/** Launch week (Nov 11-16): test and preview mail never uses Resend or Mailgun quota; it goes to the test inbox sink. */
+export const SINK_UNTIL = Date.parse('2026-11-17T00:00:00Z');
+const isTestMail = (m: Mail) => !!m.preview || !!m.test || testAddress(m.to);
+/** The sink's object for one address: unguessable (HMAC of the address), readable at PUBLIC_URL + this key. */
+export async function sinkKey(env: Env, to: string): Promise<string> {
+  const { hmacHex } = await import('./tokens');
+  return `sink/${(await hmacHex(env.SESSION_SECRET, `sink:${to.toLowerCase()}`)).slice(0, 40)}.json`;
+}
+/** Stores test mail, newest first (40 kept per address), in the public bucket (both hosts write there), else KV. */
+async function sinkMail(env: Env, mails: Mail[]): Promise<void> {
+  const by = new Map<string, Mail[]>();
+  for (const m of mails) by.set(m.to.toLowerCase(), [...(by.get(m.to.toLowerCase()) ?? []), m]);
+  const at = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+  for (const [to, ms] of by) {
+    const key = await sinkKey(env, to);
+    const add = ms.map((m) => ({ at, subject: m.subject, text: m.text, ...(m.html ? { html: m.html } : {}) }));
+    const remote = !!(env.CF_API_TOKEN && env.CF_ACCOUNT_ID && env.PUBLIC_BUCKET && env.PUBLIC_URL);
+    try {
+      const prev = remote
+        ? ((await fetch(`${env.PUBLIC_URL}${key}?t=${Date.now()}`, { signal: AbortSignal.timeout(5000) }).then((r) => (r.ok ? r.json() : null)).catch(() => null)) as { items?: unknown[] } | null)
+        : (JSON.parse((await env.DB.get(key)) ?? 'null') as { items?: unknown[] } | null);
+      const body = JSON.stringify({ address: to, note: 'Copybook test inbox: mail to this test address during launch week (Nov 11-16), not sent by email.', items: [...add, ...(prev?.items ?? [])].slice(0, 40) });
+      if (remote) {
+        await fetch(`https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/r2/buckets/${env.PUBLIC_BUCKET}/objects/${key}`, { method: 'PUT', headers: { authorization: `Bearer ${env.CF_API_TOKEN}`, 'content-type': 'application/json', 'cache-control': 'no-store' }, body });
+      } else await env.DB.put(key, body, { expirationTtl: 8 * 86400 });
+    } catch (e) {
+      console.log(`sink: ${String(e).slice(0, 120)}`);
+    }
+  }
+  console.log(`email: ${mails.length} test/preview to the sink, not sent`);
+}
+
 export async function sendMail(env: Env, mails: Mail[], opts: { bulk?: boolean; tier?: Tier; via?: 'mailgun'; preview?: boolean } = {}): Promise<string> {
   const tier: Tier = opts.tier ?? (opts.via ? 'low' : opts.bulk ? 'alert' : 'account');
   await loadMeter(env);
   if (opts.preview) mails = mails.map((m) => ({ ...m, preview: true }));
+  // Launch week: test, critic and preview mail goes to the sink, never to a provider (Space ruling, Nov 11).
+  if (env.TEST_MAIL_SINK !== 'off' && Date.now() < SINK_UNTIL) {
+    const sunk = mails.filter(isTestMail);
+    if (sunk.length) {
+      await sinkMail(env, sunk);
+      mails = mails.filter((m) => !sunk.includes(m));
+      if (!mails.length) return 'sunk';
+    }
+  }
   // `since`: the first send counted today (Resend's `used` counts the whole UTC day, account-wide; these count from here).
   // Kinds an older build started without `since` (so they couldn't be read against `used`) start over here.
   if (mailQuota.kinds && (!mailQuota.kinds.since || mailQuota.kinds.used_at_since === undefined)) mailQuota.kinds = undefined;

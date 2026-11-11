@@ -74,6 +74,8 @@ export interface Env {
   CF_API_TOKEN?: string;
   /** Public R2 bucket the cron writes static JSON to (latency.json), and its public base URL. */
   PUBLIC_BUCKET?: string;
+  /** 'off' turns the launch-week test-mail sink off (the test suite); anything else leaves it on through Nov 16. */
+  TEST_MAIL_SINK?: string;
   PUBLIC_URL?: string;
   CF_ACCOUNT_ID?: string;
   /** SEC requests per minute run: 40 fits the free plan's 50 subrequests; raise on Workers Paid. */

@@ -125,7 +125,7 @@ function memFollows() {
 
 beforeEach(async () => {
   hist = new MemR2();
-  env = { DB: new MemKV(), HIST: hist, INGEST_WORKFLOW: WORKFLOW, SITE_URL: SITE, DATA_URL: `${SITE}data/`, EMAIL_FROM: 'Copybook <a@b.c>', CONTACT_EMAIL: 'hello@example.com', STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_WEBHOOK_SECRET: 'whsec_test', SESSION_SECRET: 'session-secret', RESEND_API_KEY: 're_x', METER: memMeters(), FOLLOWS: undefined as never };
+  env = { DB: new MemKV(), HIST: hist, INGEST_WORKFLOW: WORKFLOW, SITE_URL: SITE, DATA_URL: `${SITE}data/`, EMAIL_FROM: 'Copybook <a@b.c>', CONTACT_EMAIL: 'hello@example.com', STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_WEBHOOK_SECRET: 'whsec_test', SESSION_SECRET: 'session-secret', RESEND_API_KEY: 're_x', TEST_MAIL_SINK: 'off', METER: memMeters(), FOLLOWS: undefined as never };
   env.HEALTH_TOKEN = 'health_test_token';
   // The fixture indexes carry only the fields each test needs; the routing contract has its own test (contract.test.ts).
   await env.DB.put('index:contract', JSON.stringify({ ok: false, build: null, problems: ['fixture'] }));
@@ -1410,6 +1410,21 @@ describe('copybook api', () => {
     expect(netRenamed({ moves: {} as never, changed: stored as never }).changed.map((x) => [x.change, x.shares - x.prev_shares])).toEqual([['added', 465409]]);
     // A filer still holding the old CUSIP alongside the new one isn't relinked: the old row stays its own position.
     expect(computeMoves([...cur, { ...prev[0] }] as never, prev as never).changed.map((x) => [x.change, x.cusip])).toEqual([['new', '30233Q108']]);
+  });
+
+  it('launch week: test, critic and preview mail goes to the test-inbox sink, never to Resend', async () => {
+    const { sendMail, sinkKey } = await import('../src/email');
+    env.TEST_MAIL_SINK = undefined;
+    sent = [];
+    await sendMail(env, [{ to: 'copybook-test-x@fldubai.com', subject: 'Your Copybook sign-in link', text: 'link' }, { to: 'real@example.com', subject: 'Real', text: 'r' }]);
+    expect(await sendMail(env, [{ to: 'someone@example.com', subject: 'Preview', text: 'p' }], { preview: true })).toBe('sunk');
+    expect(sent.map((m) => m.to[0])).toEqual(['real@example.com']);
+    const box = JSON.parse((await env.DB.get(await sinkKey(env, 'copybook-test-x@fldubai.com')))!);
+    expect(box.items.map((i: { subject: string }) => i.subject)).toEqual(['Your Copybook sign-in link']);
+    // The operator gets each test address's inbox URL; real addresses are refused.
+    const r = await (await handleRequest(new Request('https://api.test/ops/test-inbox', { method: 'POST', body: JSON.stringify({ emails: ['copybook-test-x@fldubai.com', 'real@example.com'] }), headers: { authorization: 'Bearer health_test_token' } }), env)).json();
+    expect(r.inboxes).toEqual([{ email: 'copybook-test-x@fldubai.com', url: expect.stringMatching(new RegExp(`${await sinkKey(env, 'copybook-test-x@fldubai.com')}$`)) }]);
+    env.TEST_MAIL_SINK = 'off';
   });
 
   it('latency rows from before the moves tag are re-timed once from the day stores', async () => {
