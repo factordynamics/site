@@ -3,9 +3,9 @@ import { useState } from 'react'
 import { SplitNote } from './Season'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Arrow, AvatarStack, Badge, Lock, Monogram, Panel, Skeleton } from '../components/ui'
-import { dateLabel, money, quarterLabel, useAsync, useTick, useTitle } from '../lib/data'
+import { dateLabel, loadIndex, money, quarterLabel, typesAsOfLabel, useAsync, useTick, useTitle } from '../lib/data'
 import { useMember } from '../lib/account'
-import { loadCards, loadFlow, seasonNow, stockPath, type FlowPeriod, type FlowRow, type FlowScope } from '../lib/stocks'
+import { LENS_LABEL, loadCards, loadFlow, loadFlowLenses, seasonNow, stockPath, type FlowPeriod, type FlowRow, type FlowScope, type LensId } from '../lib/stocks'
 
 type Tab = 'bought' | 'sold' | 'most_buyers' | 'new_multi'
 const TABS: [Tab, string][] = [
@@ -15,6 +15,7 @@ const TABS: [Tab, string][] = [
   ['new_multi', 'New by 2+'],
 ]
 const FREE_ROWS = 5
+type Scope = 'featured' | 'all' | LensId
 
 export function Flow() {
   const member = useMember()
@@ -25,7 +26,13 @@ export function Flow() {
   const [limit, setLimit] = useState(40)
   // Lens, period and ranking live in the URL so a view can be shared: ?funds=all&q=2026Q2&tab=sold.
   const [params, setParams] = useSearchParams()
-  const scope: 'featured' | 'all' = params.get('funds') === 'all' ? 'all' : 'featured'
+  // Hedge-fund lenses appear only once ingest's flow_lenses.json is served for the current type set.
+  const lens = useAsync(() => loadFlowLenses(tick ? Date.now() : undefined), [tick])
+  const idx = useAsync(loadIndex, [])
+  const asked = params.get('funds')
+  const scope: Scope = asked === 'all' ? 'all' : (asked === 'hedge' || asked === 'smart') && lens.data ? asked : 'featured'
+  const isLens = scope === 'hedge' || scope === 'smart'
+  const lensOf = (q: string) => (isLens ? lens.data?.periods.find((p) => p.quarter === q)?.lenses[scope as LensId] : undefined)
   const tab: Tab = (TABS.find(([k]) => k === params.get('tab'))?.[0] as Tab) ?? 'bought'
   const set = (k: string, v: string | null) => {
     setLimit(40)
@@ -34,17 +41,18 @@ export function Flow() {
     else n.set(k, v)
     setParams(n, { replace: true })
   }
-  const setScope = (v: 'featured' | 'all') => set('funds', v === 'all' ? 'all' : null)
+  const setScope = (v: Scope) => set('funds', v === 'featured' ? null : v)
   const setTab = (v: Tab) => set('tab', v === 'bought' ? null : v)
   useTitle('Smart money flow · Copybook')
   const periods: FlowPeriod[] = f.data?.periods ?? []
-  const filedOf = (p: FlowPeriod) => (scope === 'featured' ? p.featured_filed : p.funds_filed)
-  const totalOf = (p: FlowPeriod) => (scope === 'featured' ? p.featured_total : p.funds_total)
+  const filedOf = (p: FlowPeriod) => (isLens ? (lensOf(p.quarter)?.filed ?? 0) : scope === 'featured' ? p.featured_filed : p.funds_filed)
+  const totalOf = (p: FlowPeriod) => (isLens ? (lensOf(p.quarter)?.total ?? 0) : scope === 'featured' ? p.featured_total : p.funds_total)
+  const who = isLens ? LENS_LABEL[scope as LensId].toLowerCase() : scope === 'featured' ? 'superinvestors' : 'funds we track'
   // Default to the newest period once a third of the lens has filed it; until then, the last complete one.
   const auto = periods.find((p) => filedOf(p) >= Math.max(3, totalOf(p) / 3)) ?? periods[periods.length - 1]
   const d = periods.find((p) => p.quarter === params.get('q')) ?? auto
   const newest = periods[0]
-  const s: FlowScope | undefined = d?.[scope]
+  const s: FlowScope | undefined = d ? (isLens ? lensOf(d.quarter) : d[scope as 'featured' | 'all']) : undefined
   const rows = s?.[tab] ?? []
   const shown = paid ? rows.slice(0, limit) : rows.slice(0, FREE_ROWS)
 
@@ -80,11 +88,11 @@ export function Flow() {
             ))}
           </div>
           <p className="text-[14px] text-ink-2">
-            <span className="num font-semibold text-ink">{filedOf(newest)}</span> of {totalOf(newest)} {scope === 'featured' ? 'superinvestors' : 'funds we track'} have filed {quarterLabel(newest.quarter)}
+            <span className="num font-semibold text-ink">{filedOf(newest)}</span> of {totalOf(newest).toLocaleString('en-US')} {who} have filed {quarterLabel(newest.quarter)}
             {d !== newest && (
               <>
-                {' · '}showing {quarterLabel(d.quarter)} from {filedOf(d)} {scope === 'featured' ? 'superinvestors' : 'funds'}
-                {(scope === 'featured' ? d.featured_moved_on : d.moved_on) ? `; the ${scope === 'featured' ? d.featured_moved_on : d.moved_on} that already filed ${quarterLabel(newest.quarter)} are under ${quarterLabel(newest.quarter)}` : ''}
+                {' · '}showing {quarterLabel(d.quarter)} from {filedOf(d).toLocaleString('en-US')} {isLens ? who : scope === 'featured' ? 'superinvestors' : 'funds'}
+                {!isLens && (scope === 'featured' ? d.featured_moved_on : d.moved_on) ? `; the ${scope === 'featured' ? d.featured_moved_on : d.moved_on} that already filed ${quarterLabel(newest.quarter)} are under ${quarterLabel(newest.quarter)}` : ''}
               </>
             )}
           </p>
@@ -103,11 +111,13 @@ export function Flow() {
             </div>
             <label className="flex items-center gap-2 text-[13px] text-ink-2">
               <span>Investors</span>
-              <select value={scope} onChange={(e) => setScope(e.target.value as 'featured' | 'all')} className="h-8 rounded-full bg-paper px-3 text-[13px] shadow-[0_0_0_1px_var(--color-line)] outline-none focus:shadow-[0_0_0_2px_var(--color-accent)]">
+              <select value={scope} onChange={(e) => setScope(e.target.value as Scope)} className="h-8 rounded-full bg-paper px-3 text-[13px] shadow-[0_0_0_1px_var(--color-line)] outline-none focus:shadow-[0_0_0_2px_var(--color-accent)]">
                 <option value="featured">Superinvestors</option>
                 <option value="all">All funds we track</option>
+                {lens.data && (['hedge', 'smart'] as const).map((k) => <option key={k} value={k}>{LENS_LABEL[k]}, all filers</option>)}
               </select>
             </label>
+            {isLens && <p className="w-full text-right text-[12px] text-ink-3">{typesAsOfLabel(idx.data?.typesAsOf)}</p>}
           </header>
           <p className="border-b border-line px-5 py-2.5 text-[12.5px] text-ink-3 md:px-6">
             {tab === 'bought' && 'Net shares bought across funds, valued at quarter end.'}
@@ -124,7 +134,7 @@ export function Flow() {
           ) : rows.length === 0 ? (
             <p className="px-6 py-10 text-[14px] text-ink-2">
               {filedOf(d) < 3
-                ? `Only ${filedOf(d)} ${scope === 'featured' ? 'superinvestors have' : 'funds have'} filed for ${quarterLabel(d.quarter)} so far. This fills in as the deadline approaches.`
+                ? `Only ${filedOf(d)} ${isLens ? `${who} have` : scope === 'featured' ? 'superinvestors have' : 'funds have'} filed for ${quarterLabel(d.quarter)} so far. This fills in as the deadline approaches.`
                 : 'Nothing here yet for this quarter.'}
             </p>
           ) : (
@@ -160,7 +170,7 @@ export function Flow() {
           ) : (
             <ul className="divide-y divide-line">
               {d.recent
-                .filter((r) => scope === 'all' || r.featured)
+                .filter((r) => scope !== 'featured' || r.featured)
                 .slice(0, 12)
                 .map((r) => (
                   <li key={r.slug} className="flex items-center gap-2">
