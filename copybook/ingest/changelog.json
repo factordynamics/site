@@ -2,6 +2,20 @@
  "about": "Copybook data changelog: methodology changes, restatements and corrections, newest first. Append-only: entries are added, never edited away. Published as data/changelog.json by build.py.",
  "entries": [
   {
+   "id": "2026-11-11-held-lines-unreliable",
+   "date": "2026-11-11",
+   "kind": "correction",
+   "title": "Flagged 13F lines show only their reliable side; option lines get the price check; quality.json",
+   "body": "A line whose share count or value is off scale (suspect_units, price_outlier, reissue_ratio_not_applied) now carries unreliable: \"value\" (the share change stands, the filed dollars don't), \"shares\" (share_change is null and value_change, the filed value against the prior filed value, shows instead) or \"both\" (change unknown). New and exited positions keep their label. No flagged line counts in any dollar total: stock pages, holder net, /changes, Flow, /season/ and alerts. Before this, stock pages counted some as trades (Guardcap's 2026Q3 BKNG read -$3.30B, Crosslink's 2026Q2 CRM +$29.2M). Put and call lines are now checked against the underlying's common-share price: Mizuho Markets' 2026Q3 SPY calls read -$13.3B and now show a value change of -$58.0M. Holder index rows (hl/) carry value_delta, exactly what counts.net sums. data/quality.json counts the lines held in each run, by reason, with the largest."
+  },
+  {
+   "id": "2026-11-11-cusip-links-quarter",
+   "date": "2026-11-11",
+   "kind": "methodology",
+   "title": "cusip_links.json: quarter is the first quarter filed under the new CUSIP",
+   "body": "In cusip_links.json, a link's quarter used to be the quarter of the SEC 13(f) list that first showed the new CUSIP. It is now the first quarter 13F filers reported the new CUSIP (units_check.to_quarter). For DD, HON, NVRI, ASND, SA, CCL, ONCY, BARK, UPLD, CDLX, OPAD and BCAB that is 2026Q2, not 2026Q3. The list's quarter stays in list_quarter."
+  },
+  {
    "id": "2026-11-11-row-type",
    "date": "2026-11-11",
    "kind": "methodology",
