@@ -36,11 +36,12 @@ TOP = 10
 MOVE_COLUMNS = ("ticker", "issuer", "cusip", "put_call", "shares", "prev_shares", "value", "value_delta", "change")
 FULL_COLUMNS = ("ticker", "issuer", "title", "cusip", "put_call", "shares", "value", "shares_type", "prev_shares", "prev_value",
                 "change", "share_change", "value_delta", "pct_of_book", "delta_pct_of_book", "prev_shares_as_filed",
-                "split_ratio", "value_as_filed", "price_outlier", "suspect_units", "prev_cusip",
+                "split_ratio", "value_as_filed", "price_outlier", "suspect_units", "suspect_units_basis", "prev_cusip",
                 "source_accession", "first_disclosed_at", "value_scale", "value_adjusted")
 
 
 SECS: dict[str, dict] = {}
+NO_PRIOR: dict[str, dict] = {}  # cik -> latest full book with no prior quarter (served with its unit check, no changes)
 PERIOD: dict[str, str] = {}  # cik -> quarter of the book in LATEST when it is not the shard's own
 LATEST: dict[str, list[dict]] = {}  # cik -> rows of its latest full book (with changes when the prior is on file)
 EQUITY: dict[str, float] = {}  # cik -> value of its share positions (SH, no options, no PRN): the weight denominator
@@ -161,6 +162,7 @@ def changes(shard: dict) -> tuple[dict, list[dict]] | None:
         return None
     if prev is None:  # holdings only: still counted as holders, with no change
         LATEST[shard["cik"]] = [h | {"change": None, "prev_shares": None, "prev_value": None} for h in cur["holdings"]]
+        NO_PRIOR[shard["cik"]] = cur
         FILING[shard["cik"]] = filing(cur | {k: shard[k] for k in ("accession", "filing_date", "accepted_at") if shard.get(k)})
         return None
     rows = build.with_changes(cur, prev)
@@ -352,7 +354,19 @@ def write_hedge_flow(shards: list[dict], types: dict, curated: dict) -> tuple[in
     return len(periods), len(recent)
 
 
-def write_full(base: dict, prev_q: str, rows: list[dict]) -> None:
+def fill_provenance(rows: list[dict], shard: dict) -> None:
+    """Every row names the filing that disclosed it: its own when the book says, else this book's filing (an exited
+    row is disclosed by the filing that left it out)."""
+    acc_book = shard.get("accession")
+    for r in rows:
+        if not r.get("source_accession") or r.get("change") == "exited":
+            r["source_accession"] = acc_book
+        if not r.get("first_disclosed_at") or r.get("change") == "exited":
+            r["first_disclosed_at"] = ACCEPTED.get(r["source_accession"] or "") or shard.get("accepted_at") \
+                or ACCEPTED.get(acc_book or "")
+
+
+def write_full(base: dict, prev_q: str | None, rows: list[dict]) -> None:
     """fq/{quarter}/{cik}.json: the full book with change columns, uploaded as R2 fb/{quarter}/{cik}.json in place
     of the plain book (upload_history.py)."""
     full = {k: v for k, v in base.items() if k not in ("rows", "columns", "truncated", "_fb_only")} | {
@@ -423,9 +437,7 @@ def older_changes(shards: list[dict], curated: dict, per_quarter: dict[str, list
                         print(f"::warning::moves: prior quarter {pq} from the SEC data set failed: {e}", flush=True)
                         prior = {}
                 prev_rec = prior.get(cik)
-            prev = book(prev_rec)
-            if prev is None:
-                continue
+            prev = book(prev_rec)  # None: no prior anywhere; the book still gets its unit check and provenance
             rows = build.with_changes(cur, prev)
             for r in rows:
                 if not r.get("source_accession") or r.get("change") == "exited":
@@ -435,7 +447,7 @@ def older_changes(shards: list[dict], curated: dict, per_quarter: dict[str, list
                 if r["change"] in ("new", "added", "trimmed", "exited") and r.get("shares_type") != "PRN" \
                         and not r.get("price_outlier") and not r.get("suspect_units"):
                     per_quarter.setdefault(q, []).append(row_of(cik, rec, r))
-            write_full(rec | {"cik": cik, "quarter": q}, pq, rows)
+            write_full(rec | {"cik": cik, "quarter": q}, pq if prev is not None else None, rows)
             n += 1
     return n
 
@@ -610,18 +622,14 @@ def main() -> int:
         if got is None:
             if not shard.get("_fb_only"):
                 write(path, base)
+            if shard["cik"] in NO_PRIOR:  # /v1 still gets suspect_units (cross-filer) and provenance on every row
+                rows = build.with_changes(NO_PRIOR[shard["cik"]], None)
+                fill_provenance(rows, shard)
+                write_full(base, None, rows)
             continue
         summary, rows = got
         with_prev += 1
-        # Every row names the filing that disclosed it: its own when the book says, else this book's filing
-        # (an exited row is disclosed by the filing that left it out).
-        acc_book = shard.get("accession")
-        for r in rows:
-            if not r.get("source_accession") or r.get("change") == "exited":
-                r["source_accession"] = acc_book
-            if not r.get("first_disclosed_at") or r.get("change") == "exited":
-                r["first_disclosed_at"] = ACCEPTED.get(r["source_accession"] or "") or shard.get("accepted_at") \
-                    or ACCEPTED.get(acc_book or "")
+        fill_provenance(rows, shard)
         cik = shard["cik"]
         for r in rows:
             if r["change"] in ("new", "added", "trimmed", "exited") and r.get("shares_type") != "PRN" \

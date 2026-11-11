@@ -207,7 +207,8 @@ def provenance(data: Path) -> dict:
     """Full books served by /v1 (fq/ where present, else fb/): rows without source_accession or
     first_disclosed_at, and checked share rows (no notes or options, not exited) whose suspect_units is not
     true or false. Plus AllianceBernstein's KLAC and BKNG flags, the cross-filer check's reference case."""
-    out = {"rows": 0, "no_source": 0, "no_disclosed": 0, "share_rows": 0, "unchecked": 0, "examples": [], "ab": {}}
+    out = {"rows": 0, "no_source": 0, "no_disclosed": 0, "share_rows": 0, "unchecked": 0, "examples": [], "ab": {},
+           "basis": {}, "null_books": {}, "plain_books": 0}
     seen: set[tuple[str, str]] = set()
     for folder in ("fq", "fb"):
         for f in sorted((data / folder).glob("*/*.json")):
@@ -220,6 +221,8 @@ def provenance(data: Path) -> dict:
                 continue
             cols = doc.get("columns") or []
             rows = doc.get("rows") or []
+            if folder == "fb" and "suspect_units" not in cols:
+                out["plain_books"] += 1  # served without change columns or the unit check
             idx = {c: i for i, c in enumerate(cols)}
             get = lambda r, c: r[idx[c]] if c in idx and idx[c] < len(r) else None
             for r in rows:
@@ -231,9 +234,13 @@ def provenance(data: Path) -> dict:
                 if miss and len(out["examples"]) < 10 and name not in out["examples"]:
                     out["examples"].append(name)
                 if folder == "fq" and get(r, "shares_type") != "PRN" and not get(r, "put_call") \
-                        and get(r, "change") not in ("exited", "disclosed_later"):
+                        and get(r, "change") != "exited":
                     out["share_rows"] += 1
-                    out["unchecked"] += not isinstance(get(r, "suspect_units"), bool)
+                    basis = get(r, "suspect_units_basis") or "unset"
+                    out["basis"][basis] = out["basis"].get(basis, 0) + 1
+                    if not isinstance(get(r, "suspect_units"), bool):
+                        out["unchecked"] += 1
+                        out["null_books"][name] = out["null_books"].get(name, 0) + 1
                 if f.stem == "0001109448" and get(r, "ticker") in ("KLAC", "BKNG"):
                     out["ab"][f"{f.parent.name} {get(r, 'ticker')}"] = get(r, "suspect_units")
     return out
@@ -409,7 +416,10 @@ def main() -> int:
     pv = provenance(data)
     print(f"gate: full books: {pv['no_source']} of {pv['rows']} rows without source_accession, {pv['no_disclosed']} "
           f"without first_disclosed_at; suspect_units unset on {pv['unchecked']} of {pv['share_rows']} checked share "
-          f"rows; AllianceBernstein {pv['ab']}")
+          f"rows (basis {pv['basis']}); {pv['plain_books']} plain fb/ books; AllianceBernstein {pv['ab']}")
+    worst = sorted(pv["null_books"].items(), key=lambda x: -x[1])[:8]
+    if worst:
+        print("gate: share rows with suspect_units null, most per book: " + ", ".join(f"{b} {n}" for b, n in worst))
     if pv["no_source"] or pv["no_disclosed"]:  # accepted.py fills them under its budget; the next run continues
         print(f"::warning::per-row provenance missing in {', '.join(pv['examples'])}")
     merged = foreign_merges(data / "h")

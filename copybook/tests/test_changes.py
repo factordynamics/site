@@ -170,6 +170,22 @@ class MoveMathTest(unittest.TestCase):
             self.assertTrue(build.with_changes(cur, prev)[0].get("suspect_units"))
             cur["holdings"] = [self.row("482480100", "KLAC", 36_459_000, 11.0e9)]  # priced like its peers
             self.assertIs(build.with_changes(cur, prev)[0].get("suspect_units"), False)  # checked: false, not null
+            # UBS 2026Q3: a book with no stored prior was served without any check; the cross-filer check still runs.
+            only = build.with_changes(cur, None)[0]
+            self.assertEqual((only["suspect_units"], only["suspect_units_basis"], only["change"]), (False, "filers", None))
+            # Late-disclosed lines are share lines too.
+            late = build.with_changes({"quarter": "2026Q2", "accepted_at": "2026-08-14",
+                                       "holdings": [self.row("482480100", "KLAC", 7_472_826, 11.0e9) | {"late_disclosure": True}]}, prev)[0]
+            self.assertEqual((late["change"], late["suspect_units"]), ("disclosed_later", True))
+            # No median for the CUSIP: the filer's own prior decides (GuardCap BKNG: $188 -> $5,138 a share).
+            own = build.with_changes({"quarter": "2026Q2", "holdings": [self.row("09857L108", "BKNG", 1_304, 6.7e6)]},
+                                     {"quarter": "2026Q1", "holdings": [self.row("09857L108", "BKNG", 646_216, 121.6e6)]})[0]
+            self.assertEqual((own["suspect_units"], own["suspect_units_basis"]), (True, "own_prior"))
+            # Neither can run (a new line with no median), or not a share line: null, and the basis says why.
+            new = build.with_changes({"quarter": "2026Q2", "holdings": [self.row("000000001", "NEW", 10, 1e3)]}, prev)
+            self.assertEqual([(r["suspect_units"], r["suspect_units_basis"]) for r in new if r["change"] == "new"], [(None, "none")])
+            opt = build.with_changes({"quarter": "2026Q2", "holdings": [self.row("482480100", "KLAC", 1e5, 3e7) | {"put_call": "CALL"}]}, prev)[0]
+            self.assertEqual((opt["suspect_units"], opt["suspect_units_basis"]), (None, "none"))
         finally:
             build.CONSENSUS.clear()
 

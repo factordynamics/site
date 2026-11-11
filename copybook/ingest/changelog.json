@@ -2,6 +2,13 @@
  "about": "Copybook data changelog: methodology changes, restatements and corrections, newest first. Append-only: entries are added, never edited away. Published as data/changelog.json by build.py.",
  "entries": [
   {
+   "id": "2026-11-11-suspect-units-basis",
+   "date": "2026-11-11",
+   "kind": "correction",
+   "title": "suspect_units on every share line, with suspect_units_basis saying which check ran",
+   "body": "Some full books served by /v1 left suspect_units null on most share lines (UBS Group AG: 8,917 of 10,395 rows, NVDA, AAPL and MSFT among them; also Natixis, Credit Agricole, Natixis Advisors and Mitsubishi UFJ Trust). Three kinds of row were never checked: books with no prior quarter stored, which were served without the check; lines disclosed later by an amendment; and exited lines. Every share line now goes through the check. The cross-filer check (implied price over 3x off the CUSIP's median across all filers that quarter) runs whenever the CUSIP has a median, together with the filer's own-prior check when there is a prior. When the CUSIP has no median, the own-prior check alone decides: value per share over 5x apart from the filer's prior quarter with no split on file. New field suspect_units_basis says which check ran: filers, own_prior, or none. With none, which means neither check could run, and on notes and options, suspect_units stays null. From the first full run after 07:00 UTC on Nov 11."
+  },
+  {
    "id": "2026-11-11-filer-types-without-adv",
    "date": "2026-11-11",
    "kind": "incident",

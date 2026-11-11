@@ -551,7 +551,7 @@ def mark_refiled(trail: list[dict], refiled: list[dict]) -> list[dict]:
 
 CHANGE_FIELDS = ("prev_shares", "prev_value", "prev_weight", "change", "share_change", "value_delta", "delta_pct_of_book")
 # Set by with_changes only when they apply; a row read back from an earlier build must not keep them.
-STALE = ("split", "prev_shares_as_filed", "suspect_units", "prev_cusip", "prev_principal_amount")
+STALE = ("split", "prev_shares_as_filed", "suspect_units", "suspect_units_basis", "prev_cusip", "prev_principal_amount")
 MOVE_ROWS = 10  # per bucket in {slug}.json `moves`; alerts carry the top 5
 CHANGE_KINDS = ("new", "added", "trimmed", "exited", "unchanged", "disclosed_later")
 
@@ -573,6 +573,36 @@ def same_class(a: dict, b: dict) -> bool:
     return bool(COMMON.search(ta) and COMMON.search(tb)) and not pref(ta) and not pref(tb)
 
 
+def units(h: dict, p: dict | None, r: float, k: float, q: str | None, q_prev: str | None) -> dict:
+    """suspect_units and suspect_units_basis for one row. Share lines only (notes and options: null, basis none).
+    filers: this line or its prior priced over OFF_MEDIAN x off the CUSIP's median across every filer that quarter
+    (AllianceBernstein 2026Q2 KLAC at $1,472 a share, peers $301.71), plus the own-prior check when it can run.
+    own_prior: no median for the CUSIP, so only the filer's own value per share against its prior quarter (over
+    5x apart with no split on file: GuardCap BKNG). none: neither could run; suspect_units stays null."""
+    if h.get("shares_type") == "PRN" or h.get("put_call"):
+        return {"suspect_units": None, "suspect_units_basis": "none"}
+
+    def off(row: dict, quarter: str | None, kk: float = 1.0) -> bool | None:
+        m, n = consensus().get((quarter or "", row["cusip"])), amount(row)
+        if not (m and n and row["value"] > 0):
+            return None
+        # A prior already in post-split shares (Amundi CRWD 2026Q2 at ~$190 against a $763 median) sits at the
+        # median over the split ratio.
+        return not any(1 / OFF_MEDIAN <= row["value"] / n / (m / s) <= OFF_MEDIAN for s in {1.0, kk})
+
+    peers = [c for c in (off(h, q), off(p, q_prev, k) if p is not None else None) if c is not None]
+    own = None
+    now, was = amount(h), (amount(p) * r if p is not None else 0)
+    if p is not None and now and was and h["value"] > 0 and p["value"] > 0:
+        jump = (h["value"] / now) / (p["value"] / was)
+        own = jump > 5 or jump < 0.2
+    if peers:
+        return {"suspect_units": bool(any(peers) or own), "suspect_units_basis": "filers"}
+    if own is not None:
+        return {"suspect_units": own, "suspect_units_basis": "own_prior"}
+    return {"suspect_units": None, "suspect_units_basis": "none"}
+
+
 def with_changes(latest: dict, prev: dict | None) -> list[dict]:
     """Holdings with prior-quarter fields, plus exited positions as value-0 rows.
 
@@ -590,8 +620,9 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
     value_delta over the share-position book (equity_value). PRN notes compare
     principal amounts and never count as shares (share_change null).
     """
-    if prev is None:
-        return [h | {f: None for f in CHANGE_FIELDS} for h in latest["holdings"]]
+    if prev is None:  # no prior quarter: the cross-filer check still runs on each share line
+        return [{f: v for f, v in h.items() if f not in STALE} | {f: None for f in CHANGE_FIELDS}
+                | units(h, None, 1.0, 1.0, latest.get("quarter"), None) for h in latest["holdings"]]
     eq = latest.get("equity_value") or sum(h["value"] for h in latest["holdings"] if is_equity(h)) or None
     q_from, q_to = prev.get("quarter"), latest.get("quarter")
     known_by = latest.get("accepted_at")
@@ -654,7 +685,7 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
             if abs(math.log(was / now_px)) < abs(math.log(was / (now_px * r))):
                 r = 1.0
         if h.get("late_disclosure"):
-            rows.append(h | extra(p, "disclosed_later", 0, None, r, prn))
+            rows.append(h | units(h, p, r, k, q_to, q_from) | extra(p, "disclosed_later", 0, None, r, prn))
             continue
         now = amount(h)
         if p is None:
@@ -676,22 +707,12 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
                     h = h | {"suspect_units": True}
                 elif abs(delta) > 1.5 * max(h["value"], p["value"]):  # no trade is worth more than that
                     delta = h["value"] - p["value"]
-        # Cross-filer check: this line or its prior priced over OFF_MEDIAN x off the CUSIP's median across
-        # every filer that quarter (AllianceBernstein 2026Q2 KLAC at $1,472 a share, peers $301.71).
-        if not prn and not h.get("put_call") and not h.get("suspect_units"):
-            def off(row, q, k=1.0):
-                m, n = consensus().get((q or "", row["cusip"])), amount(row)
-                # A prior already in post-split shares (Amundi CRWD 2026Q2 at ~$190 against a $763 median)
-                # sits at the median over the split ratio.
-                return bool(m and n and row["value"] > 0 and not any(
-                    1 / OFF_MEDIAN <= row["value"] / n / (m / s) <= OFF_MEDIAN for s in {1.0, k}))
-            # Checked share lines read true or false; notes, options and late lines stay null (never checked).
-            h = h | {"suspect_units": bool(off(h, q_to) or (p is not None and off(p, q_from, k)))}
-        rows.append(h | extra(p, change, delta, ds, r, prn))
+        rows.append(h | units(h, p, r, k, q_to, q_from) | extra(p, change, delta, ds, r, prn))
     for p in sorted(before.values(), key=lambda x: x["value"], reverse=True):
         prn = p.get("shares_type") == "PRN"
         r = ratio(p)
-        rows.append(
+        gone_row = {"cusip": p["cusip"], "put_call": p["put_call"], "shares_type": p.get("shares_type"), "value": 0, "shares": 0}
+        rows.append(units(gone_row, p, r, r, q_to, q_from) |
             {
                 "issuer": p["issuer"],
                 "title": p["title"],
