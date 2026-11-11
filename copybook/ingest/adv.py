@@ -68,6 +68,7 @@ def parse(raw: bytes, exempt: bool) -> list[dict]:
             "raum": num(g(r, "5F(2)(c)")),
             "raum_individuals": num(g(r, "5D(a)(3)")) + num(g(r, "5D(b)(3)")),
             "raum_investment_companies": num(g(r, "5D(d)(3)")),
+            "raum_pooled": num(g(r, "5D(f)(3)")),  # pooled vehicles, each counted once (masters and feeders not summed)
             "private_funds": int(num(g(r, "Count of Private Funds - 7B(1)"))),
             "hedge_funds": counts["Hedge"] if g(r, "Any Hedge Funds").strip() == "Y" else 0,
             "fund_counts": {t: n for t, n in counts.items() if n},
@@ -84,13 +85,17 @@ def load() -> list[dict]:
 
 
 def hedge_gav(a: dict) -> tuple[float, bool]:
-    """(hedge-fund gross assets, estimated?)."""
+    """(hedge-fund gross assets, estimated?), de-duplicated: Schedule D 7.B.1 gross assets summed over every private fund
+    count a master fund and each of its feeders, so when that sum exceeds the adviser's RAUM in pooled vehicles (5.D(f))
+    it is scaled down to it (Akre: 20.9% of RAUM summed, 10.6% pooled). Exempt reporting advisers report no RAUM."""
     if not a["hedge_funds"] or not a["private_gav"]:
         return 0.0, False
     total = sum(a["fund_counts"].values()) or a["private_funds"] or a["hedge_funds"]
-    if a["hedge_funds"] >= total:
-        return a["private_gav"], False
-    return a["private_gav"] * a["hedge_funds"] / total, True
+    gav, est = (a["private_gav"], False) if a["hedge_funds"] >= total else (a["private_gav"] * a["hedge_funds"] / total, True)
+    pooled = a.get("raum_pooled") or 0
+    if pooled and not a["exempt"] and a["private_gav"] > pooled:
+        gav *= pooled / a["private_gav"]
+    return gav, est
 
 
 def verdict(a: dict) -> tuple[str | None, dict]:

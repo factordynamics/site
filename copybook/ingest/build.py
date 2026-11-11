@@ -57,6 +57,11 @@ NOTICE_PATH = DATA / "notices.json"
 _NOTICES: dict[str, dict] | None = None
 _SUBS: dict[str, dict] = {}
 INACTIVE_AFTER = 4  # quarters behind the expected period before a filer is retired
+# Filers known to have closed (checked by hand on EDGAR and IAPD): status inactive whatever their latest filing shows.
+CLOSED = {
+    "0000947996": "Olstein Capital Management's SEC registration has been terminated since Jul 10, 2026, and its 2026Q2 "
+                  "13F lists one $0 line; it has stopped filing and is left out of Consensus and alerts.",
+}
 _AMEND: dict[str, str] | None = None
 LITE_HOLDERS = 8
 CACHE_FORMAT = 5  # bump when stored quarters lack fields the build now needs (forces a refetch)
@@ -261,8 +266,10 @@ def notice_periods(cik: str, metas: list, notices: list, cache: dict) -> tuple[l
     return loaded, skipped, extra
 
 
-def manager_status(history: list[dict], skipped: list[dict], today: str) -> dict:
+def manager_status(history: list[dict], skipped: list[dict], today: str, cik: str = "") -> dict:
     """Why the latest book is what it is, for the front end to explain."""
+    if cik in CLOSED:
+        return {"status": "inactive", "status_note": CLOSED[cik]}
     latest = history[0]
     expected = expected_report_date(today)
     q = latest["quarter"]
@@ -901,7 +908,7 @@ def ingest() -> dict:
                     ],
                     "history_quarters": [q["quarter"] for q in history],
                     "skipped_quarters": skipped,
-                    **manager_status(history, skipped, datetime.now(timezone.utc).isoformat()),
+                    **manager_status(history, skipped, datetime.now(timezone.utc).isoformat(), cik),
                 }
             )
         except Exception as exc:

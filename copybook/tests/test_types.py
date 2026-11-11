@@ -18,6 +18,13 @@ def adviser(raum, hedge, private_gav, counts=None, individuals=0.0, inv_cos=0.0,
 
 
 class AdviserRuleTests(unittest.TestCase):
+    def test_hedge_share_counts_master_and_feeder_funds_once(self):
+        # Akre: summed private-fund gross assets 20.9% of RAUM, pooled-vehicle RAUM (5.D(f)) 10.6%.
+        from ingest.adv import hedge_gav
+        a = adviser(11.8e9, 3, 2.466e9) | {"raum_pooled": 1.251e9}
+        self.assertAlmostEqual(hedge_gav(a)[0] / a["raum"], 0.106, places=3)
+        self.assertAlmostEqual(hedge_gav(adviser(11.8e9, 3, 2.466e9))[0] / 11.8e9, 0.209, places=3)  # no 5.D(f): summed
+
     def test_hedge_fund_by_share_of_raum(self):
         self.assertEqual(verdict(adviser(0.6e9, 2, 0.5e9))[0], "hedge_fund")  # 83% of RAUM
         self.assertIsNone(verdict(adviser(2e9, 1, 0.8e9))[0])  # 40%, under $1B

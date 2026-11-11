@@ -29,7 +29,7 @@
   "0000947996": {
    "name": "Olstein Capital Management, L.P.",
    "type": "long_only",
-   "evidence": "Adviser to the Olstein Funds (registered funds, EDGAR CIK 944690); no current Form ADV in the SEC adviser file"
+   "evidence": "Long-only value manager (historical type). Closed: SEC registration (CRD 38474) terminated Jul 10, 2026; 2026Q2 13F 0000894189-26-021028 lists one $0 line. Status inactive (build.py CLOSED)."
   },
   "0001002152": {
    "name": "COMPASS CAPITAL MANAGEMENT, INC",

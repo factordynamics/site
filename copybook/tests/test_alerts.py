@@ -47,6 +47,7 @@ class StatusTest(unittest.TestCase):
     def test_statuses(self):
         today = "2026-11-08"
         self.assertEqual(manager_status([self.q("2026Q2", "2026-06-30")], [], today)["status"], "current")
+        self.assertEqual(manager_status([self.q("2026Q2", "2026-06-30")], [], today, "0000947996")["status"], "inactive")  # closed (Olstein)
         self.assertEqual(manager_status([self.q("2026Q1", "2026-03-31")], [], today)["status"], "stale")
         self.assertEqual(manager_status([self.q("2025Q3", "2025-09-30")], [], today)["status"], "stale")  # 3 behind
         self.assertEqual(manager_status([self.q("2025Q2", "2025-06-30")], [], today)["status"], "inactive")  # 4 behind
