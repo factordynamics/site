@@ -23,14 +23,17 @@
     <link rel="preconnect" href="https://refcell.github.io" crossorigin="anonymous" />
     <link rel="preconnect" href="https://copybook.factordynamics.com" crossorigin="anonymous" />
     <script>
-      if (/^\/(funds|flows|consensus|filings)?\/?$/.test(location.pathname)) {
+      var pre = function (f) {
         var l = document.createElement('link')
         l.rel = 'preload'
         l.as = 'fetch'
         l.crossOrigin = 'anonymous'
-        l.href = 'https://refcell.github.io/gust/copybook/data/index.json'
+        l.href = 'https://refcell.github.io/gust/copybook/data/' + f
         document.head.appendChild(l)
       }
+      if (/^\/(funds|flows|consensus|filings)?\/?$/.test(location.pathname)) pre('index.json')
+      // Pages built from every investor's 13F: all the books in one file.
+      if (/^\/(funds|flows|consensus)\/?$/.test(location.pathname)) pre('books.json')
     </script>
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Holdterm" />

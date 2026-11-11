@@ -130,10 +130,10 @@ export function BooksProgress({ what }: { what: string }) {
     <div className="books-progress" aria-hidden>
       <div className="books-progress-text">
         <span>{what}</span>
-        <span className="dim">{total ? `${done} of ${total} portfolios` : 'Starting…'}</span>
+        <span className="dim">{total ? `${done} of ${total} portfolios` : 'Downloading…'}</span>
       </div>
-      <div className="books-progress-bar">
-        <i style={{ width: `${total ? (done / total) * 100 : 2}%` }} />
+      <div className={`books-progress-bar${total ? '' : ' busy'}`}>
+        <i style={total ? { width: `${(done / total) * 100}%` } : undefined} />
       </div>
     </div>
   )

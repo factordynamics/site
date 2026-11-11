@@ -290,15 +290,18 @@ function longBook(b: Book) {
   b.prev_long_value = b.prev_total_value == null ? null : longs.reduce((t, h) => t + (h.prev_value ?? 0), 0)
   return b
 }
-const books = new Map<string, Promise<Book>>()
+const bookCache = new Map<string, Promise<Book>>()
+/** A raw {slug}.json object through the same checks and corrections, wherever it came from. */
+const prepare = (slug: string, raw: Promise<Book>) =>
+  raw.then((b) => {
+    if (failsData(b as never)) throw new Error(`held: ${slug} fails the data checks`)
+    return (normalise(b.holdings), longBook(correct(name(b) as Book)))
+  })
 export const loadBook = (slug: string) => {
-  let p = books.get(slug)
+  let p = bookCache.get(slug)
   if (!p) {
-    p = (inRoster(slug) ? get<Book>(`${DATA}${slug}.json`) : Promise.reject(new Error(`404 ${slug}`))).then((b) => {
-      if (failsData(b as never)) throw new Error(`held: ${slug} fails the data checks`)
-      return (normalise(b.holdings), longBook(correct(name(b) as Book)))
-    })
-    books.set(slug, p)
+    p = prepare(slug, inRoster(slug) ? get<Book>(`${DATA}${slug}.json`) : Promise.reject(new Error(`404 ${slug}`)))
+    bookCache.set(slug, p)
   }
   return p
 }
@@ -436,8 +439,20 @@ export function funds(ix: Index): Manager[] {
 /** Every roster fund's latest full book. */
 /** How many of the investors' 13F books have arrived, for pages that need all of them (see BooksProgress). */
 export const booksProgress = { done: 0, total: 0 }
+/** Every roster fund's {slug}.json in one file (Copybook ingest's data/books.json, written last in each data run).
+ * Used only when it is at least as new as index.json; otherwise, or when it's missing, null and the per-fund
+ * files load instead. */
+let combinedP: Promise<Record<string, Book> | null> | null = null
+// Fetched alongside index.json, not after it (both are preloaded by index.html on the pages that need them).
+const loadCombined = () =>
+  (combinedP ??= Promise.all([get<{ generated_at: string; books: Record<string, Book> }>(DATA + 'books.json'), loadIndex()])
+    .then(([c, ix]) => (c.generated_at >= ix.generated_at && c.books ? c.books : null))
+    .catch(() => null))
 export async function loadBooks(): Promise<Book[]> {
+  const pending = loadCombined()
   const ms = funds(await loadIndex())
+  const combined = await pending
+  if (combined) for (const m of ms) if (combined[m.slug] && !bookCache.has(m.slug)) bookCache.set(m.slug, prepare(m.slug, Promise.resolve(combined[m.slug])))
   let done = 0
   const tick = () => {
     booksProgress.done = ++done

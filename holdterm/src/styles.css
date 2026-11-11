@@ -3103,9 +3103,27 @@ p a,
   background: var(--acc);
   transition: width 0.2s ease-out;
 }
+/* Before the first portfolio arrives (one combined download): a band sliding across. */
+.books-progress-bar.busy i {
+  width: 30%;
+  animation: books-busy 1.2s ease-in-out infinite;
+}
+@keyframes books-busy {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(340%);
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .books-progress-bar i {
     transition: none;
+  }
+  .books-progress-bar.busy i {
+    animation: none;
+    width: 100%;
+    opacity: 0.35;
   }
 }
 
