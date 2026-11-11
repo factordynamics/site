@@ -1444,8 +1444,10 @@ export function Stock({ ticker }: { ticker: string }) {
   const nNew = cnt('new')
   const prevHolders = holders.length - nNew + exited.length
   const value = holders.reduce((x, h) => x + h.value, 0)
-  const topHolder = [...holders].sort((a, b) => b.weight - a.weight)[0]
+  const bigHolder = [...holders].sort((a, b) => b.value - a.value)[0]
   const movers = [...holders, ...exited].filter((h) => h.change && h.change !== 'unchanged').sort((a, b) => Math.abs(b.delta_value ?? 0) - Math.abs(a.delta_value ?? 0))
+  const buyer = movers.find((h) => (h.delta_value ?? 0) > 0)
+  const seller = movers.find((h) => (h.delta_value ?? 0) < 0)
   const tickers = new Set(d.classes.map((c) => c.ticker))
   // Filings by the investors Holdterm follows, as on /filings.
   const events = (ev.data?.events ?? []).filter((e) => e.ticker && tickers.has(e.ticker) && inRoster(e.slug) && !ownVehicle(e))
@@ -1475,29 +1477,20 @@ export function Stock({ ticker }: { ticker: string }) {
             </span>
           </div>
           <p className="activity-line">{ev.data ? <ActivityLine events={events} days={ev.data.window_days} name={(e) => firmOf(firms, e.slug, e.manager)} open={() => (setTab('filings'), document.querySelector('.tabs')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))} /> : '\u00a0'}</p>
+          {/* One plain line on where the numbers come from; the CUSIP 13Fs use is in its tooltip. */}
           <div className="meta">
-            <span>Source: investors’ latest 13Fs on SEC EDGAR</span>
-            <span title="The securities identifier used in 13F filings">
-              CUSIP {d.classes.map((c) => `${c.cusip}${d.classes.length > 1 ? ` (${c.ticker})` : ''}`).join(', ')}
-            </span>
+            <span title={`CUSIP ${d.classes.map((c) => `${c.cusip}${d.classes.length > 1 ? ` (${c.ticker})` : ''}`).join(', ')}`}>From these investors’ latest 13F filings with the SEC</span>
           </div>
         </div>
         <Follow kind="stocks" id={d.ticker} />
       </div>
       <p className="summary">
+        {/* The cards below give the counts and the total; the summary says what they can't: who holds the most and who moved the most money. */}
         {holders.length ? (
           <>
-            {holders.length === 1 ? (
-              <>
-                {name(topHolder)} is the only investor Holdterm follows that owns {issuerName(d.name)}: {usd(value)}, or {pct(topHolder.weight, 1)} of its portfolio, in its latest 13F.{' '}
-              </>
-            ) : (
-              <>
-                {num(holders.length)} of the investors Holdterm follows own {issuerName(d.name)}, {usd(value)} in all, in their latest 13Fs. {name(topHolder)} has the most of its portfolio in it, {pct(topHolder.weight, 1)}.{' '}
-              </>
-            )}
-            {movers.length === 1 && <>Over the last quarter, {name(movers[0])} {({ new: 'opened a position', added: 'added to its position', trimmed: 'trimmed its position', exited: 'sold out' } as Record<string, string>)[movers[0].change ?? ''] ?? 'changed its position'}.</>}
-            {movers.length > 1 && <>Over the last quarter, {listing([nNew > 0 && `${plural(nNew, 'investor')} started a position`, cnt('added') > 0 && `${num(cnt('added'))} added`, cnt('trimmed') > 0 && `${num(cnt('trimmed'))} trimmed`, exited.length > 0 && `${num(exited.length)} sold out`])}.</>}
+            {holders.length === 1 ? <>{name(bigHolder)} is the only investor Holdterm follows that owns it, {usd(bigHolder.value)} worth. </> : <>{name(bigHolder)} holds the most, {usd(bigHolder.value)}, or {pct(bigHolder.value / value, 0)} of what these investors hold. </>}
+            {buyer && <>{name(buyer)} bought the most last quarter, {buyer.change === 'new' ? `opening a ${usd(buyer.delta_value)} position` : `adding ${usd(buyer.delta_value)}`}. </>}
+            {seller && <>{name(seller)} sold the most{buyer ? '' : ' last quarter'}, {seller.change === 'exited' ? `selling out of ${usd(-(seller.delta_value ?? 0))}` : `cutting ${usd(-(seller.delta_value ?? 0))}`}.</>}
           </>
         ) : (
           <>None of the investors Holdterm follows reports {issuerName(d.name)} in its latest 13F.</>
@@ -1551,7 +1544,7 @@ const FORM: Record<Event['kind'], string> = { '13d': '13D', '13g': '13G', form4:
 /** The newest 13D/G or Form 4 on a stock in one sentence, with a count of the rest. */
 function ActivityLine({ events, days, name, open }: { events: Event[]; days: number; name: (e: Event) => string; open: () => void }) {
   const e = events[0]
-  if (!e) return <span className="dim">No 13D, 13G or Form 4 filings by these investors in the last {days} days.</span>
+  if (!e) return <span className="dim">No new 5% stakes or insider trades by these investors in the last {days} days.</span>
   const p = e.percent_of_class != null ? `${e.percent_of_class.toFixed(e.percent_of_class < 10 ? 1 : 0)}%` : null
   const what: Record<string, string> = {
     new_stake: p ? `new stake of ${p}` : 'new stake above 5%',
