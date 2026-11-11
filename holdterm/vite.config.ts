@@ -227,7 +227,12 @@ const pages = (): Plugin => ({
     // A stock the investors hold gets a description with its numbers, from the same aggregate as Most owned and
     // search (share classes combined, each investor's latest 13F); one held by 3 or more also gets its own card.
     const held = new Map<string, Agg>()
-    for (const a of aggregate([...books.values()]).rows) if (!a.fund && a.holders.length) for (const t of a.classes ?? [a.ticker]) if (t) held.set(t, a)
+    const rows = aggregate([...books.values()]).rows
+    for (const a of rows) if (!a.fund && a.holders.length) for (const t of a.classes ?? [a.ticker]) if (t) held.set(t, a)
+    // The same order, main class first, for every page's share-class labels (classOrder in src/data.ts).
+    const order = rows.filter((a) => a.label?.includes('+')).map((a) => a.label!.split('+'))
+    const withOrder = (s: string) => s.replace('</head>', `    <script type="application/json" id="ht-classes">${JSON.stringify(order).replace(/</g, '\\u003c')}</script>\n  </head>`)
+    writeFileSync(join(dist, 'index.html'), withOrder(readFileSync(join(dist, 'index.html'), 'utf8')))
     mkdirSync(join(dist, 'og', 's'), { recursive: true })
     let cards = 0
     const drawn = new Map<string, string>()
@@ -282,9 +287,9 @@ const pages = (): Plugin => ({
     for (const [p, body] of files) {
       const f = join(dist, `${p}.html`)
       mkdirSync(dirname(f), { recursive: true })
-      writeFileSync(f, body)
+      writeFileSync(f, withOrder(body))
     }
-    writeFileSync(join(dist, '404.html'), page(html, '', null))
+    writeFileSync(join(dist, '404.html'), withOrder(page(html, '', null)))
     offline(dist, html)
     appIcons(dist)
 
@@ -298,7 +303,7 @@ const pages = (): Plugin => ({
     const day = new Date().toISOString().slice(0, 10)
     const urls = ['/', ...Object.keys(SECTIONS).filter((p) => p !== '/' && p !== '/account'), ...funds.map((f) => fundPath(f.slug)), ...[...mainTickers].sort().map((t) => `/s/${t}`)]
     writeFileSync(join(dist, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((p) => `  <url><loc>${SITE}${p}</loc><lastmod>${day}</lastmod></url>`).join('\n')}\n</urlset>\n`)
-    console.log(`holdterm-pages: ${held.size} stocks with numbers, ${cards} stock cards`)
+    console.log(`holdterm-pages: ${held.size} stocks with numbers, ${cards} stock cards, ${order.length} share-class orders`)
     console.log(`holdterm-pages: ${files.size + 1} pages, 404.html, ${redirects.length} redirects`)
   },
 })
