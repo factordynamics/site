@@ -2962,9 +2962,24 @@ p a,
     white-space: normal;
   }
 }
+/* Phones: the name and value on one line and the bar across the full width under them, so a 41% bar is
+   visibly twice a 22% one (side by side, the bar got only about 90px). */
 @media (max-width: 560px) {
   .hbars:not(.inline) .hb-row {
-    grid-template-columns: minmax(0, 150px) minmax(40px, 1fr) 60px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'label val' 'track track';
+    row-gap: 6px;
+    padding: 8px;
+  }
+  .hbars:not(.inline) .hb-label {
+    grid-area: label;
+  }
+  .hbars:not(.inline) .hb-track {
+    grid-area: track;
+    height: 10px;
+  }
+  .hbars:not(.inline) .hb-val {
+    grid-area: val;
   }
 }
 
