@@ -624,7 +624,7 @@ function HomeBody() {
           />
           {due.length > 0 && (
             <div className="due small show-sm">
-              {plural(due.length, 'investor')} still to file for {quarterLabel(s.q)}, due {day(s.due)}. <A to="/funds">See all investors →</A>
+              {plural(due.length, 'investor')} still to file for {quarterLabel(s.q)}, due {day(s.due)}. <A to="/funds?show=due">See who →</A>
             </div>
           )}
           {due.length > 0 && (
@@ -642,7 +642,7 @@ function HomeBody() {
               {due.length > 14 && (
                 <>
                   {' '}
-                  <A to="/funds">+{due.length - 14} more</A>
+                  <A to="/funds?show=due">+{due.length - 14} more</A>
                 </>
               )}
             </div>
@@ -773,10 +773,16 @@ function ColKey({ items }: { items: [string, string, ('lg' | 'md')?][] }) {
   )
 }
 // ---------- funds directory ----------
+type FundsShow = 'all' | 'filed' | 'due'
 export function Funds() {
   title('Investors')
   const ix = useLoad(loadIndex, [])
   const books = useLoad(loadBooksAfterIndex, [])
+  // During filing season the list splits into who has filed this quarter's 13F and who hasn't (?show=filed|due).
+  const [show, setShow] = useState<FundsShow>(() => {
+    const v = new URLSearchParams(location.search).get('show')
+    return v === 'filed' || v === 'due' ? v : 'all'
+  })
   if (ix.error) return <Failed error={ix.error} what="the investors" />
   if (!ix.data) return <PageLoading what="Loading the investors" stats={0} rows={20} />
   const ms = funds(ix.data)
@@ -786,6 +792,16 @@ export function Funds() {
   const longOf = (m: Manager) => {
     const b = bookOf.get(m.slug)
     return b ? { v: b.long_value, n: b.long_count } : { v: m.total_value, n: m.position_count }
+  }
+  const sea = season()
+  const filed = ms.filter((m) => m.quarter >= sea.q)
+  const left = daysUntil(sea.due)
+  // Only while some, not all, have filed: before the first filing and after the last the split says nothing.
+  const split = filed.length > 0 && filed.length < ms.length
+  const view = !split || show === 'all' ? ms : show === 'filed' ? filed : ms.filter((m) => m.quarter < sea.q)
+  const pick = (v: FundsShow) => {
+    setShow(v)
+    history.replaceState(null, '', v === 'all' ? '/funds' : `/funds?show=${v}`)
   }
   return (
     <div className="page">
@@ -797,7 +813,29 @@ export function Funds() {
           </p>
         </div>
       </div>
-      <Panel title="All investors" right={<span className="dim hide-sm">Largest portfolio first · click a heading to sort</span>}>
+      {split && (
+        <>
+          <div className="filters quarter-pick" role="group" aria-label={`${quarterLabel(sea.q)} 13F`}>
+            {(
+              [
+                ['all', 'All', ms.length],
+                ['filed', sm(`Filed for ${quarterLabel(sea.q)}`, 'Filed'), filed.length],
+                ['due', left >= 0 ? 'Still to file' : 'Not filed yet', ms.length - filed.length],
+              ] as [FundsShow, ReactNode, number][]
+            ).map(([k, label, n]) => (
+              <button key={k} className={show === k ? 'chip on' : 'chip'} aria-pressed={show === k} onClick={() => pick(k)}>
+                {label}
+                <span className="chip-n">{n}</span>
+              </button>
+            ))}
+          </div>
+          <p className="dim small quarter-note">
+            {quarterLabel(sea.q)} 13Fs {left >= 0 ? 'are' : 'were'} due {day(sea.due)}
+            {left > 1 ? `, in ${left} days` : left === 1 ? ', tomorrow' : left === 0 ? ', today' : ''}. Until an investor files, its page shows its last 13F.
+          </p>
+        </>
+      )}
+      <Panel title={!split || show === 'all' ? 'All investors' : show === 'filed' ? `Filed for ${quarterLabel(sea.q)}` : left >= 0 ? `Still to file for ${quarterLabel(sea.q)}` : `${quarterLabel(sea.q)} 13F not filed yet`} right={<span className="dim hide-sm">Largest portfolio first · click a heading to sort</span>}>
         <ColKey
           items={[
             ['Portfolio', 'What its US-listed stocks were worth in its latest 13F. Options are left out.'],
@@ -807,7 +845,7 @@ export function Funds() {
         />
         <Grid
           rank
-          rows={ms}
+          rows={view}
           initial={['v', 'desc']}
           href={(m) => fundPath(m.slug)}
           cols={[
