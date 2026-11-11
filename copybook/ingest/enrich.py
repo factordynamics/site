@@ -178,17 +178,18 @@ def fix_shards() -> int:
         fbp = DATA / "fb" / str(r.get("quarter")) / p.name
         full = json.loads(fbp.read_text()) if fbp.exists() else None
         if not (full and full.get("ok") and full.get("accession") == r.get("accession") and full.get("rows")
-                and all(k in full["columns"] for k in cols)):
+                and all(k in full["columns"] for k in ("cusip", "value", "shares", "put_call"))):
             full = None
-        src = full or r
-        sc = src["columns"]
-        rows = [[row[sc.index(k)] for k in cols] for row in src["rows"]]
         ci, vi, si, pi = (cols.index(k) for k in ("cusip", "value", "shares", "put_call"))
+        if full:  # the fb/ book's filed values; columns it lacks (display_name, sector, a ticker) from the shard's row
+            fc = full["columns"]
+            mine = {row[ci]: row for row in r["rows"]}
+            rows = [[(row[fc.index(k)] if k in fc else None) if k in ("cusip", "value", "shares", "put_call")
+                     else (row[fc.index(k)] if k in fc and row[fc.index(k)] is not None else (mine.get(row[fc.index("cusip")]) or [None] * len(cols))[cols.index(k)])
+                     for k in cols] for row in full["rows"]]
+        else:
+            rows = [list(row) for row in r["rows"]]
         ti = cols.index("shares_type") if "shares_type" in cols else None
-        if full:  # keep the tickers enrich and figi wrote on the shard
-            tick = {row[ci]: row[cols.index("ticker")] for row in r["rows"] if row[cols.index("ticker")]}
-            for row in rows:
-                row[cols.index("ticker")] = row[cols.index("ticker")] or tick.get(row[ci])
         equity = [row for row in rows if not row[pi] and row[si] and row[vi] and (ti is None or row[ti] != "PRN")]
         price = lambda row: row[vi] / row[si]
         dollars = False

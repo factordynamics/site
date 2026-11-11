@@ -29,7 +29,7 @@ from ingest import build
 from ingest import splits as sp
 from ingest.datasets import prev_quarter
 from ingest.filer_types import signature
-from ingest.parse import ABOVE_20K, consensus_prices, not_common, unit_verdict
+from ingest.parse import ABOVE_20K, consensus_prices, debt_cusip, not_common, unit_verdict
 
 WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
 DATA = WEB / "data"
@@ -62,7 +62,8 @@ def filing(b: dict) -> dict:
             "accepted_at": b.get("accepted_at") or ACCEPTED.get(acc or ""), "original_accession": original(b) or acc}
 # Count blocks next to `counts` in hl/: smart = hedge funds and long-only managers, hedge_fund alone.
 LENSES = {"smart": {"hedge_fund", "long_only", "active"}, "hedge_fund": {"hedge_fund"}}
-HL_SCHEMA = 3  # bump when hl/ rows change shape: a curated run then rebuilds hl/ (--schema-stale)
+HL_SCHEMA = 4  # bump when hl/ rows change shape or rules: a curated run then rebuilds hl/ (--schema-stale). 4: Nov 11 P1
+# rules (options band, split sides, sign_mismatch, debt CUSIPs out of holder rows)
 HOLDERS_TOP = 25  # public rows per stock in hl/; the full list (hlf/, R2 hl/) is paid
 SITE_TOP = 500  # hlr/: rows per stock for the site's d/h pages (as before, now from full books), plus every
 SITE_PARTS = 4  # hedge-fund and long-only holder, so the lens lists and counts are complete
@@ -70,6 +71,7 @@ CONS: dict[tuple[str, str], float] = {}  # (quarter, cusip) -> median implied pr
 # (cik, quarter, cusip): lines a curated book refused to rescale x1000 (build.fix_with_consensus: its cover total equals
 # the lines as filed). The fb/ copy has no cover total, so it follows that verdict (Mizuho Securities USA 2026Q3 ON, AKAM).
 REJECTED: set[tuple[str, str, str]] = set()
+DEBT_LINES: set[tuple[str, str]] = set()  # (issuer6, cik): a debt CUSIP filed as shares, once summed by prefix
 UNCLASSED: dict[str, int] = {}  # quarter -> suspect_units rows that reached write_full with no unreliable class
 FIXED = [0]
 
@@ -212,7 +214,8 @@ def changes(shard: dict) -> tuple[dict, list[dict]] | None:
 
 
 CHANGE_COLUMNS = ("cik", "slug", "filer_name", "curated", "type", "cusip", "ticker", "issuer", "put_call", "change",
-                  "shares", "prev_shares", "share_change", "value", "value_delta", "accession", "accepted_at", "value_delta_basis")
+                  "shares", "prev_shares", "share_change", "value", "value_delta", "accession", "accepted_at", "value_delta_basis",
+                  "shares_basis")  # "contracts": an option line filed in contracts, shares x100 (BNP Paribas FM)
 CHANGES_MAX = 20_000  # largest |value_delta| per quarter; the Worker parses the whole file
 
 
@@ -422,7 +425,7 @@ def issuer_rows(rows: list[dict]):
     for r in rows:
         c = linked(r.get("cusip"))
         if len(c) < 6 or c.startswith("000000") or r.get("put_call") or r.get("shares_type") == "PRN" \
-                or r.get("price_outlier") or r.get("suspect_duplicate") or not_common(r.get("title")):
+                or r.get("price_outlier") or r.get("suspect_duplicate") or not_common(r.get("title"), c):
             continue
         yield c[:6], r
 
@@ -693,9 +696,12 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                 if len(c) >= 6:
                     per.setdefault(c[:6], {}).setdefault(cik, [0, 0, 0, 0, False, 0, False, None, False, False, None, None])[8] = True
                 continue
+            if len(c) >= 8 and debt_cusip(c) and not r.get("put_call") and r.get("shares_type") != "PRN" \
+                    and not not_common(r.get("title")):
+                DEBT_LINES.add((c[:6], cik))  # filed as shares under the issuer's prefix: kept out by its CUSIP alone
             if len(c) < 6 or c.startswith("000000") or r.get("put_call") or r.get("shares_type") == "PRN" \
-                    or not_common(r.get("title")):
-                continue  # preferreds share the common stock's issuer code (BAC 060505682) but aren't its holders
+                    or not_common(r.get("title"), c):
+                continue  # preferreds and notes share the common stock's issuer code (BAC 060505682) but aren't its holders
             # A flagged line (build.hold) shows its reliable side only and no $ trade. unreliable "value" (BMO 2026Q3
             # TEVA at ~$4,005 a share): its shares and change stand (added +159,272), its value stays out of weights
             # and $. "shares" (Guardcap BKNG 2026Q3, Crosslink CRM 2026Q2) or "both": the change is unknown, unless
@@ -1006,7 +1012,8 @@ def main() -> int:
                 r["cusip"], r.get("ticker"), r.get("issuer"), r.get("put_call"), r["change"], int(round(r.get("shares") or 0)),
                 build.shares_out(float(r.get("prev_shares") or 0)), int(round(r.get("share_change") or 0)),
                 int(round(r.get("value") or 0)), int(round(r.get("value_delta") or 0)), rec.get("accession"),
-                rec.get("accepted_at") or ACCEPTED.get(rec.get("accession") or ""), r.get("value_delta_basis")]
+                rec.get("accepted_at") or ACCEPTED.get(rec.get("accession") or ""), r.get("value_delta_basis"),
+                r.get("shares_basis")]
 
     for shard in shards:
         path = DATA / "f" / f"{shard['cik']}.json"
@@ -1058,6 +1065,8 @@ def main() -> int:
           + "; ".join(f"{o}->{v['new']} {v.get('ticker')} {v.get('filers')} filers" for o, v in build.cusip_links().items()),
           flush=True)
     print(f"moves: holder index for {write_holders(shards, types, curated, filers)} issuers", flush=True)
+    print(f"moves: debt CUSIPs filed as shares kept out of holder rows: {len(DEBT_LINES)} filer-issuer pairs across "
+          f"{len({c for c, _ in DEBT_LINES})} issuers", flush=True)
     net_parity(per_quarter)
     qy = write_quality(shards, curated, filers)
     print(f"moves: quality.json: {qy['held']['rows']} lines held across {qy['held']['filers']} filers: "

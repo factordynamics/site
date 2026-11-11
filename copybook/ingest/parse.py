@@ -12,9 +12,18 @@ _DEP_PREFERRED = re.compile(r"\bDEP(OSITARY)?\b.*(\bSHS\b|\bSR\b|\bCUM|\bCM\b|\b
 _ADR = re.compile(r"\bAMERICAN\b|\bADR|\bADS\b|RECEI|RCPT|\bUNIT")
 
 
-def not_common(title: str | None) -> bool:
+def not_common(title: str | None, cusip: str | None = None) -> bool:
+    """Not a common-stock line: a preferred, note, warrant or right by its title, or a debt CUSIP (debt_cusip)."""
     t = (title or "").upper()
-    return bool(_NOT_COMMON.search(t) or (_DEP_PREFERRED.search(t) and not _ADR.search(t)))
+    return bool(_NOT_COMMON.search(t) or (_DEP_PREFERRED.search(t) and not _ADR.search(t))) or debt_cusip(cusip)
+
+
+def debt_cusip(cusip: str | None) -> bool:
+    """A CUSIP whose issue number (characters 7-8) has a letter: a fixed-income issue, never a share class, whatever
+    the filer's title or SH/PRN says (Triglav 2026Q2 09857LAW8 and 09857LAV0, Booking notes filed as SH \"Common\" at
+    ~$1.05 a unit, were summed into BKNG's holder row by issuer prefix)."""
+    c = (cusip or "").upper()
+    return len(c) >= 8 and any(ch.isalpha() for ch in c[6:8])
 
 import xml.etree.ElementTree as ET
 from collections import defaultdict

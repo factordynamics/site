@@ -45,7 +45,7 @@ def kind_of(h: dict) -> str | None:
         return None  # principal-amount notes are not shareholders
     pc = (h.get("put_call") or "").strip().lower() or (h.get("title") or "").strip().lower()
     kind = {"put": "puts", "puts": "puts", "call": "calls", "calls": "calls"}.get(pc, "equity")
-    if kind == "equity" and (DEBT.search(h.get("title") or "") or not_common(h.get("title"))):
+    if kind == "equity" and (DEBT.search(h.get("title") or "") or not_common(h.get("title"), h.get("cusip"))):
         return None  # notes and converts are not shareholders
     return kind
 

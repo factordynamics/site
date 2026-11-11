@@ -139,3 +139,12 @@ class ParseTests(unittest.TestCase):
         scale_if_thousands(holdings, True)
         ally = next(h for h in holdings if h.cusip == "02005N100")
         self.assertEqual(ally.value, (577_211_815.0 + 128_838_056.0) * 1000)
+
+
+class DebtCusipTest(unittest.TestCase):
+    def test_debt_issue_numbers_are_not_common(self):
+        from ingest.parse import debt_cusip, not_common
+        # Triglav 2026Q2: Booking notes filed as SH "Common" at ~$1.05 a unit; BKNG's common is 09857L108.
+        self.assertTrue(debt_cusip("09857LAW8") and not_common("Common", "09857LAV0"))
+        self.assertFalse(debt_cusip("09857L108") or not_common("Common", "09857L108"))
+        self.assertFalse(debt_cusip("G6476A102"))  # a foreign issuer's numeric issue number is a share class
