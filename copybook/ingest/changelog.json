@@ -2,6 +2,13 @@
  "about": "Copybook data changelog: methodology changes, restatements and corrections, newest first. Append-only: entries are added, never edited away. Published as data/changelog.json by build.py.",
  "entries": [
   {
+   "id": "2026-11-11-row-provenance-suspect-units",
+   "date": "2026-11-11",
+   "kind": "correction",
+   "title": "Every full-book row now names its filing and acceptance time; suspect_units is true or false on checked rows",
+   "body": "Full 13F books served by /v1 for filers outside the curated list (R2 fb/) were stored without per-row provenance, so source_accession and first_disclosed_at read null on every row (AllianceBernstein 2026Q2: all 3,467 rows). Each row now carries source_accession, the filing that first disclosed it (the original 13F-HR, or for a book with amendments the first of its filings whose information table lists the row), and first_disclosed_at, that filing's EDGAR acceptance time. An exited row names the filing that left it out. Existing books are backfilled from EDGAR acceptance times. suspect_units was set only when true and otherwise left out, so /v1 read null; every share line that goes through the cross-filer and own-prior implied-price check now reads true or false (notes, options and late-disclosed lines are not checked and stay null). AllianceBernstein 2026Q2 KLAC ($1,472 a share against a $301.71 cross-filer median) and BKNG are true. Affected: every non-curated filer's /v1 holdings and the fb/ books, from the first full run on Nov 11."
+  },
+  {
    "id": "2026-11-11-hedge-fund-adv",
    "date": "2026-11-11",
    "kind": "methodology",

@@ -6,6 +6,10 @@ acceptance time, the filer's submissions JSON (one request per CIK, every filing
 an accession outside that file's recent window falls back to the filing's own header (.hdr.sgml,
 whose time is US Eastern). Results are cached in data/accepted.json ({accession: accepted_at}),
 written into the f/ shards, and read by moves.py for the hl/ holder rows and fq/ books.
+
+Full books (fb/, fq/) also get per-row provenance where missing: `source_accession`, the filing that first
+disclosed the row (the book's own filing; for a book with amendments, the first of its filings whose information
+table lists the row), and `first_disclosed_at`, that filing's acceptance time.
 Stops after COPYBOOK_ACCEPTED_BUDGET_S seconds; the next run continues.
 """
 
@@ -24,13 +28,15 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from ingest.edgar import fetch_submissions, get, iso_utc
+from ingest.edgar import fetch_info_table, fetch_submissions, get, iso_utc
+from ingest.parse import parse_info_table
 
 WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
 DATA = WEB / "data"
 CACHE = DATA / "accepted.json"
 BUDGET = float(os.environ.get("COPYBOOK_ACCEPTED_BUDGET_S") or 1500)
 EASTERN = ZoneInfo("America/New_York")
+PROV = ("source_accession", "first_disclosed_at")
 
 
 def load() -> dict[str, str]:
@@ -61,6 +67,14 @@ def main() -> int:
         shards[p] = s
         if acc not in cache:
             need.setdefault(s.get("cik") or p.stem, set()).add(acc)
+    for p in full_books():  # full books' own filings and amendments
+        try:
+            b = json.loads(p.read_text())
+        except ValueError:
+            continue
+        for a in [b.get("accession")] + list(b.get("amendments") or []):
+            if a and isinstance(a, str) and a not in cache:
+                need.setdefault(b.get("cik") or p.stem, set()).add(a)
     started, looked = time.monotonic(), 0
     try:
         for cik, accs in sorted(need.items()):
@@ -91,7 +105,68 @@ def main() -> int:
             patched += 1
     blank = len(shards) - patched
     print(f"accepted: {len(cache)} acceptance times on file; {patched} shards updated, {blank} still without one")
+    books, rows_blank = fill_rows(cache, started)
+    print(f"accepted: per-row provenance written on {books} full books; first_disclosed_at blank on {rows_blank} rows")
     return 0
+
+
+def full_books() -> list[Path]:
+    return sorted((DATA / "fb").glob("*/*.json")) + sorted((DATA / "fq").glob("*/*.json"))
+
+
+def first_listed(cik: str, accessions: list[str]) -> dict[tuple[str, str], str]:
+    """(cusip, put/call) -> the first of these filings, in order, whose information table lists it."""
+    out: dict[tuple[str, str], str] = {}
+    for a in accessions:
+        for r in parse_info_table(fetch_info_table(cik, a)):
+            out.setdefault((r.cusip, (r.put_call or "").lower()), a)
+    return out
+
+
+def fill_rows(cache: dict[str, str], started: float) -> tuple[int, int]:
+    """Adds source_accession and first_disclosed_at to full books written without them, and fills a blank
+    first_disclosed_at from the acceptance cache. Returns (books written, rows still blank)."""
+    written = blank = 0
+    for p in full_books():
+        try:
+            b = json.loads(p.read_text())
+        except ValueError:
+            continue
+        cols, acc = b.get("columns"), b.get("accession")
+        if not (b.get("ok") and cols and acc):
+            continue
+        dirty = False
+        if "source_accession" not in cols:
+            amends = [a for a in b.get("amendments") or [] if isinstance(a, str) and a]
+            first: dict[tuple[str, str], str] = {}
+            if amends:  # which filing listed each row first: a few requests, so only within the budget
+                if time.monotonic() - started > BUDGET:
+                    continue
+                try:
+                    first = first_listed(b.get("cik") or p.stem, [acc] + amends)
+                except Exception as e:  # noqa: BLE001 - retried next run
+                    print(f"accepted: {p.parent.name}/{p.name} amendments {e}")
+                    continue
+            ci, pi = cols.index("cusip"), cols.index("put_call")
+            for r in b.get("rows") or []:
+                r += [first.get((r[ci], (r[pi] or "").lower()), acc), None]
+            cols += list(PROV)
+            dirty = True
+        si, fi = cols.index("source_accession"), cols.index("first_disclosed_at")
+        for r in b.get("rows") or []:
+            if not r[si]:
+                r[si], dirty = acc, True
+            if not r[fi]:
+                if cache.get(r[si]):
+                    r[fi], dirty = cache[r[si]], True
+                else:
+                    blank += 1
+        if dirty:
+            tmp = p.with_suffix(".tmp")
+            tmp.write_text(json.dumps(b, separators=(",", ":")) + "\n")
+            tmp.replace(p)
+            written += 1
+    return written, blank
 
 
 if __name__ == "__main__":

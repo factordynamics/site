@@ -148,6 +148,42 @@ def blank_accepted(data: Path) -> tuple[int, int, list[str]]:
     return blank, total, sorted(set(curated_blank))
 
 
+def provenance(data: Path) -> dict:
+    """Full books served by /v1 (fq/ where present, else fb/): rows without source_accession or
+    first_disclosed_at, and checked share rows (no notes or options, not exited) whose suspect_units is not
+    true or false. Plus AllianceBernstein's KLAC and BKNG flags, the cross-filer check's reference case."""
+    out = {"rows": 0, "no_source": 0, "no_disclosed": 0, "share_rows": 0, "unchecked": 0, "examples": [], "ab": {}}
+    seen: set[tuple[str, str]] = set()
+    for folder in ("fq", "fb"):
+        for f in sorted((data / folder).glob("*/*.json")):
+            if (f.parent.name, f.name) in seen:
+                continue
+            seen.add((f.parent.name, f.name))
+            try:
+                doc = json.loads(f.read_text())
+            except ValueError:
+                continue
+            cols = doc.get("columns") or []
+            rows = doc.get("rows") or []
+            idx = {c: i for i, c in enumerate(cols)}
+            get = lambda r, c: r[idx[c]] if c in idx and idx[c] < len(r) else None
+            for r in rows:
+                out["rows"] += 1
+                miss = [c for c in ("source_accession", "first_disclosed_at") if not get(r, c)]
+                out["no_source"] += "source_accession" in miss
+                out["no_disclosed"] += "first_disclosed_at" in miss
+                name = f"{folder}/{f.parent.name}/{f.stem}"
+                if miss and len(out["examples"]) < 10 and name not in out["examples"]:
+                    out["examples"].append(name)
+                if folder == "fq" and get(r, "shares_type") != "PRN" and not get(r, "put_call") \
+                        and get(r, "change") not in ("exited", "disclosed_later"):
+                    out["share_rows"] += 1
+                    out["unchecked"] += not isinstance(get(r, "suspect_units"), bool)
+                if f.stem == "0001109448" and get(r, "ticker") in ("KLAC", "BKNG"):
+                    out["ab"][f"{f.parent.name} {get(r, 'ticker')}"] = get(r, "suspect_units")
+    return out
+
+
 def foreign_merges(hist: Path) -> list[str]:
     """Books holding another filer's 13F outside a 13F-NT succession. combined_with is allowed only between
     a fund and the manager its notices name as reporting for it (Pershing Square Capital and Pershing Square
@@ -303,6 +339,12 @@ def main() -> int:
         failed = True
     elif blank:  # other filers: accepted.py backfills under a time budget and continues next run
         print(f"::warning::accepted_at missing on {blank} of {total} holder rows; accepted.py fills them next run")
+    pv = provenance(data)
+    print(f"gate: full books: {pv['no_source']} of {pv['rows']} rows without source_accession, {pv['no_disclosed']} "
+          f"without first_disclosed_at; suspect_units unset on {pv['unchecked']} of {pv['share_rows']} checked share "
+          f"rows; AllianceBernstein {pv['ab']}")
+    if pv["no_source"] or pv["no_disclosed"]:  # accepted.py fills them under its budget; the next run continues
+        print(f"::warning::per-row provenance missing in {', '.join(pv['examples'])}")
     merged = foreign_merges(data / "h")
     if merged:
         print(f"::error::Another filer's 13F merged into a book: {'; '.join(merged[:20])}; not publishing.")

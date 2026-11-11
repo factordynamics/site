@@ -36,7 +36,8 @@ TOP = 10
 MOVE_COLUMNS = ("ticker", "issuer", "cusip", "put_call", "shares", "prev_shares", "value", "value_delta", "change")
 FULL_COLUMNS = ("ticker", "issuer", "title", "cusip", "put_call", "shares", "value", "shares_type", "prev_shares", "prev_value",
                 "change", "share_change", "value_delta", "pct_of_book", "delta_pct_of_book", "prev_shares_as_filed",
-                "split_ratio", "value_as_filed", "price_outlier", "suspect_units", "prev_cusip")
+                "split_ratio", "value_as_filed", "price_outlier", "suspect_units", "prev_cusip",
+                "source_accession", "first_disclosed_at")
 
 
 SECS: dict[str, dict] = {}
@@ -364,6 +365,15 @@ def main() -> int:
             continue
         summary, rows = got
         with_prev += 1
+        # Every row names the filing that disclosed it: its own when the book says, else this book's filing
+        # (an exited row is disclosed by the filing that left it out).
+        acc_book = shard.get("accession")
+        for r in rows:
+            if not r.get("source_accession") or r.get("change") == "exited":
+                r["source_accession"] = acc_book
+            if not r.get("first_disclosed_at") or r.get("change") == "exited":
+                r["first_disclosed_at"] = ACCEPTED.get(r["source_accession"] or "") or shard.get("accepted_at") \
+                    or ACCEPTED.get(acc_book or "")
         cik = shard["cik"]
         meta = curated.get(cik) or filers.get(cik) or {}
         for r in rows:

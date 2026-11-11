@@ -652,8 +652,8 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
                 # sits at the median over the split ratio.
                 return bool(m and n and row["value"] > 0 and not any(
                     1 / OFF_MEDIAN <= row["value"] / n / (m / s) <= OFF_MEDIAN for s in {1.0, k}))
-            if off(h, q_to) or (p is not None and off(p, q_from, k)):
-                h = h | {"suspect_units": True}
+            # Checked share lines read true or false; notes, options and late lines stay null (never checked).
+            h = h | {"suspect_units": bool(off(h, q_to) or (p is not None and off(p, q_from, k)))}
         rows.append(h | extra(p, change, delta, ds, r, prn))
     for p in sorted(before.values(), key=lambda x: x["value"], reverse=True):
         prn = p.get("shares_type") == "PRN"

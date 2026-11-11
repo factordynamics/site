@@ -168,7 +168,7 @@ class MoveMathTest(unittest.TestCase):
         try:
             self.assertTrue(build.with_changes(cur, prev)[0].get("suspect_units"))
             cur["holdings"] = [self.row("482480100", "KLAC", 36_459_000, 11.0e9)]  # priced like its peers
-            self.assertFalse(build.with_changes(cur, prev)[0].get("suspect_units"))
+            self.assertIs(build.with_changes(cur, prev)[0].get("suspect_units"), False)  # checked: false, not null
         finally:
             build.CONSENSUS.clear()
 

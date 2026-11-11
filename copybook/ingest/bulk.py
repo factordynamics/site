@@ -40,28 +40,35 @@ SHARD_KEYS = (
 # Rows are arrays in this column order to keep 9k shards small.
 # shares is SSHPRNAMT as filed: a share count, or a principal amount where shares_type is PRN.
 COLUMNS = ("ticker", "issuer", "title", "cusip", "put_call", "shares", "value", "shares_type")
+# The full book (fb/, paid) adds per-row point-in-time provenance: the filing (original or amendment) that first
+# disclosed the row and its EDGAR acceptance time. accepted.py fills them on books written without them.
+FB_COLUMNS = COLUMNS + ("source_accession", "first_disclosed_at")
 
 
 def numeric_cik(cik: str) -> bool:
     return cik.isdigit() and len(cik) == 10
 
 
-def slim(rec: dict, max_rows: int | None = MAX_ROWS) -> dict:
+def slim(rec: dict, max_rows: int | None = MAX_ROWS, columns: tuple = COLUMNS) -> dict:
     out = {k: rec[k] for k in SHARD_KEYS if k in rec}
     if rec.get("ok"):
         rows = rec.get("holdings") or rec.get("rows") or []
         if rows and isinstance(rows[0], list):
             rows = [dict(zip(rec.get("columns") or COLUMNS, r)) for r in rows]
         out["truncated"] = max_rows is not None and len(rows) > max_rows
-        out["columns"] = list(COLUMNS)
+        out["columns"] = list(columns)
         def cell(h: dict, k: str):
             if k == "shares_type":
                 return h.get("shares_type") or "SH"
             if k == "shares" and h.get("shares_type") == "PRN":
                 return int(h.get("principal_amount") or h.get("shares") or 0)
+            if k == "source_accession":
+                return h.get(k) or rec.get("accession")
+            if k == "first_disclosed_at":
+                return h.get(k) or rec.get("accepted_at")
             return int(h.get(k) or 0) if k in ("value", "shares") else h.get(k)
 
-        out["rows"] = [[cell(h, k) for k in COLUMNS] for h in rows[:max_rows]]
+        out["rows"] = [[cell(h, k) for k in columns] for h in rows[:max_rows]]
     return out
 
 
@@ -80,7 +87,7 @@ def write_shard(dest: Path, rec: dict) -> None:
     """Public shard (top MAX_ROWS) plus the full book in fb/{quarter}/ (paid; R2 only)."""
     write_json(dest, slim(rec))
     if rec.get("ok") and rec.get("quarter"):
-        write_json(full_path(rec), slim(rec, None) | {"source": "SEC EDGAR"})
+        write_json(full_path(rec), slim(rec, None, FB_COLUMNS) | {"source": "SEC EDGAR"})
 
 
 def has_full_book(rec: dict) -> bool:

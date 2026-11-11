@@ -18,13 +18,20 @@ TARGET: a manifest written for another store is discarded, so everything is sent
 Each run sends only what changed, curated h/ first, then hl/, then fb/, then the rest, as tar
 bundles (PUT /ingest/bundle) one at a time, at most 100 files or 20 MB each, never one request per
 file. Bundles are gzipped (content-encoding: gzip, ~4x fewer bytes through gene's slow Funnel relay); an API
-that answers 400 to gzip gets plain tars for the rest of the run. A failed bundle is retried once after 30 s; a second failure stops the run (non-zero exit),
+that answers 400 to gzip gets plain tars for the rest of the run.
+
+gene serves members over the same link, so the backlog yields to them:
+- Before each bundle, GET {api}/health is timed; over PROBE_MAX_S, wait 30 s and probe again, and a second
+  slow probe stops the run cleanly (the next run continues).
+- In EDGAR hours (weekdays 11:00-03:00 UTC, from Thu Nov 12 2026) only curated books of a fund whose index
+  changed this run are sent (a new filing), at most FRESH_MAX files; everything else waits for the night. A failed bundle is retried once after 30 s; a second failure stops the run (non-zero exit),
 as does a refused required key. UPLOAD_BUDGET_S stops cleanly; the next run continues.
 """
 
 from __future__ import annotations
 
 import gzip
+from datetime import datetime, timedelta, timezone
 import hashlib
 import io
 import json
@@ -58,6 +65,9 @@ BUNDLE_BYTES = 5_000_000  # a 19 MB bundle hit Cloudflare's 100 s tunnel timeout
 BUNDLE_RAW_BYTES = 20_000_000  # the API's limit per bundle, uncompressed; gzipped it is ~5 MB on the wire
 GZIP = [os.environ.get("COPYBOOK_UPLOAD_GZIP", "1") != "0"]  # cleared when the API refuses a gzipped bundle
 ORDER = ("h/", "hl/", "fb/")  # sent first, in this order
+PROBE_MAX_S = 2.0  # gene's /health slower than this: members are waiting, so the backlog backs off
+FRESH_MAX = 60  # files per run in EDGAR hours: a few new filings' h/ books, never the backlog
+QUIET_FROM = datetime(2026, 11, 12, 11, tzinfo=timezone.utc)
 TOKEN_TTL = 240  # tokens last ~5 minutes; refresh well before
 # Cloudflare rejects urllib's default User-Agent (error 1010), so name the client.
 USER_AGENT = "Copybook-ingest/1.0 (+https://copybook.factordynamics.com)"
@@ -86,6 +96,29 @@ class Token:
                 self.value = json.loads(resp.read())["value"]
         self.at = time.monotonic()
         return self.value
+
+
+def edgar_hours(now: datetime) -> bool:
+    """Weekdays 11:00-03:00 UTC (EDGAR's 6am-10pm ET) from QUIET_FROM: members' hours on gene."""
+    if now < QUIET_FROM or 3 <= now.hour < 11:
+        return False
+    return (now if now.hour >= 11 else now - timedelta(days=1)).weekday() < 5
+
+
+def fresh_only(todo: list) -> list:
+    """The curated h/ files of funds whose h/{slug}/index.json changed (a new filing), capped."""
+    slugs = {k.split("/")[1] for k, _, _ in todo if k.startswith("h/") and k.endswith("/index.json")}
+    return [t for t in todo if t[0].startswith("h/") and t[0].split("/")[1] in slugs][:FRESH_MAX]
+
+
+def probe() -> float:
+    t = time.monotonic()
+    try:
+        with urlopen(Request(f"{API}/health", headers={"User-Agent": USER_AGENT}), timeout=10) as resp:
+            resp.read()
+    except Exception:  # noqa: BLE001 - a failed probe counts as slow
+        return 99.0
+    return time.monotonic() - t
 
 
 def api_base() -> str:
@@ -127,6 +160,11 @@ def main() -> int:
                 todo.append((key, path, digest))
     rank = lambda key: next((i for i, p in enumerate(ORDER) if key.startswith(p)), len(ORDER))
     todo.sort(key=lambda t: (rank(t[0]), t[0]))
+    if edgar_hours(datetime.now(timezone.utc)) and os.environ.get("COPYBOOK_UPLOAD_ANYTIME") != "1":
+        held = len(todo)
+        todo = fresh_only(todo)
+        print(f"upload: EDGAR hours; sending {len(todo)} files of new filings, {held - len(todo)} wait for 03:00 UTC",
+              flush=True)
     print(f"upload: {len(todo)} new or changed of {len(files)} files to {API}, one bundle at a time of up to "
           f"{BUNDLE_ENTRIES} files / {(BUNDLE_RAW_BYTES if GZIP[0] else BUNDLE_BYTES) / 1e6:.0f} MB"
           f"{' before gzip' if GZIP[0] else ''}", flush=True)
@@ -136,6 +174,14 @@ def main() -> int:
             if time.monotonic() - started > UPLOAD_BUDGET_S:
                 print(f"::warning::upload budget reached; {len(todo) - sent} files wait for the next run", flush=True)
                 break
+            slow = probe()
+            if slow > PROBE_MAX_S:
+                time.sleep(30)
+                slow = probe()
+                if slow > PROBE_MAX_S:
+                    print(f"::warning::gene's /health took {slow:.1f} s (limit {PROBE_MAX_S:.0f} s); backing off, "
+                          f"{len(todo) - sent} files wait for the next run", flush=True)
+                    break
             written, refused = put_bundle(batch, token)
             for key, _, digest in batch:
                 if key in written:

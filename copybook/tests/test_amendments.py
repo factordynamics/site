@@ -93,3 +93,32 @@ class ConsolidatedRefilingTest(unittest.TestCase):
         addition = {"total_value": 62.0, "holdings": [h(f"C{i:08d}", 62 / 17) for i in range(17)]}
         self.assertTrue(is_refiled_book(book, [], refile))
         self.assertFalse(is_refiled_book(book, [], addition))
+
+
+class RowProvenanceTest(unittest.TestCase):
+    def test_full_books_get_source_and_disclosure_time_per_row(self):
+        # A NEW HOLDINGS amendment's row is disclosed at the amendment's acceptance, not the original's.
+        import json, tempfile, time
+        from pathlib import Path
+        from ingest import accepted
+        cols = ["ticker", "issuer", "title", "cusip", "put_call", "shares", "value", "shares_type"]
+        plain = {"ok": True, "cik": "0000000001", "accession": "0000000001-26-000001", "columns": list(cols),
+                 "rows": [["AAA", "A", "COM", "000000AAA", None, 10, 100, "SH"]]}
+        amended = {"ok": True, "cik": "0000000002", "accession": "0000000002-26-000001",
+                   "amendments": ["0000000002-26-000009"], "columns": list(cols),
+                   "rows": [["BBB", "B", "COM", "000000BBB", None, 10, 100, "SH"],
+                            ["CCC", "C", "COM", "000000CCC", "Call", 1, 5, "SH"]]}
+        cache = {"0000000001-26-000001": "2026-11-12T21:05:00Z", "0000000002-26-000001": "2026-08-14T20:00:00Z",
+                 "0000000002-26-000009": "2026-09-30T13:00:00Z"}
+        listed = {("000000BBB", ""): "0000000002-26-000001", ("000000CCC", "call"): "0000000002-26-000009"}
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "fb" / "2026Q3").mkdir(parents=True)
+            for b in (plain, amended):
+                (Path(d) / "fb" / "2026Q3" / f"{b['cik']}.json").write_text(json.dumps(b))
+            with mock.patch.object(accepted, "DATA", Path(d)), mock.patch.object(accepted, "first_listed", return_value=listed):
+                self.assertEqual(accepted.fill_rows(cache, time.monotonic()), (2, 0))
+            got = {cik: json.loads((Path(d) / "fb" / "2026Q3" / f"{cik}.json").read_text()) for cik in ("0000000001", "0000000002")}
+        self.assertEqual(got["0000000001"]["columns"][-2:], ["source_accession", "first_disclosed_at"])
+        self.assertEqual(got["0000000001"]["rows"][0][-2:], ["0000000001-26-000001", "2026-11-12T21:05:00Z"])
+        self.assertEqual([r[-2:] for r in got["0000000002"]["rows"]],
+                         [["0000000002-26-000001", "2026-08-14T20:00:00Z"], ["0000000002-26-000009", "2026-09-30T13:00:00Z"]])
