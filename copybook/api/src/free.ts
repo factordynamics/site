@@ -226,7 +226,7 @@ export async function weeklyMoves(env: Env, now: number, days = 7, followed: Set
     const book = Math.max(total, total - (d.bought_usd ?? 0) + (d.sold_usd ?? 0)) || null;
     // One row per ticker: a CUSIP or class change shows as an exit plus a new position (Fisher's XOM),
     // so a fund's rows on one ticker are netted, and dropped when the holding is unchanged.
-    const byTicker = new Map<string, Row & { change?: string }>();
+    const byTicker = new Map<string, Row & { change?: string; value?: number | null }>();
     for (const raw of Array.isArray(d.moves) ? d.moves : []) {
       if (!raw.ticker || raw.put_call || !['new', 'added', 'trimmed', 'exited'].includes(raw.change ?? '')) continue;
       const value = raw.weight != null && total ? raw.weight * total : null;
@@ -244,13 +244,16 @@ export async function weeklyMoves(env: Env, now: number, days = 7, followed: Set
       }
       const chk = checkMove({ ...raw, value, prev_value }, book, false, median);
       if (chk.verdict === 'drop') continue;
-      const r = { ...raw, value_delta: chk.value_delta, unusual: chk.verdict === 'unusual' };
+      const r = { ...raw, value, value_delta: chk.value_delta, unusual: chk.verdict === 'unusual' };
       const o = byTicker.get(r.ticker!);
       if (!o) byTicker.set(r.ticker!, r);
       else {
         const shares = (o.shares ?? 0) + (r.shares ?? 0);
         const prev = (o.prev_shares ?? 0) + (r.prev_shares ?? 0);
-        const usd = o.value_delta + r.value_delta;
+        // Share-based, at this quarter's price: summing the two deltas would count the price move as a trade
+        // (Fisher's XOM: +$894.9M by value, +$75.7M by shares).
+        const cur = (o.shares ? (o.value ?? 0) : 0) + (r.shares ? (r.value ?? 0) : 0);
+        const usd = cur && shares ? Math.round(((shares - prev) * cur) / shares) : o.value_delta + r.value_delta;
         byTicker.set(r.ticker!, { ...o, shares, prev_shares: prev, value_delta: shares === prev ? 0 : usd, change: !prev ? 'new' : !shares ? 'exited' : usd > 0 ? 'added' : 'trimmed', unusual: o.unusual || r.unusual });
       }
     }

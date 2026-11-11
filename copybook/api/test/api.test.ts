@@ -921,17 +921,26 @@ describe('copybook api', () => {
     stripeObjects['customers/cus_rt'] = { id: 'cus_rt', email: 'copybook-test-rt@fldubai.com' };
     stripeObjects['subscriptions/sub_rt'] = base;
     await webhook({ type: 'customer.subscription.created', data: { object: base } });
+    // A pause reason from earlier the same day (retail's 00:26 pause check) isn't a cancel reason: the email still asks.
+    await env.DB.put('why:cus_rt', JSON.stringify({ reason: 'seasonal', via: 'pause', at: new Date(Date.now() - 3600_000).toISOString() }));
     sent = [];
     // Portal cancel (Nov 11, 01:01:39): cancel_at_period_end and cancel_at.
     const cancelled = { ...base, cancel_at_period_end: true, cancel_at: now() + 27 * 86400, canceled_at: now() };
     await webhook({ type: 'customer.subscription.updated', data: { object: cancelled, previous_attributes: { cancel_at_period_end: false } } });
     expect(JSON.parse((await env.DB.get('cus:cus_rt'))!).cancel_at_period_end).toBe(true);
     expect(sent.map((m) => m.subject)).toEqual([expect.stringMatching(/^Your Copy plan ends /)]);
+    expect(sent[0].text).toContain('One question: what was the main reason?');
+    expect(sent[0].text.match(/\/why\/\?t=/g)).toHaveLength(7);
+    // The HTML part links instead of pasting URLs.
+    expect(sent[0].html).toMatch(/<a href="[^"]+\/resume\/\?t=[^"]+"[^>]*>Resume your plan<\/a>/);
+    expect(sent[0].html).toMatch(/<a href="[^"]+\/why\/\?t=[^"]+r=other">Tell us why<\/a>/);
+    expect(sent[0].html).not.toMatch(/>https?:/);
     // Portal renew (01:12:09): the record is active again and the member is told.
     sent = [];
     await webhook({ type: 'customer.subscription.updated', data: { object: base, previous_attributes: { cancel_at_period_end: true } } });
     expect(JSON.parse((await env.DB.get('cus:cus_rt'))!).cancel_at_period_end).toBe(false);
     expect(sent.map((m) => m.subject)).toEqual(["You've resumed Copy"]);
+    expect(sent[0].html).toMatch(/<a href="[^"]+\/account\/">Your account<\/a>/);
     // The renew webhook missed: the record still says cancelled until reconciliation re-reads Stripe, which mails once.
     await webhook({ type: 'customer.subscription.updated', data: { object: cancelled } });
     sent = [];
@@ -942,6 +951,18 @@ describe('copybook api', () => {
     sent = [];
     expect(await reconcileMembers(env)).toMatchObject({ fixed: 0 });
     expect(sent).toHaveLength(0);
+  });
+
+  it("a CUSIP change nets into one share-based move (Fisher's Q3 XOM: +$75.7M, not +$894.9M)", async () => {
+    const { computeMoves, netRenamed } = await import('../src/edgar');
+    const other = { cusip: '037833100', put_call: null, issuer: 'APPLE INC', ticker: 'AAPL', shares: 1e6, value: 2e8 };
+    const prev = [{ cusip: '30231G102', put_call: null, issuer: 'EXXON MOBIL CORP', ticker: 'XOM', shares: 31468114, value: 4302320615 }, other];
+    const cur = [{ cusip: '30233Q108', put_call: null, issuer: 'EXXONMOBIL HOLDINGS CORPORATIO', shares: 31933523, value: 5197180970 }, other];
+    const raw = computeMoves(cur as never, prev as never);
+    raw.changed.find((x) => x.cusip === '30233Q108')!.ticker = 'XOM'; // as lookupTickers maps the new CUSIP
+    const r = netRenamed(raw);
+    expect(r.changed.map((x) => [x.change, x.ticker, x.shares - x.prev_shares, x.value_delta])).toEqual([['added', 'XOM', 465409, 75745316]]);
+    expect([r.moves.new, r.moves.exited, r.moves.bought_usd]).toEqual([[], [], 75745316]);
   });
 
   it('latency rows from before the moves tag are re-timed once from the day stores', async () => {
@@ -995,7 +1016,7 @@ describe('copybook api', () => {
     expect((await signup({ email: 'nope' })).status).toBe(400);
     expect(await (await signup({ email: 'bot@reader.test', website: 'http://spam' })).json()).toEqual({ ok: true });
     expect(await env.DB.get('email:bot@reader.test')).toBeNull();
-    const r = await signup({ email: 'Reader@Reader.test', source: 'home', utm_campaign: 'q3' });
+    const r = await signup({ email: 'Reader@Reader.test', source: 'home', utm_campaign: 'q3', utm_source: 'x', utm_content: 'kahn-watch' });
     expect(r.status).toBe(201);
     expect(sent.map((m) => [m.to[0], m.subject])).toEqual([['reader@reader.test', "You're on the Copybook weekly"]]);
     const s = await (await call('/session', { body: { login: loginTokenFrom(sent[0].text) } })).json();
@@ -1034,9 +1055,10 @@ describe('copybook api', () => {
     const cardData: Record<string, unknown> = {
       // Bigger than Buffett's moves, but a tracked fund ranks after the superinvestors, and 2 rows at most.
       'ICI-13F': { manager: 'ICICI Prudential, LLC', firm: 'ICICI Prudential Asset Management Co Ltd', featured: false, changes: { added: 4 }, moves: [row('added', 'IVV', 9.5e10, { name: 'iShares Core S&P 500 ETF' }), row('added', 'X1', 9e10), row('added', 'X2', 8e10), row('added', 'X3', 7e10), row('added', 'AAPL', 1e7)] },
-      'FSH-13F': { manager: 'Fisher Asset Management, LLC', featured: false, changes: { new: 1, exited: 1 }, moves: [
-        // A CUSIP change: one exit and one new position on XOM net to +$0.9B, added; on CVX to nothing.
-        row('new', 'XOM', 5.2e9, { shares: 50, prev_shares: 0 }), row('exited', 'XOM', -4.3e9, { shares: 0, prev_shares: 40 }),
+      'FSH-13F': { manager: 'Fisher Asset Management, LLC', featured: false, total_value: 2.5e11, changes: { new: 1, exited: 1 }, moves: [
+        // Fisher's real Q3 CUSIP change (30231G102 to 30233Q108): one exit and one new position on XOM net by shares to
+        // +$75.7M added (465,409 shares at this quarter's price), not the +$894.9M the two values sum to; on CVX to nothing.
+        row('new', 'XOM', 5197180970, { shares: 31933523, prev_shares: 0, weight: 5197180970 / 2.5e11 }), row('exited', 'XOM', -4302320615, { shares: 0, prev_shares: 31468114, weight: 0 }),
         row('new', 'CVX', 3e9, { shares: 30, prev_shares: 0 }), row('exited', 'CVX', -3e9, { shares: 0, prev_shares: 30 }),
       ] },
       // GuardCap's real card: BKNG's shares changed units between quarters (a -$3.3B "trim" on a $1.47B book); CME is flagged by ingest.
@@ -1097,6 +1119,9 @@ describe('copybook api', () => {
     for (const no of ['X3', 'IVV', ', LLC', 'VVV', 'Vanguard', 'OLDX', 'PUTX', '$77.0B', 'gift', '$50.0K']) expect(body).not.toContain(no);
     expect(w.text.indexOf('BAC')).toBeLessThan(w.text.indexOf('STZ'));
     expect(body).not.toMatch(/sold out (XOM|CVX)|CVX/); // netted: an added XOM, and CVX unchanged
+    const { weeklyMoves } = await import('../src/free');
+    const wk = await weeklyMoves(env, sat);
+    expect(wk.all.filter((x) => x.slug === 'fisher').map((x) => [x.what, x.ticker, x.usd])).toEqual([['added', 'XOM', 75745316]]);
     // Impossible and flagged moves never show; an all-caps filer name reads normally.
     expect(w.text).toContain('Guardcap Asset Management: trimmed ILMN, −$16.1M');
     expect(body).not.toMatch(/BKNG|CME|GUARDCAP/);
@@ -1128,6 +1153,16 @@ describe('copybook api', () => {
     await webhook({ type: 'customer.subscription.updated', data: { object: sub('sub_rd', 'cus_rd', 'active') } });
     const f = (await (await privateHealth()).json()).business.funnel_7d;
     expect(f).toMatchObject({ signups: 1, trials: 1, trial_to_paid: 1, cancellations: 0, by_source: { signups: { home: 1 }, trials: { home: 1 } }, plan_mix: { 'trials:copy_monthly': 1, 'trial_to_paid:copy_monthly': 1 } });
+    // Credited to the post that brought them (utm_source|utm_content), apart from the page's source.
+    expect(f.by_utm).toMatchObject({ signups: { 'x|kahn-watch': 1 }, trials: { 'x|kahn-watch': 1 } });
+    expect(f.by_source).not.toHaveProperty('utm:signups');
+    // The site's page counts, by page, source and post; the ops view totals them by post.
+    const track = (b: Record<string, unknown>) => handleRequest(new Request('https://api.test/track', { method: 'POST', body: JSON.stringify(b), headers: { origin: 'https://refcell.github.io', 'cf-connecting-ip': '9.9.9.9' } }), env);
+    for (const b of [{ kind: 'visit', page: '/investors/irving-kahn/', utm_source: 'x', utm_content: 'kahn-watch' }, { kind: 'visit', page: '/season/', utm_source: 'x', utm_content: 'seed-season' }, { kind: 'visit', page: '/season/', utm_source: 'x', utm_content: 'seed-season' }, { kind: 'trial_click', page: '/pricing/', utm_source: null }])
+      expect(await (await track(b)).json()).toEqual({ ok: true, counted: true });
+    const ops = await (await handleRequest(new Request('https://api.test/ops/funnel?days=1', { headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), env)).json();
+    expect(ops.track_by_utm).toEqual({ visit: { 'x|kahn-watch': 1, 'x|seed-season': 2 }, trial_click: { 'direct|-': 1 } });
+    expect(Object.values(ops.track)[0]).toMatchObject({ visit: { page: { '/season/': 2 }, source: { x: 3 } } });
 
     // A trial that runs out cancelled: one short note offering monthly, whose link opens a monthly Checkout.
     sent = [];

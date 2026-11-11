@@ -328,22 +328,50 @@ export function computeMoves(cur: Position[], prev: Position[], limit = MOVE_ROW
   // Unit errors are left out; unusually large moves are tagged. The larger book is the yardstick.
   const prior = new Map(prev.map((p) => [`${p.cusip}|${p.put_call ?? ''}`, p.value]));
   rows.splice(0, rows.length, ...guardRows(rows, book, (r) => prior.get(`${r.cusip}|${r.put_call ?? ''}`), splits, medians));
+  return { moves: movesOf(rows, limit), changed: rows };
+}
+
+function movesOf(rows: MoveRow[], limit = MOVE_ROWS): Moves {
   const top = (c: string) =>
     rows
       .filter((r) => r.change === c)
       .sort((a, b) => Math.abs(b.value_delta) - Math.abs(a.value_delta))
       .slice(0, limit);
   return {
-    moves: {
-      bought_usd: rows.reduce((s, r) => s + Math.max(r.value_delta, 0), 0),
-      sold_usd: rows.reduce((s, r) => s - Math.min(r.value_delta, 0), 0),
-      new: top('new'),
-      exited: top('exited'),
-      added: top('added'),
-      trimmed: top('trimmed'),
-    },
-    changed: rows,
+    bought_usd: rows.reduce((s, r) => s + Math.max(r.value_delta, 0), 0),
+    sold_usd: rows.reduce((s, r) => s - Math.min(r.value_delta, 0), 0),
+    new: top('new'),
+    exited: top('exited'),
+    added: top('added'),
+    trimmed: top('trimmed'),
   };
+}
+
+/**
+ * A security whose CUSIP changed (Exxon's Q3 holding-company reorganisation: 30231G102 -> 30233Q108) shows as an exit
+ * of the old CUSIP and a new position in the new one. Netted by ticker that is the change in reported value (Fisher's
+ * XOM: +$5,197.2M - $4,302.3M = +$894.9M, mostly price). Once tickers are known, the pair becomes one add or trim
+ * sized by shares at this filing's price (+465,409 sh x $162.75 = +$75.7M), or nothing when the shares are the same.
+ */
+export function netRenamed(r: { moves: Moves; changed: MoveRow[] }, limit = MOVE_ROWS): { moves: Moves; changed: MoveRow[] } {
+  const key = (x: MoveRow) => (x.ticker ? `${x.ticker}|${x.put_call ?? ''}` : null);
+  const exits = new Map<string, MoveRow>();
+  for (const x of r.changed) if (x.change === 'exited' && key(x)) exits.set(key(x)!, x);
+  if (!exits.size) return r;
+  const drop = new Set<MoveRow>();
+  const merged: MoveRow[] = [];
+  for (const n of r.changed) {
+    const e = n.change === 'new' && key(n) ? exits.get(key(n)!) : undefined;
+    if (!e || drop.has(e) || !n.shares) continue;
+    drop.add(e).add(n);
+    exits.delete(key(n)!);
+    if (n.shares === e.prev_shares) continue;
+    const delta = ((n.shares - e.prev_shares) * n.value) / n.shares;
+    merged.push({ ...n, change: n.shares > e.prev_shares ? 'added' : 'trimmed', prev_shares: e.prev_shares, value_delta: Math.round(delta), delta_pct_of_book: n.delta_pct_of_book != null && n.value_delta ? (n.delta_pct_of_book * delta) / n.value_delta : null });
+  }
+  if (!drop.size) return r;
+  const changed = [...r.changed.filter((x) => !drop.has(x)), ...merged];
+  return { moves: movesOf(changed, limit), changed };
 }
 
 /** Filing-level point-in-time facts from EDGAR, for one accession. Immutable once filed. */

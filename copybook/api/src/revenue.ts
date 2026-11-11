@@ -102,6 +102,9 @@ export async function bump(env: Env, kind: FunnelKind, m: Member, once?: string,
   const d = JSON.parse((await env.DB.get(key)) ?? '{}') as Record<string, Record<string, number>>;
   const src = m.source ?? m.utm?.utm_source ?? 'direct';
   (d[kind] ??= {})[src] = (d[kind][src] ?? 0) + 1;
+  // And by the post that brought them (the site sends the session's first-touch utm_*): "utm_source|utm_content".
+  const post = `${m.utm?.utm_source ?? 'direct'}|${m.utm?.utm_content ?? '-'}`;
+  (d[`utm:${kind}`] ??= {})[post] = (d[`utm:${kind}`][post] ?? 0) + 1;
   if (kind !== 'signups') {
     const mix = `${kind}:${m.plan}_${m.interval}`;
     (d.plan_mix ??= {})[mix] = (d.plan_mix[mix] ?? 0) + 1;
@@ -133,7 +136,7 @@ export async function funnel(env: Env, now: number, days: number) {
     for (const [kind, xs] of Object.entries(d)) for (const [k, n] of Object.entries(xs)) (total[kind] ??= {})[k] = (total[kind][k] ?? 0) + n;
   }
   const sum = (kind: string) => Object.values(total[kind] ?? {}).reduce((a, n) => a + n, 0);
-  return { days, signups: sum('signups'), trials: sum('trials'), trial_to_paid: sum('trial_to_paid'), paid_direct: sum('paid_direct'), cancellations: sum('cancellations'), pauses: sum('pauses'), by_source: Object.fromEntries(Object.entries(total).filter(([k]) => k !== 'plan_mix')), plan_mix: total.plan_mix ?? {}, by_day };
+  return { days, signups: sum('signups'), trials: sum('trials'), trial_to_paid: sum('trial_to_paid'), paid_direct: sum('paid_direct'), cancellations: sum('cancellations'), pauses: sum('pauses'), by_source: Object.fromEntries(Object.entries(total).filter(([k]) => k !== 'plan_mix' && !k.startsWith('utm:'))), by_utm: Object.fromEntries(Object.entries(total).filter(([k]) => k.startsWith('utm:')).map(([k, v]) => [k.slice(4), v])), plan_mix: total.plan_mix ?? {}, by_day };
 }
 
 const secs = (n: number) => (n < 120 ? `${n} seconds` : `${Math.round(n / 60)} minutes`);
@@ -298,16 +301,30 @@ export async function cancelMail(env: Env, m: Member): Promise<Mail> {
   const ends = m.status === 'canceled' ? null : (m.cancel_at ?? (m.status === 'trialing' ? m.trial_end : null) ?? m.period_end) || null;
   const name = PRICES[m.plan]?.name ?? 'Copybook';
   // The resume link opens the site's page, which changes nothing until its button posts (mail scanners follow links).
-  // Already told us why in the app (within a day): the email doesn't ask again.
-  const told = JSON.parse((await env.DB.get(`why:${m.customer}`)) ?? 'null') as { at?: string } | null;
-  const ask = !(told?.at && Date.now() - Date.parse(told.at) < 86400_000);
+  // Already told us why they cancelled (in the app or a cancel email, within a day): the email doesn't ask again.
+  // A pause reason doesn't count: pausing isn't cancelling (retail's 00:26 pause hid the question at 01:29).
+  const told = JSON.parse((await env.DB.get(`why:${m.customer}`)) ?? 'null') as { at?: string; via?: string } | null;
+  const ask = !(told?.at && told.via !== 'pause' && Date.now() - Date.parse(told.at) < 86400_000);
   const resume = ends ? `${env.SITE_URL}resume/?t=${encodeURIComponent(await signToken(env.SESSION_SECRET, 'resume', m.customer, Math.max(86400, ends - Math.floor(Date.now() / 1000) + 86400)))}` : null;
   return {
     to: m.email,
     subject: ends ? `Your ${name} plan ends ${day(ends)} · Resume anytime before then` : `Your ${name} plan has ended`,
     text: `${ends ? `Your ${name} plan is cancelled and ends on ${endAt(ends)}. Alerts, history and CSV keep working until then${m.status === 'trialing' ? ", and you won't be charged" : ''}.\n\nChanged your mind? Resume with one click, same plan and price, follows kept:\n${resume}` : `Your ${name} plan has ended. Your follows are kept if you come back: ${env.SITE_URL}pricing/`}${ask ? `\n\nOne question: what was the main reason? One click is enough:\n${Object.entries(WHY).map(([k, v]) => `  ${v}: ${base}${k}`).join('\n')}` : ''}\n\nYour account: ${env.SITE_URL}account/${FOOTER}`,
+    html: mailHtml(
+      (ends
+        ? `<p>Your ${esc(name)} plan is cancelled and ends on <b>${esc(endAt(ends))}</b>. Alerts, history and CSV keep working until then${m.status === 'trialing' ? ", and you won't be charged" : ''}.</p><p>Changed your mind? Same plan and price, follows kept.</p>${button(resume!, 'Resume your plan')}`
+        : `<p>Your ${esc(name)} plan has ended. Your follows are kept if you come back: <a href="${env.SITE_URL}pricing/">see plans</a>.</p>`) +
+        (ask ? `<p style="margin-bottom:4px"><b>One question: what was the main reason?</b> One click is enough. <a href="${base}other">Tell us why</a>:</p><ul style="margin-top:0">${Object.entries(WHY).map(([k, v]) => `<li><a href="${base}${k}">${esc(v)}</a></li>`).join('')}</ul>` : '') +
+        `<p><a href="${env.SITE_URL}account/">Your account</a></p>`,
+    ),
   };
 }
+
+/** A footer'd HTML body with real links (the text part keeps bare URLs). */
+const mailHtml = (inner: string) =>
+  `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:560px">${inner}<p style="color:#666;font-size:13px">${esc(FOOTER.trim()).replace(/\n/g, '<br>')}</p></div>`;
+const button = (href: string, label: string) =>
+  `<p><a href="${href}" style="display:inline-block;background:#111;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">${esc(label)}</a></p>`;
 
 /** A cancellation undone before it took effect (the resume link, or Renew in the billing portal): one confirmation. */
 export async function maybeResumeMail(env: Env, prev: Member | null, m: Member): Promise<void> {
@@ -324,6 +341,7 @@ function resumedMail(env: Env, m: Member): Mail {
     to: m.email,
     subject: `You've resumed ${name}`,
     text: `You've resumed ${name}. Nothing ends: alerts, history and CSV carry on, with your follows and settings as they are.\n\n${next ? `${m.status === 'trialing' ? 'Your trial ends' : 'Your plan renews'} on ${endAt(next)}.` : ''} ${priceLine(m)}\n\nYour account: ${env.SITE_URL}account/${FOOTER}`,
+    html: mailHtml(`<p>You've resumed ${esc(name)}. Nothing ends: alerts, history and CSV carry on, with your follows and settings as they are.</p><p>${next ? `${m.status === 'trialing' ? 'Your trial ends' : 'Your plan renews'} on <b>${esc(endAt(next))}</b>. ` : ''}${esc(priceLine(m))}</p><p><a href="${env.SITE_URL}account/">Your account</a></p>`),
   };
 }
 

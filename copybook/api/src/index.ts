@@ -270,7 +270,7 @@ export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDeliver
     count: all.count,
     by_form: group(rows, (l) => family(formOf(l)), (l) => l.seconds),
     moves_fix_at: MOVES_FIX_AT,
-    before_moves_fix: { '13F': spread(pre.map((l) => l.seconds)) },
+    before_moves_fix: { '13F': { ...spread(pre.map((l) => l.seconds)), max_seconds: pre.length ? Math.max(...pre.map((l) => l.seconds)) : null, rows: pre.map((l) => ({ accession: l.accession, manager: l.manager ?? null, slug: l.slug, accepted_at: l.accepted, sent_at: l.sent, seconds: l.seconds })) } },
     by_channel: { email: all, ...group(chRows, (c) => c.channel, (c) => c.seconds) },
     by_coverage: group(rows, (l) => l.coverage ?? 'curated', (l) => l.seconds),
     recent: rows.slice(0, 20).map((l) => ({ form: formOf(l), manager: l.manager ?? null, slug: l.slug, coverage: l.coverage ?? 'curated', accession: l.accession, accepted_at: l.accepted, delivered_at: l.sent, seconds: l.seconds, channel: 'email' })),
@@ -364,7 +364,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return json({ ok: true, ...(await pollerStatus(env, Date.now())), alert_latency_summary: summary, missed_recovered, alert_latency: url.searchParams.get('latency') === 'all' ? live : live.slice(0, 10), replays_excluded: all.length - live.length, mail_quota: { ...(JSON.parse((await env.DB.get('host:mail-meter')) ?? 'null') ?? (await import('./email')).mailQuota), daily_cap: 100, monthly_cap: 3000, reserve_for_account_mail: 15 }, moves_queue: { pending: ((JSON.parse((await env.DB.get('alerts:pending-moves')) ?? '[]') as Alert13F[]).map((p) => p.accession)), last: JSON.parse((await env.DB.get('host:moves-last')) ?? 'null') }, ...business }, 200, h);
   }
 
-  // The site's page counts: visits, signup form views and trial clicks per page and utm_source. Counts only (no
+  // The site's page counts: visits, signup form views and trial clicks per page, utm_source and post (utm_source|utm_content). Counts only (no
   // IP, cookie or member stored); 120 a IP an hour. Read with GET /ops/funnel.
   if (req.method === 'POST' && path === '/track') {
     const b = await body(req);
@@ -378,15 +378,19 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const clean = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().toLowerCase().replace(/[^a-z0-9/_.:-]/g, '').slice(0, max) || null : null);
     const page = (clean(b.page, 100) ?? '/').split('?')[0];
     const src = clean(b.utm_source, 60) ?? 'direct';
+    const post = `${src}|${clean(b.utm_content, 60) ?? '-'}`;
     const key = `track:${new Date(Date.now() - 5 * 3600_000).toISOString().slice(0, 10)}`;
     const d = JSON.parse((await env.DB.get(key)) ?? '{}') as Record<string, Record<string, Record<string, number>>>;
     const byPage = ((d[kind] ??= {}).page ??= {});
     const bySrc = (d[kind].source ??= {});
+    const byPost = (d[kind].utm ??= {});
     // Bounded: at most 300 pages and 100 sources a day; the rest count as "other".
     const pk = page in byPage || Object.keys(byPage).length < 300 ? page : 'other';
     const sk = src in bySrc || Object.keys(bySrc).length < 100 ? src : 'other';
     byPage[pk] = (byPage[pk] ?? 0) + 1;
     bySrc[sk] = (bySrc[sk] ?? 0) + 1;
+    const uk = post in byPost || Object.keys(byPost).length < 300 ? post : 'other';
+    byPost[uk] = (byPost[uk] ?? 0) + 1;
     await env.DB.put(key, JSON.stringify(d), { expirationTtl: 400 * 86400 });
     return json({ ok: true, counted: true }, 200, h);
   }
@@ -516,7 +520,11 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       const t = await env.DB.get(`track:${day}`);
       if (t) track[day] = JSON.parse(t);
     }
-    return json({ ok: true, funnel: await funnel(env, Date.now(), days), track }, 200, h);
+    // Totals over the window by post ("utm_source|utm_content"): page counts from /track, signups and the rest from the funnel.
+    const track_by_utm: Record<string, Record<string, number>> = {};
+    for (const d of Object.values(track) as Record<string, { utm?: Record<string, number> }>[])
+      for (const [kind, x] of Object.entries(d)) for (const [k, n] of Object.entries(x.utm ?? {})) (track_by_utm[kind] ??= {})[k] = (track_by_utm[kind][k] ?? 0) + n;
+    return json({ ok: true, funnel: await funnel(env, Date.now(), days), track, track_by_utm }, 200, h);
   }
 
   // Operator: one member's access log (for telling a member whether any session read their book), or an entry for a
@@ -1204,7 +1212,7 @@ export default {
 };
 
 /** Every request this copy answers itself, within the read budget. */
-function serve(req: Request, env: Env): Promise<Response> {
+async function serve(req: Request, env: Env): Promise<Response> {
   const handled = handleRequest(req, env).catch((err) => {
     console.log(String(err?.stack ?? err));
     return json({ ok: false, error: 'server error' }, 500, cors(allowedOrigin(req.headers.get('origin'), env)));
@@ -1213,8 +1221,9 @@ function serve(req: Request, env: Env): Promise<Response> {
   // Writes (sign-in, checkout, pause: they call Stripe or the mailer) are never cut off mid-way, and downloads and
   // whole books stream for longer.
   const path = new URL(req.url).pathname;
-  // The operator can time a slow route past the budget (x-copybook-operator: HEALTH_TOKEN).
-  const op = !!env.HEALTH_TOKEN && req.headers.get('x-copybook-operator') === env.HEALTH_TOKEN;
+  // The operator (its bearer token) can time a slow route past the budget. x-copybook-operator only names the caller
+  // for the access log, so it never has to carry a secret.
+  const op = await isOperator(env, req);
   if (op || req.method !== 'GET' || /^\/(csv\/|feed\/|v1\/bulk|v1\/filers\/[^/]+\/holdings)/.test(path)) return handled;
   let timer: ReturnType<typeof setTimeout> | undefined;
   // Retry-After is exposed to pages (CORS hides response headers from scripts otherwise).

@@ -21,13 +21,16 @@ const HOLDINGS_HEADERS = {
   'RateLimit-Limit': { description: 'The limit of the window closest to running out.', schema: { type: 'integer' } },
   'RateLimit-Remaining': { description: 'Requests left in that window.', schema: { type: 'integer' } },
   'RateLimit-Reset': { description: 'Seconds until that window resets.', schema: { type: 'integer' } },
+  'X-RateLimit-Limit': { description: 'The same value as RateLimit-Limit, under the common legacy name.', schema: { type: 'integer' } },
+  'X-RateLimit-Remaining': { description: 'The same value as RateLimit-Remaining.', schema: { type: 'integer' } },
+  'X-RateLimit-Reset': { description: 'The same value as RateLimit-Reset (seconds, not a timestamp).', schema: { type: 'integer' } },
 };
 const BUILD = { schema_version: SCHEMA_VERSION, data_built_at: '2026-11-08T21:29:01Z', build_id: '20261108T212901Z' };
 
 const POSITION_EXAMPLE = {
   cusip: '02079K305', ticker: 'GOOGL', issuer: 'ALPHABET INC', title_of_class: 'CAP STK CL A', put_call: null, sector: 'Communication Services',
   shares: 54000000, shares_type: 'SH', value_usd: 9512640000, weight: 0.0367, weight_incl_options: 0.0367, weight_equity: 0.0367, value_scale: null, value_as_filed: null, value_adjusted: null, zero_value: false,
-  change: 'added', prev_shares: 4200000, share_change: 49800000, value_delta_usd: 8770349040, source_accession: null, first_disclosed_at: null, suspect_units: false,
+  change: 'added', prev_shares: 4200000, share_change: 49800000, value_delta_usd: 8770349040, source_accession: null, first_disclosed_at: null, suspect_units: null,
 };
 
 /** OpenAPI 3.1 description of /v1, served at /v1/openapi.json. */
@@ -111,6 +114,25 @@ export function openapi() {
             history_quarters: { type: 'array', items: { type: 'string' }, description: 'Quarters available, newest first' },
           },
         },
+        HolderRow: {
+          type: 'object',
+          required: ['filer', 'period', 'kind', 'put_call', 'shares', 'prev_shares', 'share_change', 'value_usd', 'prev_value_usd', 'change', 'weight', 'accession', 'accepted_at'],
+          properties: {
+            filer: { type: 'object', required: ['cik', 'name', 'slug', 'type', 'curated'], properties: { cik: { type: 'string' }, name: { type: 'string' }, slug: { type: ['string', 'null'] }, type: { type: ['string', 'null'], description: 'hedge_fund, long_only, index, bank, wealth, pension, sovereign, insurance or other.' }, curated: { type: ['boolean', 'null'] } } },
+            period: { type: ['string', 'null'], description: 'The filer\'s own latest quarter for this row, e.g. 2026Q3.' },
+            kind: { type: 'string', enum: ['equity', 'calls', 'puts'] },
+            put_call: { type: ['string', 'null'], enum: ['CALL', 'PUT', null], description: 'As EDGAR writes it; null for shares.' },
+            shares: { type: 'integer' },
+            prev_shares: { type: ['integer', 'null'], description: 'Null when the filer had no prior quarter on file.' },
+            share_change: { type: ['integer', 'null'] },
+            value_usd: { type: 'integer', description: 'Whole US dollars, as filed (thousands rescaled).' },
+            prev_value_usd: { type: ['integer', 'null'] },
+            change: { type: ['string', 'null'], description: 'Versus the filer\'s prior quarter: new, added, trimmed, exited or unchanged; null when there is no prior quarter on file.' },
+            weight: { type: ['number', 'null'], description: 'Share of the filer\'s whole 13F book that period, 6 decimals; null when that total isn\'t known.' },
+            accession: { type: ['string', 'null'] },
+            accepted_at: { type: ['string', 'null'], format: 'date-time', description: 'Filing-level, not per position: the EDGAR acceptance of the filer\'s original 13F-HR for that quarter. A position added later by an amendment carries the original\'s time, so it can look disclosed earlier than it was. Null until gene has fetched it.' },
+          },
+        },
         Position: {
           type: 'object',
           description: 'One position: info-table rows summed per (CUSIP, put/call).',
@@ -138,7 +160,7 @@ export function openapi() {
             value_delta_usd: { type: ['integer', 'null'], description: 'Trade size in whole USD at this filing\'s own value per share: +value for new, -prior value for exited, share_change x value/shares otherwise. A price move alone is 0.' },
             source_accession: { type: ['string', 'null'], description: 'Point-in-time: the accession (original 13F-HR or amendment) this row was disclosed in. Null until point-in-time data is published.' },
             first_disclosed_at: { type: ['string', 'null'], format: 'date-time', description: 'The per-row point-in-time key: EDGAR acceptance datetime (UTC) of source_accession, the filing that first disclosed this row (an amendment-added position gets the amendment\'s time). Use it, not the filing\'s accepted_at, to know when a row was public. Null until point-in-time data is published.' },
-            suspect_units: { type: 'boolean', description: 'True when ingest flags the row\'s value as a likely unit error (e.g. reported in dollars where thousands were meant). Such rows are left out of moves and alerts.' },
+            suspect_units: { type: ['boolean', 'null'], description: 'Null until ingest\'s cross-filer check has run on the row (implied price inconsistent with other filers, or the filer\'s own prior quarter); then true or false. True when ingest flags the row\'s value as a likely unit error (e.g. reported in dollars where thousands were meant). Such rows are left out of moves and alerts.' },
           },
         },
         Holdings: {
@@ -307,9 +329,9 @@ export function openapi() {
           responses: {
             '200': {
               description: 'Holders, largest first. Each row\'s `accepted_at` is filing-level: the EDGAR acceptance of the filer\'s original 13F-HR for that quarter. A position added later by an amendment carries the original\'s time, so it can look disclosed earlier than it was; per-row disclosure times come with `lots[]`. For point-in-time work use the holdings endpoints\' per-row `first_disclosed_at`.',
-              content: json(envelope({ type: 'object' }, { count: { type: 'integer', description: 'Position rows after the filters.' }, filers: { type: 'integer', description: 'Distinct filers with a nonzero position among those rows.' }, next_offset: { type: ['integer', 'null'] } }), {
+              content: json(envelope({ type: 'object', required: ['issuer', 'ticker', 'tickers', 'display_name', 'cohort', 'type', 'counts', 'truncated', 'holders'], properties: { issuer: { type: 'string', description: '6-character CUSIP issuer code' }, ticker: { type: ['string', 'null'] }, tickers: { type: 'array', items: { type: 'string' } }, display_name: { type: ['string', 'null'] }, cohort: { type: 'string', enum: ['all', 'curated'] }, type: { type: ['string', 'null'] }, counts: { type: 'object', additionalProperties: true }, truncated: { type: 'boolean' }, holders: { type: 'array', items: { $ref: '#/components/schemas/HolderRow' } } } }, { count: { type: 'integer', description: 'Position rows after the filters.' }, filers: { type: 'integer', description: 'Distinct filers with a nonzero position among those rows.' }, next_offset: { type: ['integer', 'null'] } }), {
                 ...BUILD,
-                data: { issuer: '829933', ticker: 'SIRI', tickers: ['SIRI'], display_name: 'Sirius XM', cohort: 'all', type: null, counts: { holders: 608, new: 76, added: 153, trimmed: 124, exited: 55, unchanged: 79, no_prior: 176, by_period: { '2026Q3': 64, '2026Q2': 536 } }, truncated: false, holders: [{ filer: { cik: '0001067983', name: 'BERKSHIRE HATHAWAY INC', slug: 'warren-buffett', type: 'active', curated: true }, period: '2026Q2', kind: 'equity', put_call: null, shares: 124807117, prev_shares: 124807117, share_change: 0, value_usd: 3686802237, prev_value_usd: 2880548260, change: 'unchanged', weight: 0.0143, accession: '0000950123-26-008377', accepted_at: '2026-08-14T20:05:04Z' }] },
+                data: { issuer: '829933', ticker: 'SIRI', tickers: ['SIRI'], display_name: 'Sirius XM', cohort: 'all', type: null, counts: { holders: 608, new: 76, added: 153, trimmed: 124, exited: 55, unchanged: 79, no_prior: 176, by_period: { '2026Q3': 64, '2026Q2': 536 } }, truncated: false, holders: [{ filer: { cik: '0001067983', name: 'BERKSHIRE HATHAWAY INC', slug: 'warren-buffett', type: 'long_only', curated: true }, period: '2026Q2', kind: 'equity', put_call: null, shares: 124807117, prev_shares: 124807117, share_change: 0, value_usd: 3686802237, prev_value_usd: 2880548260, change: 'unchanged', weight: 0.0143, accession: '0000950123-26-008377', accepted_at: '2026-08-14T20:05:04Z' }] },
                 count: 663,
                 filers: 608,
                 next_offset: 100,

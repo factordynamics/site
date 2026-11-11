@@ -10,6 +10,18 @@ export const SCHEMA_VERSIONS = [SCHEMA_VERSION];
 /** Changes to /v1, newest first. Served at /v1/changelog and summarised in the spec. */
 export const CHANGELOG: { id: string; date: string; schema_version: string; breaking: boolean; status: 'shipped' | 'announced'; changes: string[] }[] = [
   {
+    id: '2026-11-11-suspect-units-null',
+    date: '2026-11-11',
+    schema_version: SCHEMA_VERSION,
+    breaking: false,
+    status: 'shipped',
+    changes: [
+      'Fix: Position.`suspect_units` is null until ingest\'s cross-filer check has run on the row, then true or false. It used to say false for rows never checked. Typed clients should accept null.',
+      'A bad `limit` or `offset` on /v1/events and /v1/changes now names the parameter and the value it got.',
+      'The spec declares the X-RateLimit-* headers (the same values as RateLimit-*) and gives /v1/stocks/{stock}/holders rows a schema (HolderRow), with `accepted_at` described as filing-level.',
+    ],
+  },
+  {
     id: '2026-11-09-type-enum',
     date: '2026-11-09',
     schema_version: '2026-11-09',

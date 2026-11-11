@@ -3,7 +3,7 @@ import { refreshBooks } from './book';
 import { countAlerts, logSent, pausedFilingMail, resumeUrl, runRevenue } from './revenue';
 import { inFilingWeek } from './seasons';
 import { alertMail, digestMail, type FeedItem, feedItems, holdtermAlertMail, sendMail } from './email';
-import { bookSuspect, companyFilings, computeMoves, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, prevQuarterEnd, prior13F, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
+import { bookSuspect, companyFilings, computeMoves, netRenamed, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, prevQuarterEnd, prior13F, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
 import { isActive, isPaused, testAddress, type Env, type Member } from './env';
 import { getFollows, getMember, listMembers, putMember, type Follows } from './members';
 import { unsubscribeUrl } from './free';
@@ -932,12 +932,15 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
           const book = isExtra ? await filerShardBook(env, e.cik, prev[s]) : await priorBook(env, s, prev[s]);
           if (!book) continue;
           const q = quarterOf(f.report_date);
-          const r = computeMoves(f.holdings, book, undefined, await splitsFor(env, q), await perShareMedians(env, perShareSuspects(f.holdings, book).slice(0, 6), q));
+          let r = computeMoves(f.holdings, book, undefined, await splitsFor(env, q), await perShareMedians(env, perShareSuspects(f.holdings, book).slice(0, 6), q));
+          // Held positions already carry tickers from last quarter's book; look up only new ones (each lookup scans
+          // the securities map, ~0.5 ms of CPU): the email's, plus the 30 largest when a held name was exited, so a
+          // CUSIP change (XOM's Q3 reorganisation) nets into one share-based move.
+          const exitedNamed = r.changed.some((x) => x.change === 'exited' && x.ticker);
+          await lookupTickers(env, exitedNamed ? [...r.moves.new, ...r.changed.filter((x) => x.change === 'new').sort((a, b) => b.value - a.value).slice(0, 30)] : r.moves.new);
+          r = netRenamed(r);
           moves = r.moves;
           changed = keepChanged(r.changed);
-          // Held positions already carry tickers from last quarter's book; look up only the new ones
-          // shown in the email (each lookup scans the securities map, ~0.5 ms of CPU).
-          await lookupTickers(env, moves.new);
           tickers = [...new Set(r.changed.map((x) => x.ticker).filter((t): t is string => !!t))];
           break;
         }
@@ -1124,9 +1127,11 @@ export async function geneMoves(env: Env, now: number, budgetMs = 45_000): Promi
         continue;
       }
       const q = quarterOf(f.report_date);
-      const r = computeMoves(f.holdings, book, undefined, await splitsFor(env, q), await perShareMedians(env, perShareSuspects(f.holdings, book).slice(0, 6), q));
-      // EDGAR tables carry no tickers: look up every changed row, so owned and watched names match.
-      await lookupTickers(env, [...r.changed, ...r.moves.new, ...r.moves.added, ...r.moves.trimmed, ...r.moves.exited]);
+      const raw = computeMoves(f.holdings, book, undefined, await splitsFor(env, q), await perShareMedians(env, perShareSuspects(f.holdings, book).slice(0, 6), q));
+      // EDGAR tables carry no tickers: look up every changed row, so owned and watched names match and a CUSIP
+      // change nets into one share-based move.
+      await lookupTickers(env, raw.changed);
+      const r = netRenamed(raw);
       ready.push({ ...p, moves: r.moves, changed: keepChanged(r.changed), tickers: [...new Set(r.changed.map((x) => x.ticker).filter((t): t is string => !!t))], followup: true, moves_pending: undefined });
     } catch (e) {
       failed.push(`${p.accession}: ${e}`);

@@ -170,7 +170,9 @@ export function linkBase(env: Env, req: Request, url: URL): string {
  * their book. Members' own requests are not logged.
  */
 export async function logAccess(env: Env, req: Request | null, route: string, customers: (string | null | undefined)[], note?: string, who?: string, at = new Date().toISOString()): Promise<void> {
-  const by = who ?? req?.headers.get('x-copybook-operator')?.slice(0, 120) ?? 'operator token';
+  const named = req?.headers.get('x-copybook-operator')?.slice(0, 120);
+  // A caller still sending the token in this header (the old timing bypass) is never written to the log.
+  const by = who ?? (named && named !== env.HEALTH_TOKEN ? named : 'operator token');
   for (const c of new Set(customers.filter((x): x is string => !!x))) {
     const k = `access:${c}`;
     const log = JSON.parse((await env.DB.get(k)) ?? '[]') as unknown[];

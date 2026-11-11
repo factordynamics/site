@@ -87,7 +87,8 @@ function position(h: any, equityTotal: number, allTotal: number) {
     source_accession: h.source_accession ?? null,
     first_disclosed_at: h.first_disclosed_at ?? null,
     // Ingest's unit-error flag, passed through when the data carries it.
-    suspect_units: h.suspect_units === true,
+    // Null until ingest's cross-filer check has run on the row: false would claim a check that never happened.
+    suspect_units: typeof h.suspect_units === 'boolean' ? h.suspect_units : null,
   };
 }
 
@@ -823,7 +824,9 @@ ROUTES.push(
     const limit = Number(p.get('limit') ?? 100);
     const offset = Number(p.get('offset') ?? 0);
     const date = /^\d{4}-\d{2}-\d{2}$/;
-    if ((kinds && kinds.some((k) => !k)) || (from && !date.test(from)) || (to && !date.test(to)) || !Number.isInteger(limit) || limit < 1 || limit > 500 || !Number.isInteger(offset) || offset < 0) {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 500) return v1error('bad_request', 400, `limit must be an integer from 1 to 500 (got ${p.get('limit')}); page with offset.`);
+    if (!Number.isInteger(offset) || offset < 0) return v1error('bad_request', 400, `offset must be an integer from 0 (got ${p.get('offset')}).`);
+    if ((kinds && kinds.some((k) => !k)) || (from && !date.test(from)) || (to && !date.test(to))) {
       return v1error('bad_request', 400, 'form: form4, 13d, 13g (comma-separated); from, to: YYYY-MM-DD filing dates; limit 1-500; offset from 0.');
     }
     let filerSlug: string | null = null;
@@ -956,7 +959,9 @@ ROUTES.push(
     const offset = Number(p.get('offset') ?? 0);
     const minValue = Number(p.get('min_value_usd') ?? 0);
     const cohort = p.get('cohort') ?? 'all';
-    if (!QUARTER.test(quarter) || want.some((c) => !CHANGES.includes(c)) || !Number.isInteger(limit) || limit < 1 || limit > 1000 || !Number.isInteger(offset) || offset < 0 || !Number.isFinite(minValue) || minValue < 0) {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 1000) return v1error('bad_request', 400, `limit must be an integer from 1 to 1000 (got ${p.get('limit')}); page with offset.`);
+    if (!Number.isInteger(offset) || offset < 0) return v1error('bad_request', 400, `offset must be an integer from 0 (got ${p.get('offset')}).`);
+    if (!QUARTER.test(quarter) || want.some((c) => !CHANGES.includes(c)) || !Number.isFinite(minValue) || minValue < 0) {
       return v1error('bad_request', 400, 'quarter like 2026Q2; change: new, added, trimmed, exited (comma-separated); limit 1-1000; offset from 0; min_value_usd from 0.');
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
