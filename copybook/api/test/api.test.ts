@@ -2446,7 +2446,29 @@ describe('copybook api', () => {
     const orig = globalThis.fetch;
     vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => (String(u) === 'https://pub.test/api.json' ? Response.json({ api: 'https://abc-def.trycloudflare.com/copybook', at: '2026-11-09T05:30:24Z' }) : orig(u, init)));
     const r = await worker.fetch(new Request('https://copybook-api.factordynamics.workers.dev/resume?t=abc', { method: 'POST' }), { ...env, MOVED_TO: 'https://gene.tail70ba3.ts.net/copybook/', PUBLIC_URL: 'https://pub.test/' } as Env);
-    expect([r.status, r.headers.get('location')]).toEqual([308, 'https://abc-def.trycloudflare.com/copybook/resume?t=abc']);
+    // 307, never 301 or 308: clients and feed readers cache permanent redirects, and the tunnel's name changes.
+    expect([r.status, r.headers.get('location')]).toEqual([307, 'https://abc-def.trycloudflare.com/copybook/resume?t=abc']);
+    // A private feed is fetched from the live host and answered here (200), so readers keep this name.
+    const tok = 'feedtok_abcdefghijklmnopqrstu';
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) =>
+      String(u) === 'https://pub.test/api.json' ? Response.json({ api: 'https://abc-def.trycloudflare.com/copybook', at: '2026-11-09T05:30:24Z' })
+      : String(u) === `https://abc-def.trycloudflare.com/copybook/feed/${tok}.json` ? Response.json({ version: 'https://jsonfeed.org/version/1.1', items: [] }, { headers: { 'content-type': 'application/feed+json' } })
+      : orig(u, init));
+    const wenv = { ...env, MOVED_TO: 'https://gene.tail70ba3.ts.net/copybook/', PUBLIC_URL: 'https://pub.test/' } as Env;
+    const fr = await worker.fetch(new Request(`https://copybook-api.factordynamics.workers.dev/feed/${tok}.json`), wenv);
+    expect([fr.status, fr.headers.get('content-type'), fr.headers.get('location'), (await fr.json()).version]).toEqual([200, 'application/feed+json', null, 'https://jsonfeed.org/version/1.1']);
+    // No response from the Worker is a permanent redirect.
+    for (const [method, path] of [['GET', '/me'], ['POST', '/resume?t=x'], ['GET', '/v1/filers'], ['GET', '/unsubscribe?t=x'], ['HEAD', `/feed/${tok}.rss`], ['GET', '/']]) {
+      const res = await worker.fetch(new Request(`https://copybook-api.factordynamics.workers.dev${path}`, { method }), wenv);
+      expect([path, [301, 308].includes(res.status)]).toEqual([path, false]);
+    }
+    vi.stubGlobal('fetch', orig);
+    // The feed served by gene names the Worker, never gene's own hosts, in feed_url and in its items' links.
+    await env.DB.put(`feedtok:${tok}`, 'cus_feedhost');
+    await env.DB.put('feed:cus_feedhost', JSON.stringify([{ id: 'i1', url: 'https://gene.tail70ba3.ts.net/copybook/why?t=1', title: 'T', text: 'See https://abc-def.trycloudflare.com/copybook/why?t=2', published: '2026-11-11T00:00:00Z' }]));
+    const gf = await (await handleRequest(new Request(`https://api.test/feed/${tok}.json`), { ...env, FEED_URL: 'https://gene.tail70ba3.ts.net/copybook' } as Env)).json();
+    expect([gf.feed_url, gf.items[0].url, gf.items[0].content_text]).toEqual([`https://copybook-api.factordynamics.workers.dev/feed/${tok}.json`, 'https://copybook-api.factordynamics.workers.dev/why?t=1', 'See https://copybook-api.factordynamics.workers.dev/why?t=2']);
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => (String(u) === 'https://pub.test/api.json' ? Response.json({ api: 'https://abc-def.trycloudflare.com/copybook', at: '2026-11-09T05:30:24Z' }) : orig(u, init)));
     // Failed over to this host (api.json names it, read again after the minute's cache): served here, no 308 to itself.
     vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => (String(u) === 'https://pub.test/api.json' ? Response.json({ api: 'https://copybook-api.factordynamics.workers.dev' }) : orig(u, init)));
     const later = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 61_000);
@@ -2454,7 +2476,7 @@ describe('copybook api', () => {
     later.mockRestore();
     expect([own.status, (await own.json()).ok]).toEqual([200, true]);
     vi.stubGlobal('fetch', orig);
-    expect((await worker.fetch(new Request('https://api.test/health'), env)).status).not.toBe(308);
+    expect([301, 307, 308]).not.toContain((await worker.fetch(new Request('https://api.test/health'), env)).status);
     // One-click unsubscribe for a member only gene has so far (just signed up; the minute sync copies 40 keys a minute):
     // the Worker reads gene's published copy, records the unsubscribe, and publishes it for gene.
     const r2 = new MemR2();

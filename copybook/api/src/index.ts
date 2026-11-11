@@ -1584,13 +1584,31 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   return json({ ok: false, error: 'not found' }, 404, h);
 }
 
+/** A private feed, fetched from the live host and answered here: readers keep this stable name, never a redirect. */
+async function proxyFeed(req: Request, to: string): Promise<Response> {
+  try {
+    const r = await fetch(to, { method: 'GET', headers: { accept: req.headers.get('accept') ?? '*/*', 'user-agent': req.headers.get('user-agent') ?? 'copybook-feed-proxy', 'x-copybook-public-base': 'https://copybook-api.factordynamics.workers.dev' }, redirect: 'manual', signal: AbortSignal.timeout(15_000) });
+    const headers = new Headers({ 'cache-control': 'no-store', 'access-control-allow-origin': '*', 'referrer-policy': 'no-referrer' });
+    const ct = r.headers.get('content-type');
+    if (ct) headers.set('content-type', ct);
+    // A redirect from the live host would hand out its name: answered as unavailable instead.
+    if (r.status >= 300 && r.status < 400) {
+      headers.set('retry-after', '60');
+      return new Response('Feed temporarily unavailable', { status: 503, headers });
+    }
+    return new Response(req.method === 'HEAD' ? null : r.body, { status: r.status, headers });
+  } catch {
+    return new Response('Feed temporarily unavailable', { status: 503, headers: { 'cache-control': 'no-store', 'retry-after': '60', 'access-control-allow-origin': '*' } });
+  }
+}
+
 export default {
   fetch(req: Request, env: Env): Promise<Response> {
     // A retired copy (MOVED_TO set as a secret on Cloudflare's fallback): every request, including links in emails
-    // already sent (resume, unsubscribe, why, keep), goes to the same path on the live host. 308 keeps method and body.
+    // already sent (resume, unsubscribe, why, keep), goes to the same path on the live host. 307 keeps method and body (temporary: the live host moves); private feeds are proxied, not redirected.
     // It follows the API's current public base (the runner's api.json, read at most once a minute), else MOVED_TO,
     // so this hostname is the stable one for links in email and feed readers while the self-hosted base moves.
-    // Failed over to this host (api.json names it): serve here, never a 308 to itself. MOVED_TO stays set, so this
+    // Failed over to this host (api.json names it): serve here, never a redirect to itself. MOVED_TO stays set, so this
     // copy keeps its identity (Cloudflare, the primary poller) through a failover and back.
     if (env.MOVED_TO) {
       const u = new URL(req.url);
@@ -1603,7 +1621,12 @@ export default {
       return movedBase(env).then((b) =>
         new URL(b).origin === u.origin && followWrite
           ? json({ ok: false, code: 'read_only', error: "Follows can't be changed while we run on our backup. Try again in a few minutes." }, 503, { ...cors(allowedOrigin(req.headers.get('origin'), env)), 'retry-after': '300', 'access-control-expose-headers': 'retry-after' })
-          : new URL(b).origin === u.origin ? import('./failover').then((fo) => fo.writeThrough(env, (e) => serve(req, e))) : new Response(null, { status: 308, headers: { location: `${b}${u.pathname}${u.search}`, 'access-control-allow-origin': '*', 'cache-control': 'no-store' } }),
+          : new URL(b).origin === u.origin
+            ? import('./failover').then((fo) => fo.writeThrough(env, (e) => serve(req, e)))
+            : /^\/feed\/[\w-]+\.(json|rss)$/.test(u.pathname) && (req.method === 'GET' || req.method === 'HEAD')
+              ? proxyFeed(req, `${b}${u.pathname}${u.search}`)
+              // 307, never 301 or 308: clients and feed readers cache a permanent redirect, and the live host moves.
+              : new Response(null, { status: 307, headers: { location: `${b}${u.pathname}${u.search}`, 'access-control-allow-origin': '*', 'cache-control': 'no-store' } }),
       );
     }
     return serve(req, env);

@@ -6,7 +6,7 @@ Two hosts run the same Worker bundle, with one state.
 
 - Its minute cron runs the EDGAR polls and every scheduled job: digests, revenue emails, the ops digest, webhook retries and `latency.json`.
 - Cron invocations don't use the 100k/day request quota.
-- `MOVED_TO` is set, so every HTTP request to it 308-redirects to the current base in `api.json` (cached up to 60 s), else to `MOVED_TO`. When `api.json` names the Worker itself (a failover), it serves the request instead. Its cron never fetches its own URL. Never delete `MOVED_TO`: it also makes this copy the `cloudflare` host for the sync and the poller.
+- `MOVED_TO` is set, so every HTTP request to it 307-redirects (private feeds are proxied, answered 200 here) to the current base in `api.json` (cached up to 60 s), else to `MOVED_TO`. When `api.json` names the Worker itself (a failover), it serves the request instead. Its cron never fetches its own URL. Never delete `MOVED_TO`: it also makes this copy the `cloudflare` host for the sync and the poller.
 - Links in email and feeds use `API_URL` = this hostname, so they keep working wherever gene's base moves.
 
 **gene** (a self-hosted machine) serves **members, `/v1`, the Stripe webhook and ingest** through the front doors below. It is also the **backup poller**.

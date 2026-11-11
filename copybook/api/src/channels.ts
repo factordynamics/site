@@ -91,6 +91,8 @@ const randomToken = (bytes: number) => btoa(String.fromCharCode(...crypto.getRan
 
 /** Feed links use the Worker's stable name (it serves or forwards every path), never gene's own host names. */
 const WORKER_BASE = 'https://copybook-api.factordynamics.workers.dev';
+/** gene's own host names (tunnel, Funnel) in a stored link, as the Worker's stable name. */
+const publicLinks = (s: string) => s.replace(/https:\/\/[a-z0-9-]+\.(?:[a-z0-9-]+\.ts\.net|trycloudflare\.com)(?:\/copybook)?/g, WORKER_BASE);
 function feedUrls(token: string, apiBase: string) {
   const base = /\.ts\.net|trycloudflare\.com/.test(apiBase) ? WORKER_BASE : apiBase;
   return { json_url: `${base}/feed/${token}.json`, rss_url: `${base}/feed/${token}.rss` };
@@ -571,18 +573,18 @@ export async function serveFeed(env: Env, token: string, format: 'json' | 'rss',
         version: 'https://jsonfeed.org/version/1.1',
         title: 'Copybook alerts',
         home_page_url: env.SITE_URL,
-        feed_url: selfUrl,
+        feed_url: publicLinks(selfUrl),
         description: 'Your Copybook alerts: 13F, Form 4 and Schedule 13D/G filings from SEC EDGAR. Not investment advice.',
         // date_published is EDGAR's acceptance; sent_at is when Copybook sent the alert.
         // A "Send a test" item is tagged test, so readers (and the account page) can count alerts only.
-        items: items.map((i) => ({ id: i.id, url: i.url, title: i.title, content_text: i.text, date_published: i.published, sent_at: i.sent ?? null, ...(i.test ? { tags: ['test'] } : {}) })),
+        items: items.map((i) => ({ id: i.id, url: publicLinks(i.url), title: i.title, content_text: publicLinks(i.text), date_published: i.published, sent_at: i.sent ?? null, ...(i.test ? { tags: ['test'] } : {}) })),
       }),
       { headers: { ...headers, 'content-type': 'application/feed+json; charset=utf-8' } },
     );
   }
   const rss = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0"><channel><title>Copybook alerts</title><link>${xml(env.SITE_URL)}</link><description>Your Copybook alerts: 13F, Form 4 and Schedule 13D/G filings from SEC EDGAR. Not investment advice.</description>
-${items.map((i) => `<item><title>${xml(i.title)}</title><link>${xml(i.url)}</link><guid isPermaLink="false">${xml(i.id)}</guid><pubDate>${new Date(i.sent ?? i.published).toUTCString()}</pubDate><description>${xml(i.text)}</description></item>`).join('\n')}
+${items.map((i) => `<item><title>${xml(i.title)}</title><link>${xml(publicLinks(i.url))}</link><guid isPermaLink="false">${xml(i.id)}</guid><pubDate>${new Date(i.sent ?? i.published).toUTCString()}</pubDate><description>${xml(publicLinks(i.text))}</description></item>`).join('\n')}
 </channel></rss>`;
   return new Response(rss, { headers: { ...headers, 'content-type': 'application/rss+xml; charset=utf-8' } });
 }

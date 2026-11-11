@@ -157,7 +157,7 @@ export interface Member {
 
 /**
  * Cloudflare's Worker: always up, and it answers /unsubscribe itself (failover.writeThrough), so a member email's
- * one-click unsubscribe works when gene is down; its other paths 308 to the members' API. Member emails link here or to
+ * one-click unsubscribe works when gene is down; its feeds are proxied and its other paths 307 to the members' API. Member emails link here or to
  * the site, never to gene's host.
  */
 export const WORKER_URL = 'https://copybook-api.factordynamics.workers.dev';
