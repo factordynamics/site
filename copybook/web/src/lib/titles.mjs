@@ -1,3 +1,5 @@
+import { SEO_NAME, shortName } from './names.mjs'
+
 // Page titles with live numbers, shared by the build (scripts/postbuild.mjs, scripts/cards.mjs), which
 // writes them into each page's HTML for search and link previews, and by the pages, which keep the same
 // title in the tab once their data has loaded.
@@ -15,6 +17,7 @@ export function stockTitle({ ticker, superinvestors, hedge, filers, quarter }) {
 
 /** "Warren Buffett 13F portfolio, Q2 2026: $299.3B in 29 positions" (share positions, as the page counts them). */
 export function investorTitle({ who, quarter, value, positions }) {
+  who = SEO_NAME[who] ?? who
   return value ? `${who} 13F portfolio, ${qLabel(quarter)}: ${usd(value)} in ${num(positions)} positions` : `${who} portfolio · Copybook`
 }
 
@@ -43,6 +46,7 @@ export function recapFilers({ filed, names = [], final = false }) {
 export function dueLead({ quarter, deadline, names }) {
   if (!names.length || !deadline) return null
   const day = new Date(deadline).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'America/New_York' }).replace(',', '')
-  const last = names.map((n) => n.trim().split(/\s+/).at(-1))
+  // A firm-led name ("Berkshire Hathaway (Warren Buffett)") goes by its firm; a person by the last name.
+  const last = names.map((n) => (/\)$/.test(n.trim()) ? shortName(n) : n.trim().split(/\s+/).at(-1)))
   return `${qLabel(quarter).split(' ')[0]} 13Fs due by ${day} from ${last.slice(0, 3).join(', ')}${last.length > 3 ? '…' : ''}`
 }

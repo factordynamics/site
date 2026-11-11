@@ -4,5 +4,7 @@
 // replaces the location at once. Add a line here for a new post.
 export const X_LINKS = {
   kahn: 'investors/irving-kahn/',
+  // W-Kahn (Thu Nov 12): a link X has never cached, with the Kahn Brothers card.
+  'kahn-brothers': 'investors/irving-kahn/',
   season: 'season/',
 }

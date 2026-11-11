@@ -442,7 +442,7 @@ export function dateLabel(d?: string) {
 
 const LEGAL = /^(llc|lp|llp|l|p|inc|incorporated|corp|corporation|co|company|ltd|limited|plc|gp|sa|ag|se|nv|the|of|and|et|al)$/i
 export function initials(name: string) {
-  const all = name.replace(/[^A-Za-z ]/g, ' ').split(/\s+/).filter(Boolean)
+  const all = name.replace(/\(.*\)/g, ' ').replace(/[^A-Za-z ]/g, ' ').split(/\s+/).filter(Boolean)
   const kept = all.filter((w) => !LEGAL.test(w))
   const parts = kept.length ? kept : all
   return ((parts[0]?.[0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : parts[0]?.[1] ?? '')).toUpperCase()

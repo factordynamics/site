@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Resvg } from '@resvg/resvg-js'
-import { displayName, possessive } from '../src/lib/names.mjs'
+import { displayName, MARQUEE, possessive, renamed } from '../src/lib/names.mjs'
 import { dayName, isEdgarDay } from '../src/lib/calendar.mjs'
 import { recapFilers, recapTitle } from '../src/lib/titles.mjs'
 import { getJson } from './getjson.mjs'
@@ -27,7 +27,7 @@ const fontFiles = [
   ...['Medium', 'SemiBold'].map((w) => join(fonts, 'geist-mono', `GeistMono-${w}.ttf`)),
 ]
 
-const index = await read('index.json')
+const index = renamed(await read('index.json'))
 const live = index.managers.filter((m) => m.ok && (m.total_value ?? 0) > 0 && !['inactive', 'reported_by_other'].includes(m.status))
 const newest = Math.max(...live.map((m) => qn(m.quarter)))
 // This filing season and the one before: the filings people are sharing.
@@ -88,7 +88,6 @@ console.log(`filing cards: ${list.length}`)
   // A date, never "today": a card is a snapshot that gets reposted.
   const day = (iso) => dayName(iso)
   // Most-followed first; anyone not listed ranks after, in expected order.
-  const MARQUEE = ['warren-buffett', 'bill-ackman', 'stanley-druckenmiller', 'david-tepper', 'seth-klarman', 'ray-dalio', 'carl-icahn', 'li-lu', 'howard-marks', 'david-einhorn', 'bill-gates', 'dan-loeb', 'nelson-peltz', 'chase-coleman', 'terry-smith', 'chris-hohn', 'philippe-laffont']
   const rank = (slug) => (MARQUEE.includes(slug) ? MARQUEE.indexOf(slug) : MARQUEE.length)
   const bought = s.featured.filed >= 10
   const list = bought

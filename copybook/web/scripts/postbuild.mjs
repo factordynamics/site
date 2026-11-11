@@ -5,14 +5,14 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { getJson } from './getjson.mjs'
 import { ogCard } from './ogcard.mjs'
-import { displayName } from '../src/lib/names.mjs'
+import { displayName, renamed } from '../src/lib/names.mjs'
 import { X_LINKS } from './xlinks.mjs'
 import { API, API_JSON_URL } from '../api.config.mjs'
 import { dueLead, investorTitle, seasonTitle, stockTitle } from '../src/lib/titles.mjs'
 
 const dist = new URL('../dist/', import.meta.url).pathname
 const src = process.argv[2] || 'https://refcell.github.io/gust/copybook/data/index.json'
-const index = src.startsWith('http') ? await getJson(src) : JSON.parse(readFileSync(src, 'utf8'))
+const index = renamed(src.startsWith('http') ? await getJson(src) : JSON.parse(readFileSync(src, 'utf8')))
 // Static content for crawlers and link previews that don't run JavaScript (prerendered into #root
 // below); a browser running the app replaces it, and never shows it in the meantime.
 const shell = readFileSync(join(dist, 'index.html'), 'utf8').replace('</head>', () => `  <script>document.documentElement.classList.add('js')</script>\n    <style>.js #pre{display:none}#pre{max-width:1200px;margin:0 auto;padding:48px 20px;font:16px/1.55 system-ui,sans-serif}#pre table{border-collapse:collapse;margin:12px 0 28px}#pre td,#pre th{padding:6px 14px 6px 0;text-align:left}</style>\n  </head>`)

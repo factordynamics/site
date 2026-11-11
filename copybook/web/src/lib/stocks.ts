@@ -126,7 +126,7 @@ export type ExpectedSoon = Pick<Expected, 'slug' | 'manager' | 'pattern' | 'expe
 type Live = Manager & { accession?: string; accepted_at?: string | null }
 const filedNow = (quarter: string) =>
   getJSON<{ managers: Live[] }>(live('index.json'))
-    .then((i) => new Map(i.managers.filter((m) => m.quarter === quarter).map((m) => [m.slug, m])))
+    .then((i) => new Map(i.managers.filter((m) => m.quarter === quarter).map((m) => [m.slug, { ...m, manager: displayName(m.manager) }])))
     .catch(() => new Map<string, Live>())
 export const loadExpected = () =>
   getJSON<{ quarter: string; generated_at?: string; latest_13f?: { manager: string; filing_date?: string; accepted_at?: string | null } | null; expected: ExpectedSoon[] }>(`${D}expected.json${fresh()}`)
@@ -148,6 +148,14 @@ export function usualTime(x: Pick<Expected, 'pattern' | 'time_et' | 'time_range'
   return `${word} ${s.h}${s.pm === e.pm ? '' : s.pm ? ' pm' : ' am'}–${e.h} ${e.pm ? 'pm' : 'am'} ET`
 }
 /** The next two filing days' largest superinvestors, up to four a day (books within a few percent of each other are effectively tied). */
+/** The soonest superinvestor still expected (by day, then usual time), as "Kahn Brothers, Thursday" ("today" on the day). */
+export function nextFiler(list: ExpectedSoon[], today: string) {
+  const x = list.filter((e) => e.expected_date && e.expected_date >= today).sort((a, b) => a.expected_date!.localeCompare(b.expected_date!) || a.time_et - b.time_et || b.total_value - a.total_value)[0]
+  if (!x) return null
+  const day = x.expected_date === today ? 'today' : new Date(`${x.expected_date}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' })
+  return { name: displayName(x.manager), day }
+}
+
 export function nextUp(list: ExpectedSoon[], today: string, perDay = 4) {
   const days = [...new Set(list.filter((x) => x.expected_date! >= today).map((x) => x.expected_date!))].sort().slice(0, 2)
   const groups = days.map((d) => ({

@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto'
 import { getJson, pooled } from './getjson.mjs'
 import { ETF_NAMES } from './etfs.mjs'
 import { isEdgarDay } from '../src/lib/calendar.mjs'
-import { displayName } from '../src/lib/names.mjs'
+import { displayName, renamed } from '../src/lib/names.mjs'
 import { addLine, newPosition, positionFlags, positionMove } from '../src/lib/position.mjs'
 
 const out = process.argv[2] || 'dist'
@@ -45,7 +45,7 @@ async function* filerBooks(filers) {
 }
 
 const qn = (q) => (q ? Number(q.slice(0, 4)) * 4 + Number(q.slice(5)) - 1 : -1)
-const index = await read('index.json')
+const index = renamed(await read('index.json'))
 const live = index.managers.filter((m) => m.ok && (m.total_value ?? 0) > 0 && !['inactive', 'reported_by_other'].includes(m.status))
 const newest = Math.max(...live.map((m) => qn(m.quarter)))
 // A fund more than two quarters behind the newest filing isn't a current holder of anything.
