@@ -3572,6 +3572,72 @@ describe('copybook api', () => {
     expect([items[0].title, items[0].url === items[1].url, items[0].url === 'https://refcell.github.io/gust/copybook/']).toEqual(['Copybook test', true, false]);
   });
 
+  it("Telegram contract, against the Bot API's documented responses (getMe, getUpdates, sendMessage; 401, 403, 400): Save, a blocked bot, and alerts as valid Telegram HTML", async () => {
+    stripeObjects['checkout/sessions/cs_test_tgc'] = { id: 'cs_test_tgc', status: 'complete', created: now(), subscription: 'sub_tgc', customer_details: { email: 'tgc@example.com' } };
+    stripeObjects['subscriptions/sub_tgc'] = sub('sub_tgc', 'cus_tgc', 'active');
+    const t = (await (await fullCheckout('cs_test_tgc')).json()).token as string;
+    const req = (method: string, path: string, b?: unknown) => handleRequest(new Request(`https://api.test${path}`, { method, body: b ? JSON.stringify(b) : undefined, headers: { origin: 'https://refcell.github.io', authorization: `Bearer ${t}` } }), env);
+    const TOKEN = '123456789:AAbbccddeeffgghhiijjkkllmmnnoopp';
+    // Response bodies as https://core.telegram.org/bots/api documents them.
+    const me = { ok: true, result: { id: 123456789, is_bot: true, first_name: 'Copybook alerts', username: 'copybook_alerts_test_bot', can_join_groups: true, can_read_all_group_messages: false, supports_inline_queries: false } };
+    const updates = { ok: true, result: [{ update_id: 873451201, message: { message_id: 1, from: { id: 424242, is_bot: false, first_name: 'Ann', language_code: 'en' }, chat: { id: 424242, first_name: 'Ann', type: 'private' }, date: 1762862400, text: '/start', entities: [{ offset: 0, length: 6, type: 'bot_command' }] } }] };
+    const sentOk = { ok: true, result: { message_id: 2, from: me.result, chat: { id: 424242, first_name: 'Ann', type: 'private' }, date: 1762862401, text: 'Connected' } };
+    const err = (code: number, description: string) => ({ status: code, body: { ok: false, error_code: code, description } });
+    const tg = () => posts.filter((p) => p.url.startsWith('https://api.telegram.org/'));
+
+    // Save with no chat id: the token (getMe), the chat from the bot's latest update (getUpdates), then "Connected ✓" there.
+    posts = [];
+    chatReplies = { 'api.telegram.org': [{ status: 200, body: me }, { status: 200, body: updates }, { status: 200, body: sentOk }] };
+    const saved = await (await req('PUT', '/channels', { telegram: { bot_token: TOKEN } })).json();
+    expect(saved.channels).toMatchObject({ telegram: { chat_id: '424242' }, verified: ['telegram'] });
+    expect(tg().map((p) => p.url.split('/').at(-1))).toEqual(['getMe', 'getUpdates', 'sendMessage']);
+    expect(JSON.parse(tg()[2].body)).toMatchObject({ chat_id: '424242', parse_mode: 'HTML', disable_web_page_preview: true });
+    expect(JSON.parse(tg()[2].body).text).toMatch(/^Connected ✓ to Copybook/);
+    // 401 Unauthorized (a bad or revoked token): refused, with what to check; the working chat stays.
+    chatReplies = { 'api.telegram.org': [err(401, 'Unauthorized')] };
+    expect(await (await req('PUT', '/channels', { telegram: { bot_token: TOKEN, chat_id: '424242' } })).json()).toMatchObject({ ok: false, code: 'telegram_token', error: 'Check the token from @BotFather' });
+    // 400 chat not found (HTML, then the plain-text fallback): refused in plain words, not saved.
+    chatReplies = { 'api.telegram.org': [{ status: 200, body: me }, err(400, 'Bad Request: chat not found'), err(400, 'Bad Request: chat not found')] };
+    expect(await (await req('PUT', '/channels', { telegram: { bot_token: TOKEN, chat_id: '999' } })).json()).toMatchObject({ ok: false, code: 'telegram_unreachable', error: "Telegram couldn't find this chat (check the chat id, and that the bot is in the chat)" });
+    expect((await (await req('GET', '/channels')).json()).channels.telegram).toEqual({ chat_id: '424242' });
+
+    // 403 Forbidden: bot was blocked by the user, on a real alert: Telegram is flagged at once with one notice, and email
+    // resumes with that same alert (chats go first, so the failure is known before email is decided).
+    await putFollows('cus_tgc', { investors: ['warren-buffett'] });
+    const today = new Date().toISOString().slice(0, 10);
+    const ev = (id: string) => ({ id, slug: 'warren-buffett', manager: 'Warren Buffett', form: '4', kind: 'form4', action: 'buy', filing_date: today, url: `https://www.sec.gov/${id}`, issuer: 'SIRIUS XM', display_name: null, ticker: 'SIRI', shares: 1000, value: 25000, accepted: new Date().toISOString() });
+    events = [ev('tg-seed')];
+    await cron(47);
+    sent = [];
+    posts = [];
+    chatReplies = { 'api.telegram.org': [err(403, 'Forbidden: bot was blocked by the user')] };
+    events = [ev('tg-seed'), ev('TG1')];
+    await cron(47);
+    expect(tg()).toHaveLength(1);
+    expect(JSON.parse(tg()[0].body)).toMatchObject({ chat_id: '424242', parse_mode: 'HTML' });
+    expect((await (await req('GET', '/me')).json()).member.channels_failing).toHaveProperty('telegram');
+    expect(sent.filter((m) => m.to[0] === 'tgc@example.com').map((m) => m.subject).sort()).toEqual(['Buffett SIRI Form 4: bought', 'Your Telegram alerts stopped: access was revoked (HTTP 403)']);
+    chatReplies = {};
+
+    // A real alert's text as Telegram HTML: <, > and & escaped, links as <a href>, nothing else; under 4,096 characters.
+    const { telegramParts } = await import('../src/channels');
+    const { chatText } = await import('../src/email');
+    const row = (change: string, display_name: string, value_delta: number) => ({ change, ticker: null, display_name, issuer: display_name, cusip: '00206R102', put_call: null, shares: 1000, prev_shares: change === 'new' ? 0 : 500, value: 1e6, value_delta, delta_pct_of_book: 0.01 });
+    const filing = { slug: 'ruane-cunniff', slugs: ['ruane-cunniff'], manager: 'Ruane, Cunniff & Goldfarb L.P.', name: 'Ruane, Cunniff & Goldfarb L.P.', quarter: '2026Q3', report_date: '2026-09-30', filing_date: today, accession: '0001720792-26-000011', sec_url: 'https://www.sec.gov/Archives/edgar/data/1720792/000172079226000011/0001720792-26-000011-index.html', tickers: [], moves: { bought_usd: 2e6, sold_usd: 0, new: [row('new', 'AT&T <Class A>', 1e6)], added: [row('added', 'Johnson & Johnson', 5e5)], trimmed: [], exited: [] } };
+    const f = { investors: ['ruane-cunniff'], stocks: [], owned: [], peers: [], onboarded: true };
+    const valid = (h: string) => !/[<>]/.test(h.replace(/<a href="https?:\/\/[^"<>\s]+">[^<>]*<\/a>/g, '')) && !/&(?!(amp|lt|gt|quot);)/.test(h);
+    const one = telegramParts(chatText(env, [filing as never], [], f as never));
+    expect([one.length, valid(one[0].html), one[0].html.length <= 4096]).toEqual([1, true, true]);
+    expect(one[0].html).toContain('Ruane, Cunniff &amp; Goldfarb');
+    expect(one[0].html).toContain('AT&amp;T &lt;Class A&gt;');
+    expect(one[0].html).toContain(`<a href="${filing.sec_url}">${filing.sec_url}</a>`);
+    // Longer than one message: several, split at line ends, each valid and under the limit, nothing cut or lost.
+    const long = chatText(env, Array.from({ length: 40 }, (_, i) => ({ ...filing, accession: `0001720792-26-${String(100 + i).padStart(6, '0')}` })) as never, [], f as never);
+    const parts = telegramParts(long);
+    expect(long.length).toBeGreaterThan(4096);
+    expect([parts.length > 1, parts.every((p) => valid(p.html) && p.html.length <= 4096), parts.map((p) => p.plain).join('\n') === long]).toEqual([true, true, true]);
+  });
+
   it("Item 4 excerpts: Icahn's real CVI 13D/A #41 without the amendment preamble or defined terms, cut at a sentence end", () => {
     const p = parseSchedule13(cvi41)!;
     expect(p.item4).toBe(
@@ -3986,8 +4052,12 @@ describe('copybook api', () => {
     const keyStatus = async (k: string) => (await handleRequest(new Request('https://api.test/v1/me', { headers: { authorization: `Bearer ${k}` } }), env)).status;
     expect(await keyStatus(oldKey)).toBe(200);
     const staleLink = await signToken(env.SESSION_SECRET, 'login', seatId, 600, {}, Date.now() / 1000 - 5);
+    const seatFeed = (await (await call('/channels/feed', { body: {}, token: seat })).json()).channels.feed.json_url as string;
+    expect((await handleRequest(new Request(seatFeed), env)).status).toBe(200);
     expect((await call('/seats/analyst%40fund.example', { method: 'DELETE', token: owner })).status).toBe(200);
     expect([(await call('/me', { token: seat })).status, await keyStatus(oldKey)]).toEqual([401, 401]);
+    // The removed seat's private feed stops at once too (a feed URL is a credential of its own).
+    expect((await handleRequest(new Request(seatFeed), env)).status).toBe(404);
     expect((await call('/seats', { body: { email: 'analyst@fund.example' }, token: owner })).status).toBe(201);
     expect([(await call('/me', { token: seat })).status, await keyStatus(oldKey)]).toEqual([401, 401]);
     expect((await call('/session', { body: { login: staleLink } })).status).toBe(401); // a link from before the removal
@@ -4006,9 +4076,14 @@ describe('copybook api', () => {
     expect((await call('/seats/s5%40fund.example', { method: 'DELETE', token: owner })).status).toBe(200);
     expect(await env.DB.get('email:s5@fund.example')).toBeNull();
     expect(await env.DB.get(`cus:${s5}`)).toBeNull();
+    const fundKey = (await (await call('/keys', { body: { name: 'seat-fund-end' }, token: seat })).json()).key as string;
     await webhook({ type: 'customer.subscription.deleted', data: { object: { ...sub('sub_fund', 'cus_fund', 'canceled', 'year', 'fund_yearly') } } });
     expect((await (await call('/me', { token: seat })).json()).member).toMatchObject({ active: false, status: 'canceled' });
     expect((await call('/follows', { token: seat })).status).toBe(402);
+    // A seat's API key once the Fund ends: 402 that names the plan that lapsed, Copy Fund (not Copy or Copy Pro).
+    const ended = await handleRequest(new Request('https://api.test/v1/filers', { headers: { authorization: `Bearer ${fundKey}` } }), env);
+    const endedBody = (await ended.json()) as { error?: { code?: string; message?: string }; code?: string; message?: string };
+    expect([ended.status, JSON.stringify(endedBody).includes('subscription_inactive'), JSON.stringify(endedBody).includes('Copy Fund subscription')]).toEqual([402, true, true]);
   });
 
   it('/v1 every filer: the all-filer list, books from the public shard then the full R2 book, ranges, stock holders', async () => {
