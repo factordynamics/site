@@ -591,6 +591,8 @@ const listNames = (xs: string[]) => (xs.length <= 1 ? xs.join('') : xs.length <=
 /** $400.1M as $400M, $8.0M as $8M: for subject lines. */
 const roundMoney = (v: number) => money(Math.abs(v)).replace(/(\d{3,})\.\d([KMB])/, '$1$2').replace(/\.0([KMB])/, '$1');
 /** "bought $400M of NVR" / "sold out of CHRW" / "sold $300M of HM1": one move in a subject. */
+/** Still-due names in a preheader: a person by last name, a firm in full ("Buffett", "Akre Capital Management"). */
+const dueName = (w: string) => (/\b(capital|management|partners|advisors|advisers|group|llc|lp|inc|street|fund|trust|associates|investments?)\b/i.test(w) ? w : lastName(w));
 const headPart = (change: string, v: number, what: string) => (change === 'exited' ? `sold out of ${what}` : `${v > 0 ? 'bought' : 'sold'} ${roundMoney(v)} of ${what}`);
 const VERB: Record<string, string> = { new: 'new position in', added: 'added', trimmed: 'trimmed', exited: 'sold out of' };
 
@@ -646,7 +648,7 @@ export function email2Mail(env: Env, to: string, o: E2Input): Mail {
     subject = `${o.biggest[0].firm} ${[buy, sell].filter((x): x is E2Move => !!x).map((b) => headPart(b.change, b.usd, b.what)).join(', ')}`;
   } else subject = `${deadlineNight ? '13F deadline night' : 'Tonight'}: the biggest superinvestor moves`;
   // Preheader: who is still due, else the paid moment.
-  const pre = o.due.length ? `${listNames(o.due.map(lastName))} due by ${dayLabel(dl.date)}` : moment || (big[1] ?? big[0] ?? intro);
+  const pre = o.due.length ? `${listNames(o.due.slice(0, 2).map(dueName))} due by ${dayLabel(dl.date)}` : moment || (big[1] ?? big[0] ?? intro);
   const leadText = lead.length ? `Your follows:\n${lead.map((l) => `  ${l.text}`).join('\n')}\n  ${COPY_LINE}` : '';
   const bigText = big.length ? `${bigTitle}:\n${big.map((x) => `  ${x}`).join('\n')}\n  The season so far: ${recap}` : '';
   const ask = `Start 14-day free trial: ${pricing}\nCard required · charged on day 15 unless you cancel.`;
@@ -665,6 +667,12 @@ export function email2Mail(env: Env, to: string, o: E2Input): Mail {
     unsubscribe: o.unsub,
   };
 }
+
+/** A security in a subject: its short name ("C.H. Robinson Worldwide"), or the ticker when the name is just the ticker (NVR). */
+const subjectName = (name: string | undefined, ticker: string | null) => {
+  const n = name ? short(name).replace(/\b([A-Z])\. (?=[A-Z]\.)/g, '$1.') : '';
+  return !n || (ticker && n.toUpperCase() === ticker.toUpperCase()) ? (ticker ?? n) : n;
+};
 
 /** Email 2's speed line quotes only 13Fs from this ET day on (after the moves fix, as decided). */
 const E2_SPEED_FROM = '2026-11-12';
@@ -721,7 +729,7 @@ export async function runEmail2(env: Env, now: number, preview?: string[]): Prom
   }
   const biggest: E2Move[] = picked.map((b) => {
     const total = funds.get(b.slug)?.total_value;
-    return { slug: b.slug, who: whoOf(b.slug, b.manager), firm: firmOf(b.slug, plainName(b.manager)), usd: b.delta_value, change: b.change, what: b.name ? short(b.name) : (b.ticker ?? ''), text: `${VERB[b.change]} ${b.name ?? b.ticker ?? ''} ${b.delta_value > 0 ? '+' : '−'}${money(b.delta_value)}${pctOf(total ? b.delta_value / total : null)}` };
+    return { slug: b.slug, who: whoOf(b.slug, b.manager), firm: firmOf(b.slug, plainName(b.manager)), usd: b.delta_value, change: b.change, what: subjectName(b.name, b.ticker), text: `${VERB[b.change]} ${b.name ?? b.ticker ?? ''} ${b.delta_value > 0 ? '+' : '−'}${money(b.delta_value)}${pctOf(total ? b.delta_value / total : null)}` };
   });
   // The paid moment, clock times in ET: a 13F accepted after the moves fix whose moves email reached Copy members within
   // 5 minutes. The real send quotes only Nov 12-16 filings; a preview shows First Eagle's logged times, marked as an example.
@@ -729,7 +737,8 @@ export async function runEmail2(env: Env, now: number, preview?: string[]): Prom
   const log = JSON.parse((await env.DB.get('alerts:latency')) ?? '[]') as { slug: string; accession: string; accepted: string; sent: string; seconds: number; kind?: string; moves?: boolean; replay?: boolean; email_delayed?: boolean }[];
   const quick = log.filter((l) => (l.kind ?? '13f') === '13f' && l.moves && !l.replay && !l.email_delayed && Date.parse(l.accepted) >= Date.parse(MOVES_FIX_AT) && l.seconds < 300);
   const fast = quick.filter((l) => etDay(Date.parse(l.accepted)) >= E2_SPEED_FROM && etDay(Date.parse(l.accepted)) <= day).sort((x, y) => Date.parse(y.accepted) - Date.parse(x.accepted));
-  const example = preview ? (quick.find((l) => l.slug === 'matthew-mclennan') ?? null) : null;
+  // The example predates the moves fix (Nov 10, 12:09 pm ET): retail judges the line's wording from its logged times.
+  const example = preview ? (log.find((l) => l.slug === 'matthew-mclennan' && (l.kind ?? '13f') === '13f' && !l.replay && l.seconds < 300) ?? null) : null;
   const momentFor = (slugs: string[]): E2Moment | null => {
     const l = slugs.map((s) => fast.find((x) => x.slug === s)).find(Boolean) ?? fast[0];
     if (l) return { firm: firmOf(l.slug, l.slug), filed: etTime(Date.parse(l.accepted)), had: etTime(Date.parse(l.sent)) };
