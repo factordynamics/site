@@ -20,6 +20,7 @@ import { Arrow, Badge, Button, Check, Monogram, Skeleton } from '../components/u
 import { api, checkout, DATA_TERMS, plans, renewalTerms, trialTerms, TRIAL_DAYS, prices } from '../config'
 import { ApiStatus, Updating } from '../components/ApiStatus'
 import { ConfirmEmail } from '../components/ConfirmEmail'
+import { WinterPreview } from '../components/WinterPreview'
 import { addCard, switchYearly, ApiError, call, errText, pendingEmail, needsVerify, signOutEverywhere, apiDown, cachedFresh, downloadFile, fetchMe, getToken, lastMe, needsReauth, readMe, isFree, openPortal, pausePlan, resumePlan, PLAN_NAME, requestLogin, sendCancelReason, setAlerts, signOut, startSession, type CancelReason, type Member } from '../lib/account'
 import { copyCheckout } from '../lib/attribution'
 
@@ -998,7 +999,9 @@ function ToYearly() {
   const [err, setErr] = useState('')
   // Member-facing: the founding price on both intervals; "Goes to $99" is for prospects only (the lead, Nov 11).
   return (
-    <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13.5px] text-ink-2">
+    <div className="mt-3">
+      <WinterPreview />
+      <p className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13.5px] text-ink-2">
       <span>
         Your ${prices.monthly}/month founding price is locked. Switch to yearly at ${prices.yearly}/yr, locked, with history back to 2013 (from Dec 31).
       </span>
@@ -1022,7 +1025,8 @@ function ToYearly() {
           {err}
         </span>
       )}
-    </p>
+      </p>
+    </div>
   )
 }
 
@@ -1056,6 +1060,7 @@ function NoCard({ end, day, founding }: { end?: string; day?: string; founding: 
       <p>No card on file: without one, the trial simply ends{end ? ` ${end}` : ''}.</p>
       {/* The trial lock, as /pricing/ states it (trader, Nov 11): a trial started before Feb 1 keeps the founding price. */}
       {founding && <p className="mt-1 text-[13px] text-accent-2/85">You started before Feb 1, so the founding price stays: ${prices.monthly}/month or ${prices.yearly}/year, locked while you stay subscribed.</p>}
+      <WinterPreview className="mt-3 mb-1" />
       <fieldset className="mt-3 grid gap-2 sm:grid-cols-2">
         <legend className="sr-only">Plan after the trial</legend>
         {opts.map((o) => (
