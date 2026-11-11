@@ -2040,6 +2040,11 @@ describe('copybook api', () => {
     const ops = await (await handleRequest(new Request('https://api.test/ops/funnel?days=1', { headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), env)).json();
     expect(ops.track_by_utm).toEqual({ visit: { 'x|kahn-watch': 1, 'x|seed-season': 2 }, trial_click: { 'direct|-': 1 } });
     expect(Object.values(ops.track)[0]).toMatchObject({ visit: { page: { '/season/': 2 }, source: { x: 3 } } });
+    // By UTC hour as well, and the form's focus and submit (the lead): read-outs split before and after a post.
+    for (const kind of ['signup_focus', 'signup_submit']) expect((await (await track({ kind, page: '/season/', utm_source: 'x', utm_content: 'seed-season' })).json()).counted).toBe(true);
+    const hourly = (await (await handleRequest(new Request('https://api.test/ops/funnel?days=1', { headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), env)).json()).track_hourly;
+    const hr = new Date().toISOString();
+    expect(hourly[hr.slice(0, 10)][hr.slice(11, 13)]).toMatchObject({ visit: { 'x|seed-season': 2 }, signup_focus: { 'x|seed-season': 1 }, signup_submit: { 'x|seed-season': 1 } });
 
     // A trial that runs out cancelled: one short note offering monthly, whose link opens a monthly Checkout.
     sent = [];

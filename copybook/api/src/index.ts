@@ -552,7 +552,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   if (req.method === 'POST' && path === '/track') {
     const b = await body(req);
     const kind = String(b.kind ?? '');
-    if (!['visit', 'signup_view', 'trial_click'].includes(kind)) return json({ ok: false, error: 'kind: visit, signup_view or trial_click', code: 'bad_request' }, 400, h);
+    if (!['visit', 'signup_view', 'signup_focus', 'signup_submit', 'trial_click'].includes(kind)) return json({ ok: false, error: 'kind: visit, signup_view, signup_focus, signup_submit or trial_click', code: 'bad_request' }, 400, h);
     const ip = req.headers.get('cf-connecting-ip') ?? req.headers.get('x-forwarded-for') ?? 'unknown';
     const k = `rl:track:${ip}`;
     const n = Number((await env.DB.get(k)) ?? 0);
@@ -575,6 +575,13 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const uk = post in byPost || Object.keys(byPost).length < 300 ? post : 'other';
     byPost[uk] = (byPost[uk] ?? 0) + 1;
     await env.DB.put(key, JSON.stringify(d), { expirationTtl: 400 * 86400 });
+    // By UTC hour too (kind x utm_source|utm_content), kept 30 days, so a read-out can tell before a post from after it.
+    const at = new Date().toISOString();
+    const hk = `trackh:${at.slice(0, 10)}`;
+    const hd = JSON.parse((await env.DB.get(hk)) ?? '{}') as Record<string, Record<string, Record<string, number>>>;
+    const hb = ((hd[at.slice(11, 13)] ??= {})[kind] ??= {});
+    hb[uk] = (hb[uk] ?? 0) + 1;
+    await env.DB.put(hk, JSON.stringify(hd), { expirationTtl: 30 * 86400 });
     return json({ ok: true, counted: true }, 200, h);
   }
 
@@ -732,7 +739,14 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const track_by_utm: Record<string, Record<string, number>> = {};
     for (const d of Object.values(track) as Record<string, { utm?: Record<string, number> }>[])
       for (const [kind, x] of Object.entries(d)) for (const [k, n] of Object.entries(x.utm ?? {})) (track_by_utm[kind] ??= {})[k] = (track_by_utm[kind][k] ?? 0) + n;
-    return json({ ok: true, funnel: await funnel(env, Date.now(), days), track, track_by_utm }, 200, h);
+    // By UTC day and hour: { "2026-11-11": { "15": { visit: { "x|seed-season": 1 } } } } (30 days kept).
+    const track_hourly: Record<string, unknown> = {};
+    for (let d = 0; d < days; d++) {
+      const day = new Date(Date.now() - d * 86_400_000).toISOString().slice(0, 10);
+      const t = await env.DB.get(`trackh:${day}`);
+      if (t) track_hourly[day] = JSON.parse(t);
+    }
+    return json({ ok: true, funnel: await funnel(env, Date.now(), days), track, track_by_utm, track_hourly }, 200, h);
   }
 
   // Operator: one member's access log (for telling a member whether any session read their book), or an entry for a
