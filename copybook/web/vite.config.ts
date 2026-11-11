@@ -11,7 +11,8 @@ process.env.VITE_SITE ||= 'https://copybook.factordynamics.com/'
 process.env.VITE_DATA_BASE ||= 'https://refcell.github.io/gust/copybook/data/'
 process.env.VITE_API = API
 // The footer's build stamp: the commit this build came from.
-process.env.VITE_BUILD = (process.env.GITHUB_SHA ?? (() => { try { return execSync('git rev-parse HEAD').toString() } catch { return 'local' } })()).trim().slice(0, 7)
+// The newest commit that changed the site (copybook/web), not main's head, which is often an API or ingest commit.
+process.env.VITE_BUILD = (process.env.COPYBOOK_BUILD_SHA ?? (() => { try { return execSync('git log -1 --format=%H -- .').toString() || 'local' } catch { return 'local' } })()).trim().slice(0, 7)
 process.env.VITE_LATENCY_URL = LATENCY_URL
 process.env.VITE_API_JSON_URL = API_JSON_URL
 // Preload the Latin web fonts the first screen uses, so headlines don't reflow when they swap in (layout

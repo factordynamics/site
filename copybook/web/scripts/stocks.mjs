@@ -229,7 +229,19 @@ list.sort((a, b) => b.h - a.h || b.v - a.v)
   const cik = (c) => String(c).replace(/^0+/, '')
   const all = new Set([...(fl?.filers ?? []).filter((f) => f.ok).map((f) => cik(f.cik)), ...index.managers.map((m) => cik(m.cik))])
   // Funds we track: the ones /season/ and Flow count, with a 13F for the newest quarter or the one before.
-  writeFileSync(join(out, 'd', 'coverage.json'), JSON.stringify({ filers: all.size, curated: live.filter((m) => qn(m.quarter) >= newest - 1).length, superinvestors: SUPER_TOTAL, generated_at: index.generated_at }))
+  // Ingest's own counts (index.json counts) once published, so every page shows one number; this build's
+  // figures, computed the same way, only until then.
+  const c = index.counts
+  writeFileSync(
+    join(out, 'd', 'coverage.json'),
+    JSON.stringify({
+      filers: c?.filers ?? all.size,
+      curated: c?.tracked ?? live.filter((m) => qn(m.quarter) >= newest - 1).length,
+      superinvestors: c?.superinvestors ?? SUPER_TOTAL,
+      ...(c?.definitions ? { definitions: c.definitions } : {}),
+      generated_at: index.generated_at,
+    }),
+  )
 }
 writeFileSync(join(out, 'd', 'stocks.json'), JSON.stringify({ generated_at: index.generated_at, funds: books.length, stocks: list }))
 
@@ -474,7 +486,7 @@ writeFileSync(join(out, 'd', 'flow.json'), JSON.stringify(flow))
     expected,
     not_filing: notFiling,
     deadline: due.toISOString(),
-    curated: { filed: active.filter((m) => qn(m.quarter) === q).length, total: active.length },
+    curated: { filed: active.filter((m) => qn(m.quarter) === q).length, total: index.counts?.tracked ?? active.length },
     // Every superinvestor on the expected list, so filed + still to file always equals the total.
     featured: { filed: expected.filter((x) => x.filed).length, total: expected.length },
     filers: { filed: filedAll.length, total: fl.filter((f) => qn(f.quarter) >= q - 1).length },

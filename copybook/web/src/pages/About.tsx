@@ -53,9 +53,6 @@ export function About() {
         </p>
         <div className="mt-5 flex flex-wrap gap-3">
           <Button to="/investors/">Browse investors</Button>
-          <Button href="https://www.factordynamics.com" variant="outline">
-            factordynamics.com
-          </Button>
         </div>
       </section>
     </div>

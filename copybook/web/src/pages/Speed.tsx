@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Signup } from '../components/Signup'
 import { Badge, Panel, Skeleton } from '../components/ui'
 import { gapLabel, loadLatency, type Latency, type LatencyStat } from '../lib/account'
+import { displayName } from '../lib/names.mjs'
 import { quarterLabel, useAsync, useTick, useTitle } from '../lib/data'
 import { INCIDENTS, OUTAGES } from '../lib/hosting'
 import { seasonNow } from '../lib/stocks'
@@ -48,6 +49,14 @@ export function Speed() {
   const timed = seasonGaps(d).filter((a) => f13Ready(d) || !a.form.startsWith('13F'))
   const gaps = timed.map((a) => a.seconds)
   const overall = gapStats(gaps)
+  // 13G alerts are opt-in and outnumber the rest, so the latest-alerts table leaves them out unless asked.
+  const is13G = (form: string) => /13G/.test(form)
+  const optIn = timed.filter((a) => is13G(a.form)).length
+  const [show13G, setShow13G] = useState(false)
+  const latest = ((d?.log?.length ? d.log : alerts) as Alert[])
+    .filter((a) => (f13Ready(d) || !a.form.startsWith('13F')) && (show13G || !is13G(a.form)))
+    .sort((a, b) => b.sent_at.localeCompare(a.sent_at))
+    .slice(0, 20)
   const median = overall.median_seconds
   const p90 = overall.p90_seconds
   const season = d?.season ?? seasonNow().quarter
@@ -93,7 +102,7 @@ export function Speed() {
       </section>
       <p className="mt-3 text-[13px] text-ink-3">
         All alert types: median {median != null ? gapLabel(median) : '—'}
-        {p90 != null ? `, 90th percentile ${gapLabel(p90)}` : ''}, {overall.count.toLocaleString('en-US')} alerts in the {quarterLabel(season)} season so far. We check EDGAR every minute.
+        {p90 != null ? `, 90th percentile ${gapLabel(p90)}` : ''}, {overall.count.toLocaleString('en-US')} alerts{optIn ? `, ${optIn.toLocaleString('en-US')} of them opt-in 13G,` : ''} in the {quarterLabel(season)} season so far. We check EDGAR every minute.
       </p>
 
       {empty ? (
@@ -126,8 +135,18 @@ export function Speed() {
 
       {!empty && !loading && (
         <section className="mt-6">
-          <h2 className="text-[15px] font-semibold">Latest alerts</h2>
-          <p className="mt-1 text-[13px] text-ink-3">The 20 most recent, New York time.</p>
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <h2 className="text-[15px] font-semibold">Latest alerts</h2>
+              <p className="mt-1 text-[13px] text-ink-3">The 20 most recent{show13G ? '' : ' 13F, 13D and Form 4'}, New York time.</p>
+            </div>
+            {optIn > 0 && (
+              <label className="flex cursor-pointer items-center gap-2 text-[13px] text-ink-2">
+                <input type="checkbox" checked={show13G} onChange={(e) => setShow13G(e.target.checked)} className="size-4 accent-[var(--color-accent)]" />
+                Show 13G (opt-in)
+              </label>
+            )}
+          </div>
           <div className="mt-3 overflow-x-auto rounded-[var(--radius-card)] bg-card shadow-[var(--shadow-card)]" tabIndex={0} role="region" aria-label="Latest alerts and their latency">
             <table className="w-full text-[13.5px]">
               <thead>
@@ -141,11 +160,11 @@ export function Speed() {
                 </tr>
               </thead>
               <tbody>
-                {alerts.slice(0, 20).map((a) => (
+                {latest.map((a) => (
                   <tr key={a.accession + a.sent_at} className="border-b border-line last:border-0">
                     <td className="px-5 py-2.5">
                       <Link to={`/investors/${a.slug}/`} className="font-medium hover:text-accent">
-                        {a.manager}
+                        {displayName(a.manager)}
                       </Link>
                       {a.quarter && <span className="ml-1.5 text-[11.5px] text-ink-3">{quarterLabel(a.quarter)}</span>}
                     </td>
@@ -171,7 +190,7 @@ export function Speed() {
             <span className="font-medium text-ink">Start:</span> EDGAR’s acceptance time on the filing itself, not when we noticed it.
           </li>
           <li>
-            <span className="font-medium text-ink">End:</span> when the alert left us for its destination (for email, when our mail provider accepted it). Your inbox or chat app can add a few seconds.
+            <span className="font-medium text-ink">End:</span> when the alert left us for its destination (for email, when our mail provider accepted it). Your inbox or chat app can add a few seconds. For 13F alerts the clock stops when the email with the filing’s moves is sent, not at a first notice.
           </li>
           <li>
             <span className="font-medium text-ink">Counted:</span> live alerts only. Replays, backfills and test messages are left out, and slow alerts stay in.
@@ -192,7 +211,8 @@ export function Speed() {
         </h2>
         {d?.poller_last_run && (
           <p className="mt-2 text-[14px] text-ink-2">
-            EDGAR poller last ran {ago(Date.now() - Date.parse(d.poller_last_run))} ago{d.poller_host ? ` · ${d.poller_host}` : ''}.
+            {Date.now() - Date.parse(d.poller_last_run) < 120_000 ? 'EDGAR checked within the last 2 min' : `EDGAR poller last ran ${ago(Date.now() - Date.parse(d.poller_last_run))} ago`}
+            {d.poller_host ? ` · ${d.poller_host === 'cloudflare' ? 'Cloudflare' : 'backup'}` : ''}.
           </p>
         )}
         <h3 className="mt-5 text-[15px] font-semibold">Incidents</h3>

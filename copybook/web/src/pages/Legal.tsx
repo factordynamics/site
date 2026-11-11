@@ -8,6 +8,11 @@ const UPDATED = 'November 9, 2026'
 // newest date is the page's "Last updated".
 const CHANGES: Partial<Record<'terms' | 'privacy' | 'security', [string, string][]>> = {
   security: [
+    ['November 11, 2026', 'The API’s own hostname will be api.factordynamics.com, with at least 7 days’ notice before the old host stops working.'],
+    ['November 11, 2026', 'Sign-in: sessions last 30 days from sign-in and signing out ends only that browser’s session; welcome-email links work for 7 days; the post-checkout hand-off lasts 2 minutes.'],
+    ['November 11, 2026', 'Access logging: operator and /ops/ reads of member data are logged with who, when, route and row ID; direct shell reads are not covered until Nov 17. What else runs on it now lists member books and peer lists among the readable files.'],
+    ['November 11, 2026', 'Who can see member data: what changes on Nov 17 (a separate service account for member data, secrets and backup keys; rotated signing secrets) and the limits that remain (deployed code can read member data, deploys aren’t individually reviewed, isolation stops accidental reads only, older agent session logs).'],
+    ['November 11, 2026', 'Who can see member data now leads with how member data is kept out of agent sessions (counts and row IDs only, logged book reads, a separate API account from Nov 17) and says the model provider’s training setting is unconfirmed, so assume it may be on. Access logging updated to match.'],
     ['November 11, 2026', 'How credentials are stored: API keys as SHA-256 hashes, sign-in links and sessions as signed tokens we don’t store, private feed links stored and rotatable.'],
     ['November 11, 2026', 'Host description shortened; the disclosure is unchanged.'],
     ['November 11, 2026', 'What else runs on it: the API runs on a personal machine, under an account shared with other software that can technically read its data files.'],
@@ -102,7 +107,7 @@ const PAGES: Record<'terms' | 'privacy' | 'security', { title: string; lead: str
       ['Backups', HOSTING.backups],
       ['Access logging', HOSTING.logging],
       ['Availability', <>{HOSTING.availability} Live status and incidents are on the <Link to="/status/" className="font-medium text-accent hover:text-accent-2">status page</Link>.</>],
-      ['Sign-in', 'Sign-in is by emailed one-time links; there are no passwords to leak. A sign-in link you ask for works once, within 15 minutes; a Copy Fund invite link works once, within 7 days. Session tokens are never put in URLs. CSV downloads use single-use links that expire in 60 seconds.'],
+      ['Sign-in', 'Sign-in is by emailed one-time links; there are no passwords to leak. A sign-in link you ask for works once, within 15 minutes; links in the welcome email and Copy Fund seat invites work once, within 7 days; the hand-off right after checkout lasts 2 minutes. Sessions last 30 days from sign-in and aren’t extended by use. Sessions are signed tokens we don’t store, so signing out ends the session in that browser only; a copied token keeps working until it expires. A Copy Fund owner can sign a seat out everywhere at once; a self-serve “sign out everywhere” for every member isn’t built yet. Session tokens are never put in URLs. CSV downloads use single-use links that expire in 60 seconds.'],
       ['Your book is private', <>A list of holdings you upload or enter is private to you, or to your team on Copy Fund. It is never shared, except as described under <Link to="/security/#who-can-see-member-data" className="font-medium text-accent hover:text-accent-2">Who can see member data</Link>; it is never shown to other members, and never used in aggregates, rankings or anything we publish.</>],
       ['API keys', 'A key’s secret is shown once, when you create it. Revoke a key from your account page and requests with it fail immediately.'],
       ['How credentials are stored', 'API keys are stored only as SHA-256 hashes and shown once; sign-in links and sessions are signed, expiring tokens we don’t store; private feed links are stored so your account page can show them, and you can rotate one anytime.'],

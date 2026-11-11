@@ -5,7 +5,7 @@ import { FUND_SEATS, FUND_WHY, plans, TRIAL_DAYS, trialTerms, SPEED_CLAIMS } fro
 import { attributed, referredCheckout } from '../lib/attribution'
 import { gapLabel, loadLatency, useApiBase } from '../lib/account'
 import { BASE, useAsync, useTitle } from '../lib/data'
-import { HOSTING } from '../lib/hosting'
+import { HOST_MOVE, HOSTING } from '../lib/hosting'
 import { loadCoverage } from '../lib/stocks'
 
 // Landing pages for the two buyers of the paid data plans: investment teams (Copy Fund) and quants
@@ -165,6 +165,7 @@ export function ForFunds() {
               , and never used in aggregates.
             </li>
             <li>{HOSTING.api}</li>
+            <li>{HOSTING.shared}</li>
             <li>{HOSTING.encryption}</li>
             <li>{HOSTING.access}</li>
             <li>{HOSTING.physical}</li>
@@ -229,7 +230,7 @@ export function ForQuants() {
           <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-xl bg-night p-4 font-mono text-[12.5px] leading-relaxed text-white/90 sm:whitespace-pre sm:break-normal">
             <code>{curl}</code>
           </pre>
-          <p className="mt-2 text-[12.5px] text-ink-3">Base URL: <code className="font-mono">{base}</code>. A dedicated api.copybook.factordynamics.com hostname is planned.</p>
+          <p className="mt-2 text-[12.5px] text-ink-3">Base URL: <code className="font-mono">{base}</code>. {HOST_MOVE}</p>
           <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-[14px]">
             <Link to="/api/" className="inline-flex items-center gap-1 font-medium text-accent hover:text-accent-2">
               API docs <Arrow className="size-3" />

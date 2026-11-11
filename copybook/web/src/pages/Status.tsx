@@ -4,7 +4,7 @@ import { Skeleton } from '../components/ui'
 import { apiReady } from '../config'
 import { loadLatency, type Latency } from '../lib/account'
 import { useAsync, useTick, useTitle } from '../lib/data'
-import { HOST_MOVE, HOSTING, INCIDENT_RULE, INCIDENTS } from '../lib/hosting'
+import { DATA_ALERTS, DATA_ALERTS_NOTE, DATA_MANUAL, DEPLOY_FREEZE, DEPLOY_POLICY, HOST_MOVE, HOSTING, INCIDENT_RULE, INCIDENTS } from '../lib/hosting'
 import { DATA, displayName } from '../lib/data'
 import { loadExpected } from '../lib/stocks'
 import { isEdgarDay } from '../lib/calendar.mjs'
@@ -35,7 +35,7 @@ type StatusFile = {
   freshness?: { last_13f?: { manager: string; accepted_at: string } | null }
   restarts?: { unplanned_7d: number; deploys_7d: number; short_unconfirmed_7d: number; rows?: { at: string; down_seconds: number; kind: 'deploy' | 'unplanned' | 'short_unconfirmed'; build?: string | null; prev_build?: string | null; note?: string }[] }
 }
-const KIND = { deploy: 'Deploy', unplanned: 'Unplanned restart', short_unconfirmed: 'Short restart, cause unconfirmed' } as const
+const KIND = { deploy: 'Deploy', unplanned: 'Unplanned restart', short_unconfirmed: 'Brief restart we couldn’t attribute' } as const
 const STATUS_URL = String(import.meta.env.VITE_LATENCY_URL).replace(/latency\.json$/, 'status.json')
 
 const API_JSON = import.meta.env.VITE_API_JSON_URL as string
@@ -111,7 +111,7 @@ export function Status() {
     : fresh.data?.latest_13f
       ? { manager: fresh.data.latest_13f.manager, at: fresh.data.latest_13f.accepted_at ? `accepted ${utc(fresh.data.latest_13f.accepted_at)}` : `filed ${new Date(`${fresh.data.latest_13f.filing_date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}` }
       : null
-  const dataIssues = (log.data?.entries ?? []).filter((e) => e.kind === 'correction' || e.kind === 'incident')
+  const dataIssues: { id: string; date: string; kind: string; title: string; body?: string; affected?: string }[] = [...DATA_MANUAL, ...(log.data?.entries ?? []).filter((e) => e.kind === 'correction' || e.kind === 'incident')].sort((a, b) => b.date.localeCompare(a.date))
   const l = lat.data as Latency | null | undefined
   const h = pr?.health ?? null
   const checking = !pr
@@ -189,7 +189,7 @@ export function Status() {
               <Row
                 name="Filing alerts"
                 tone={alertsTone}
-                state={pollerAge == null ? 'No recent poller run on record' : `${alertsTone === 'warn' ? '13F alerts delayed · ' : ''}EDGAR poller last ran ${ago(pollerAge)} ago · ${pollerHost === 'cloudflare' ? 'Cloudflare' : 'backup'}`}
+                state={pollerAge == null ? 'No recent poller run on record' : `${alertsTone === 'warn' ? '13F alerts delayed · ' : ''}${pollerAge < 120 ? 'EDGAR checked within the last 2 min' : `EDGAR poller last ran ${ago(pollerAge)} ago`} · ${pollerHost === 'cloudflare' ? 'Cloudflare' : 'backup'}`}
               >
                 {(a13 || mq) && (
                   <span className="block">
@@ -253,6 +253,10 @@ export function Status() {
       <section className="mt-10 max-w-3xl">
         <h2 className="text-[22px] font-semibold tracking-[-0.02em]">Incidents</h2>
         <p className="mt-1.5 text-[13.5px] text-ink-3">{INCIDENT_RULE}</p>
+        <p className="mt-1 text-[13.5px] text-ink-3">
+          {DEPLOY_POLICY}
+          {Date.now() < Date.parse(DEPLOY_FREEZE.until) && <span className="block font-medium text-ink-2">Now: {DEPLOY_FREEZE.text}</span>}
+        </p>
         <ol className="mt-3 divide-y divide-line rounded-[var(--radius-card)] bg-card px-5 shadow-[var(--shadow-card)]">
           {INCIDENTS.map(([when, what, link]) => (
             <li key={when} className="py-3 text-[14px] leading-relaxed">
@@ -270,7 +274,7 @@ export function Status() {
           <>
             <h3 className="mt-6 text-[15px] font-semibold">Restarts, last 7 days</h3>
             <p className="mt-1 text-[13.5px] text-ink-3">
-              {rs.deploys_7d} {rs.deploys_7d === 1 ? 'deploy' : 'deploys'} · {rs.unplanned_7d} unplanned · {rs.short_unconfirmed_7d} short, cause unconfirmed. A deploy is a new build back up in under 60 seconds.
+              {rs.deploys_7d} {rs.deploys_7d === 1 ? 'deploy' : 'deploys'} · {rs.unplanned_7d} unplanned{rs.short_unconfirmed_7d ? ` · ${rs.short_unconfirmed_7d} brief ${rs.short_unconfirmed_7d === 1 ? 'restart' : 'restarts'} we couldn’t attribute` : ''}. A deploy is a new build back up in under 60 seconds.
             </p>
             {rs.rows?.length ? (
               <ol className="mt-2 divide-y divide-line rounded-[var(--radius-card)] bg-card px-5 shadow-[var(--shadow-card)]">
@@ -328,7 +332,7 @@ export function Status() {
         <h2 id="data" className="text-[22px] font-semibold tracking-[-0.02em]">
           Data
         </h2>
-        <p className="mt-1.5 text-[13.5px] text-ink-3">Errors in the filing data and how they were fixed, newest first. Each links to its entry in the methodology changelog.</p>
+        <p className="mt-1.5 text-[13.5px] text-ink-3">Errors in the filing data and how they were fixed, newest first. Each links to its entry in the methodology changelog. {DATA_ALERTS_NOTE}</p>
         {log.loading ? (
           <Skeleton className="mt-3 h-24 w-full" />
         ) : dataIssues.length ? (
@@ -338,9 +342,21 @@ export function Status() {
                 <span className="num block text-[12.5px] text-ink-3">
                   {new Date(`${e.date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })} · {e.kind === 'incident' ? 'Incident' : 'Correction'}
                 </span>
-                <Link to={`/methodology/#${e.id}`} className="text-ink-2 hover:text-accent">
-                  {e.title}
-                </Link>
+                {e.body ? (
+                  <>
+                    <span className="font-medium text-ink-2">{e.title}</span>
+                    <span className="mt-0.5 block text-[13.5px] text-ink-2">{e.body}</span>
+                  </>
+                ) : (
+                  <Link to={`/methodology/#${e.id}`} className="text-ink-2 hover:text-accent">
+                    {e.title}
+                  </Link>
+                )}
+                {(e.affected ?? DATA_ALERTS[e.id]) && (
+                  <span className="mt-0.5 block text-[13px] text-ink-3">
+                    <span className="font-medium text-ink-2">Alerts affected:</span> {e.affected ?? DATA_ALERTS[e.id]}
+                  </span>
+                )}
               </li>
             ))}
           </ol>

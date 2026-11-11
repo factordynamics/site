@@ -28,13 +28,15 @@ async function loadCard(accession: string): Promise<{ card: Card; live: boolean 
     if (!r.ok) throw new Error(`${r.status} ${url}`)
     return (await r.json()) as T
   }
-  const idx = await fresh<{ managers: { slug: string; accession?: string }[] }>(`${DATA}index.json`)
-  const m = idx.managers.find((m) => m.accession === accession)
+  const idx = await fresh<{ managers: { slug: string; accession?: string; filing_accessions?: string[] }[] }>(`${DATA}index.json`)
+  // Every filing behind the fund's latest book (original, amendments, superseded), so an amendment's URL resolves too.
+  const m = idx.managers.find((m) => m.filing_accessions?.includes(accession)) ?? idx.managers.find((m) => m.accession === accession)
   if (!m) throw new Error(`no card for ${accession}`)
   // index.json and {slug}.json ship in one deploy, but the CDN can serve the old book for a minute: retry once.
   let built = buildCard(await fresh(`${DATA}${m.slug}.json`))
-  if (built?.accession !== accession) built = await new Promise((r) => setTimeout(r, 4000)).then(async () => buildCard(await fresh(`${DATA}${m.slug}.json?r=${Date.now()}`)))
-  if (!built || built.accession !== accession) throw new Error(`no card for ${accession}`)
+  const same = (b: Card | null) => Boolean(b && (b.accession === accession || m.filing_accessions?.includes(b.accession)))
+  if (!same(built)) built = await new Promise((r) => setTimeout(r, 4000)).then(async () => buildCard(await fresh(`${DATA}${m.slug}.json?r=${Date.now()}`)))
+  if (!built || !same(built)) throw new Error(`no card for ${accession}`)
   return { card: built, live: true }
 }
 
