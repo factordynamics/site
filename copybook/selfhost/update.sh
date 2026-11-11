@@ -79,7 +79,7 @@ rm -f "${STATUS_DIR:-/nonexistent}/deploy-pending.txt"
 #    message": 8873bf4, the commit that documents this policy, mentions "[P0] overrides" and went out at once.)
 # A build whose bundle equals the running one restarts nothing and uses no slot (see below).
 RESTARTS=$ROOT/state.deploy-restarts   # epoch, sha of each deploy restart
-FREEZE="2026-11-11T16:00Z 2026-11-11T16:30Z 2026-11-12T11:00Z 2026-11-13T03:00Z 2026-11-13T11:00Z 2026-11-14T03:00Z 2026-11-16T11:00Z 2026-11-17T03:00Z"
+FREEZE="2026-11-11T16:00Z 2026-11-11T16:30Z 2026-11-11T22:45Z 2026-11-11T23:20Z 2026-11-12T11:00Z 2026-11-13T03:00Z 2026-11-13T11:00Z 2026-11-14T03:00Z 2026-11-16T11:00Z 2026-11-17T03:00Z"
 hold_reason() { # now, last deploy restart (epoch) -> prints why a deploy restart must wait, or nothing
   local now=$1 last=$2 gap_start=0 a b
   set -- $FREEZE
