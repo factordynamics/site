@@ -355,8 +355,14 @@ def write_links(quarter: str | None) -> list[str]:
                 "by the SEC's Official List of Section 13(f) Securities, which deletes the old CUSIP in the list that "
                 "adds the new one (list_quarter, list_url); units, rights and warrants never link. Each link's share "
                 "units are checked on the holders that reported the old CUSIP one quarter and the new one the next "
-                "(units_check): ratio is the prior shares' multiplier, units_basis split_confirmed (a split found on "
-                "the pair, DD 2026Q2 1-for-3) or holders_1to1 (holders at exactly 1:1 outnumber any other ratio). "
+                "(units_check): ratio is the prior shares' multiplier. units_basis split_confirmed: the issuer's own "
+                "SEC filing states the ratio (units_check.evidence names it; HON 2026Q2 1-for-2, 8-K "
+                "0000773840-26-000084; a 1:1 re-domicile such as TGLS counts too), or a split found on the pair and "
+                "confirmed by SEC XBRL shares outstanding. units_basis holders_1to1: at least 5 holders and at least "
+                "10% of them at exactly 1:1, more than at any other ratio, with the median ratio within 1% of 1:1 "
+                "(holders trade through a reissue, so the median carries the evidence: XOM 514 of 2,333 at exactly "
+                "1:1, median 1.00). Otherwise the pair is held. A filer that kept its pre-split count under the new "
+                "CUSIP is flagged suspect_units (reissue_ratio_not_applied), with no change. "
                 "Changes, holder counts, bulk and /v1 treat a link as one position. `held` lists SEC-confirmed "
                 "reissues whose units don't check out or weren't checked yet (units_reason); they are not applied.",
         "links": links, "held": sorted(held.values(), key=lambda v: -(v.get("filers") or 0))})
