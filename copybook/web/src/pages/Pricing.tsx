@@ -172,7 +172,7 @@ export function Pricing() {
   const hook = useAsync(() => (EMAIL_FROM[params.get('from') ?? ''] ? Promise.resolve(null) : fromFact(params.get('from'))), [params.get('from')])
   const copy = plans.copy
   // Between seasons (marketing's plan rev 69): what Copy does from the November deadline to February's 13Fs. Last
-  // winter's counts return once payments confirms the corrected figures, with links to their accession lists.
+  // winter's counts are payments' (EDGAR, matching the trader's count), linked to every accession.
   const between = (
       <section id="between-seasons" className="scroll-mt-24 rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)] -order-1 md:order-last md:col-span-full md:mt-6 md:p-8" aria-labelledby="between">
         <div className="grid gap-6 md:grid-cols-[1fr_1.15fr] md:gap-12">
@@ -182,6 +182,12 @@ export function Pricing() {
               {Date.now() < Date.parse('2026-11-17T05:00:00Z') ? 'After Monday, Copy keeps working.' : 'Between 13F seasons, Copy keeps working.'}
             </h2>
             <p className="mt-3 text-[15px] leading-relaxed text-ink-2">13Fs come four times a year. Between them, the funds you follow and the stocks you own keep moving, and Copy emails you when they do.</p>
+            <p className="mt-3 text-[14px] leading-relaxed text-ink-3">
+              Last winter (Dec 2025–Jan 2026): 19 Schedule 13D/G filings by the superinvestors we follow (4 new stakes, 15 amendments), and 18 open-market buys by directors and officers in the 100 stocks they hold most by value.{' '}
+              <a href="https://pub-c691ec38c5cd4db6acb8e6bfef337500.r2.dev/winter-2025-26.json" className="font-medium text-accent underline-offset-2 hover:underline">
+                See the filings
+              </a>
+            </p>
             <p className="mt-4 text-[14px] font-medium leading-relaxed">
               Yearly ${plans.copy.yearly}: less than 9 months of monthly. Monthly? Pause once a year, up to 3 months, and keep your founding price. {TRIAL_DAYS} days free, no card needed.
             </p>
