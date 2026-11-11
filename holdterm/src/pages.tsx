@@ -1623,6 +1623,7 @@ export function Stock({ ticker }: { ticker: string }) {
     { key: 'q', label: 'As of', num: true, render: (h) => <span className="dim">{quarterLabel(h.quarter).replace(' 20', " '")}</span>, sort: (h) => h.quarter },
   ]
   const fundHref = (h: StockHolder) => (inRoster(h.slug) ? fundPath(fundSlug(h.slug)) : null)
+  const held = holders.length > 0 || exited.length > 0 || pick(d.options).length > 0
   return (
     <div className="page">
       <Crumbs parent={['/consensus', 'Most owned stocks']} here={issuerName(d.name)} />
@@ -1639,14 +1640,35 @@ export function Stock({ ticker }: { ticker: string }) {
               <Sector s={d.sector} full />
             </span>
           </div>
-          <p className="activity-line">{ev.data ? <ActivityLine events={events} days={ev.data.window_days} name={(e) => firmOf(firms, e.slug, e.manager)} open={() => (setTab('filings'), document.querySelector('.tabs')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))} /> : '\u00a0'}</p>
+          {held && <p className="activity-line">{ev.data ? <ActivityLine events={events} days={ev.data.window_days} name={(e) => firmOf(firms, e.slug, e.manager)} open={() => (setTab('filings'), document.querySelector('.tabs')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))} /> : '\u00a0'}</p>}
           {/* One plain line on where the numbers come from; the CUSIP 13Fs use is in its tooltip. */}
-          <div className="meta">
-            <span title={`CUSIP ${d.classes.map((c) => `${c.cusip}${d.classes.length > 1 ? ` (${c.ticker})` : ''}`).join(', ')}`}>From these investors’ latest 13F filings with the SEC</span>
-          </div>
+          {held && (
+            <div className="meta">
+              <span title={`CUSIP ${d.classes.map((c) => `${c.cusip}${d.classes.length > 1 ? ` (${c.ticker})` : ''}`).join(', ')}`}>From these investors’ latest 13F filings with the SEC</span>
+            </div>
+          )}
         </div>
         <Follow kind="stocks" id={d.ticker} />
       </div>
+      {!held ? (
+        // Nobody Holdterm follows owns it, sold it last quarter or holds options on it, so there are no numbers to show:
+        // one plain panel says so instead of four zero cards and three empty tabs. Any stake or insider filing still shows.
+        <>
+          <Panel title="Who owns it">
+            <Empty
+              title={`None of the ${roster.funds.length} investors Holdterm follows owns ${issuerName(d.name)}`}
+              hint="It shows up here once one of them reports it in a 13F. Those are filed each quarter, up to 45 days after the quarter ends."
+              action={['See the stocks they own most', '/consensus']}
+            />
+          </Panel>
+          {events.length > 0 && (
+            <Panel title="Stakes and insider trades">
+              <Grid rows={events} cols={eventCols(firms)} />
+            </Panel>
+          )}
+        </>
+      ) : (
+      <>
       <p className="summary">
         {/* The cards below give the counts and the total; the summary says what they can't: who holds the most and who moved the most money. */}
         {holders.length ? (
@@ -1701,6 +1723,8 @@ export function Stock({ ticker }: { ticker: string }) {
         {tab === 'filings' && <Grid rows={events} cols={eventCols(firms)} empty={<Empty title="No stake or insider filings in the last 30 days" hint="None of these investors filed a 13D, 13G or Form 4 on this company in that time." action={['See every recent filing', '/filings']} />} />}
       </Panel>
       </TabPanel>
+      </>
+      )}
     </div>
   )
 }
