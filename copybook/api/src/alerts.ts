@@ -147,6 +147,8 @@ interface Manager {
   featured?: boolean;
   /** Filer type from the data run, e.g. hedge_fund, active, bank, broker, index. */
   type?: string | null;
+  /** index.json status `inactive` (SEC registration ended, e.g. Robert Olstein): routes no alerts at all. */
+  inactive?: boolean;
   /** A non-curated 13F filer that a member follows; `report_date` is its latest quarter on file. */
   extra?: boolean;
   report_date?: string;
@@ -165,7 +167,7 @@ export const etDay = (t: number) => new Date(t - 5 * 3600_000).toISOString().sli
 // Targeting and delivery
 
 import { NO_STOCK_ALERT_TYPES, checkIndex } from './contract';
-export type FilerMeta = Record<string, { featured?: boolean; type?: string | null }>;
+export type FilerMeta = Record<string, { featured?: boolean; type?: string | null; inactive?: boolean }>;
 
 /**
  * A watched or owned stock alerts only through active managers (hedge funds and other active
@@ -206,6 +208,10 @@ export function forHoldterm(f: Follows, filings: Alert13F[], events: AlertEvent[
 /** Which of these filings and events a member gets, by their alert switch and follows. */
 export function forMember(m: Member, f: Follows, filings: Alert13F[], events: AlertEvent[], meta: FilerMeta = {}): { filings: Alert13F[]; events: AlertEvent[] } {
   if (m.alerts === 'off') return { filings: [], events: [] };
+  // An inactive filer (index.json status) alerts nobody: not followers, not stock watchers.
+  const live = (slug: string | undefined) => !slug || !meta[slug]?.inactive;
+  filings = filings.filter((x) => x.slugs.some(live));
+  events = events.filter((e) => live(e.slug));
   const all = m.alerts === 'all';
   const investors = new Set(Array.isArray(m.alerts) ? [...m.alerts, ...f.investors] : f.investors);
   const stocks = new Set(f.stocks);
@@ -235,7 +241,7 @@ export function forMember(m: Member, f: Follows, filings: Alert13F[], events: Al
 
 async function filerMeta(env: Env): Promise<FilerMeta> {
   const meta: FilerMeta = {};
-  for (const list of Object.values((await cikMap(env)) ?? {})) for (const m of list) meta[m.slug] = { featured: m.featured, type: m.type };
+  for (const list of Object.values((await cikMap(env)) ?? {})) for (const m of list) meta[m.slug] = { featured: m.featured, type: m.type, ...(m.inactive ? { inactive: true } : {}) };
   return meta;
 }
 
@@ -1906,7 +1912,7 @@ export async function runBackstop(env: Env, now: number): Promise<Record<string,
   }
 
   const ciks: CikMap = {};
-  const byCik = (cik: string, m: IndexRow) => (ciks[cik.padStart(10, '0')] ??= []).push({ slug: m.slug, manager: m.manager, name: m.name, cik: m.cik.padStart(10, '0'), featured: m.featured, type: m.type ?? null });
+  const byCik = (cik: string, m: IndexRow) => (ciks[cik.padStart(10, '0')] ??= []).push({ slug: m.slug, manager: m.manager, name: m.name, cik: m.cik.padStart(10, '0'), featured: m.featured, type: m.type ?? null, ...((m as { status?: string }).status === 'inactive' ? { inactive: true } : {}) });
   for (const m of rows) {
     if (!m.slug || !m.cik) continue;
     byCik(m.cik, m);

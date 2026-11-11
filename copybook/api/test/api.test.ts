@@ -1970,6 +1970,14 @@ describe('copybook api', () => {
       const got = forMember({ alerts: 'followed' } as never, f, ['lo', 'hf', 'wl', 'ot', 'bk', 'ix', 'fb', 'untracked'].map(fl), [], meta);
       expect(got.filings.map((x: { slug: string }) => x.slug)).toEqual(['lo', 'hf', 'wl', 'ot', 'fb']);
     }
+    // An inactive filer (index.json status; Olstein's registration ended) alerts nobody, followers and watchers alike.
+    {
+      const f = { investors: ['gone'], stocks: ['APH'], owned: [], onboarded: true } as never;
+      const fl = { slug: 'gone', slugs: ['gone'], tickers: ['APH'], accession: 'g' } as never;
+      const ev = { id: 'e', kind: 'form4', slug: 'gone', ticker: 'APH' } as never;
+      const got = forMember({ alerts: 'all' } as never, f, [fl], [ev], { gone: { type: 'long_only', featured: true, inactive: true } });
+      expect([got.filings.length, got.events.length]).toEqual([0, 0]);
+    }
     // A bond line (PRN) whose prior was stored with shares 0 and its principal: Advent's read "added +$141M" from zero.
     const bond = (amt: number, value: number) => ({ ...pos('BOND', '00000BND1', 0, value), shares_type: 'PRN', principal_amount: amt });
     const bp = [bond(140_000_000, 140_150_269), jq2[1]];
