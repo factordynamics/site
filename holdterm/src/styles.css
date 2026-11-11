@@ -920,10 +920,35 @@ table.grid {
   gap: 4px;
   background: color-mix(in srgb, #d97706 14%, transparent);
   color: color-mix(in srgb, #b45309 85%, var(--fg));
-  cursor: help;
 }
 [data-theme='dark'] .tag.held {
   color: #fbbf24;
+}
+/* The badge is a button that opens its reason (HeldTag). */
+button.tag.held {
+  border: 0;
+  cursor: pointer;
+}
+button.tag.held:hover {
+  background: color-mix(in srgb, #d97706 24%, transparent);
+}
+.held-pop {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  max-width: min(320px, calc(100vw - 16px));
+  padding: 10px 12px;
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--fg2);
+  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.16);
+  font: 400 13px/1.5 var(--sans);
+  white-space: normal;
+  text-align: left;
+}
+.held-pop strong {
+  color: var(--fg);
 }
 .as-filed {
   color: var(--dim);
@@ -1010,6 +1035,19 @@ table.grid {
 }
 .who a:hover {
   color: var(--acc);
+}
+.nowrap {
+  white-space: nowrap;
+}
+/* The key to the stock page's highlighted rows (blue = this season's 13Fs). */
+.fresh-key {
+  font-size: 13px;
+  color: var(--dim);
+  white-space: nowrap;
+}
+.fresh-key b {
+  color: var(--acc);
+  font-weight: 600;
 }
 .qtag {
   margin-left: 4px;
