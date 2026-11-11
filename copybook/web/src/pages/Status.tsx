@@ -307,7 +307,7 @@ export function Status() {
             <>
               <Row name="Member API" tone={apiTone} state={h ? `Up · answered in ${pr!.ms} ms` : 'Not answering'}>
                 {/* No host or tunnel names here: /status/ is linked from replies. API users find the address on /api/. */}
-                A personal machine{h?.api_up_since ? `, running since ${utc(h.api_up_since)}` : ''}. API users: the documented address is on{' '}
+                A self-hosted machine{h?.api_up_since ? `, running since ${utc(h.api_up_since)}` : ''}. API users: the documented address is on{' '}
                 <Link to="/api/" className="font-medium text-accent hover:text-accent-2">
                   /api/
                 </Link>
