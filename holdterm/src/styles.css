@@ -447,6 +447,22 @@ main:focus {
     display: inline;
   }
 }
+/* No results: the empty list takes no room, so the note sits right under the search box. */
+.palette .results:empty {
+  display: none;
+}
+.palette .no-hits a,
+.search-why a {
+  color: var(--acc);
+  text-decoration: underline;
+}
+.search-why {
+  margin: 0;
+  padding: 12px 16px 14px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--fg2);
+}
 .chip-n {
   margin-left: 6px;
   font-weight: 600;

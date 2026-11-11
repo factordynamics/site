@@ -2,7 +2,7 @@ import '@fontsource-variable/inter/index.css'
 import './styles.css'
 import { StrictMode, useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { aggregate, freshness, funds, loadBooks, loadIndex, loadStockIndex, searchNames, type Agg, type Manager, type StockIndexRow } from './data'
+import { aggregate, freshness, funds, loadBooks, loadIndex, loadStockIndex, roster, searchNames, type Agg, type Manager, type StockIndexRow } from './data'
 import { A, navigate, usd, usePath } from './lib'
 import { dataSlug, fundPath, issuerName, publicSlug } from './names'
 import { price as PRICE } from './config'
@@ -117,6 +117,23 @@ const investorHit = (m: Manager, score = 0): Hit => ({
   score,
 })
 
+/** Names people search by that aren't in the company's SEC name. */
+const ALIAS: Record<string, string> = { google: 'GOOGL', facebook: 'META', tsmc: 'TSM', amex: 'AXP' }
+/** Letters and digits only, so "coca cola" finds Coca-Cola and "jp morgan" finds JPMorgan Chase. */
+const flat = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, '')
+const pctWord = (x: number) => `${Math.round(x * 100)}%`
+/** Why a fund the published rule screened out last time isn't followed, in the rule's own terms. */
+function whyNot(c: (typeof roster.near_misses)[number] & { fails?: string[] }) {
+  const r = roster.rule
+  const why: Record<string, string> = {
+    top10: `its ten largest holdings are ${pctWord(c.top10)} of its portfolio, and the rule asks for at least ${pctWord(r.min_top10)}`,
+    turnover: `it traded ${pctWord(c.turnover)} of its portfolio last quarter, and the rule allows up to ${pctWord(r.max_turnover)}`,
+    etf: `more than ${pctWord(r.max_etf)} of its portfolio is in ETFs and index funds`,
+    top1: `its largest position is more than ${pctWord(r.max_top1)} of its portfolio`,
+  }
+  return (c.fails ?? []).map((f) => why[f]).filter(Boolean).join(', and ')
+}
+
 function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => void }) {
   const [q, setQ] = useState('')
   const [cur, setCur] = useState(0)
@@ -148,7 +165,7 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
   }, [held])
   const ready = held.length > 0
   // Stock names as the pages show them ("Liberty Live Holdings Series C", not the index's "Com Shs Ser C").
-  const named = useMemo(() => stocks.map((r) => ({ r, name: issuerName(r.n) })), [stocks])
+  const named = useMemo(() => stocks.map((r) => ({ r, name: issuerName(r.n), nf: flat(issuerName(r.n)) })), [stocks])
   const stockHit = (t: string, n: string, score = 0): Hit => ({
     kind: 'stock',
     label: n,
@@ -178,10 +195,11 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
       if (hay.includes(s)) inv.push(investorHit(m, m.firm.toLowerCase().startsWith(s) ? 4.5 : hay.split(/[ |]+/).some((w) => w.startsWith(s)) ? 3 : 1))
     }
     const st: Hit[] = []
-    for (const { r, name } of named) {
+    const fs = flat(s)
+    for (const { r, name, nf } of named) {
       const t = r.t.toLowerCase()
       const n = name.toLowerCase()
-      const sc = t === s ? 10 : t.startsWith(s) ? 5 : n.startsWith(s) ? 4 : n.includes(s) ? 1 : 0
+      const sc = t === s ? 10 : ALIAS[s] === r.t ? 8 : t.startsWith(s) ? 5 : n.startsWith(s) || (fs.length > 3 && nf.startsWith(fs)) ? 4 : n.includes(s) || (fs.length > 3 && nf.includes(fs)) ? 1 : 0
       if (sc) st.push(stockHit(r.t, name, sc + Math.min(owned.get(r.t) ?? 0, 100) / 100))
     }
     const top = (xs: Hit[]) => xs.sort((a, b) => b.score - a.score).slice(0, 6)
@@ -192,6 +210,14 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
     return (g[1][1][0]?.score ?? 0) > (g[0][1][0]?.score ?? 0) ? [g[1], g[0]] : g
   }, [q, named, mgrs, owned, held]) // eslint-disable-line react-hooks/exhaustive-deps
   const hits = groups.flatMap(([, h]) => h)
+  // A fund the rule screened out (say, Fundsmith) gets a plain reason instead of silence.
+  const s0 = q.trim().toLowerCase()
+  const missed = s0.length > 2 ? roster.near_misses.find((c) => `${c.firm} ${(c.slug ?? '').replace(/-/g, ' ')}`.toLowerCase().includes(s0)) : undefined
+  const toRule = (e: React.MouseEvent) => {
+    e.preventDefault()
+    setOpen(false)
+    navigate('/about#roster')
+  }
   // Say how many results there are once typing pauses, so a screen reader user knows whether to arrow down.
   const count = (kind: Hit['kind']) => {
     const n = hits.filter((h) => h.kind === kind).length
@@ -268,14 +294,30 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
                 })}
               </div>
             ))}
-          {q.trim() && !hits.length && (
+        </div>
+        {!q.trim() && !hits.length && <div className="no-hits">Loading suggestions…</div>}
+          {q.trim() && !hits.length && !(missed && whyNot(missed)) && (
             <div className="no-hits">
               <b>Nothing matches “{q.trim()}”</b>
               <span>Try a company name such as Apple, a ticker such as MSFT, or an investor such as Berkshire Hathaway.</span>
+              {(
+                <span>
+                  Holdterm follows {roster.funds.length} investors chosen by a published rule, so a fund you know may not be one of them.{' '}
+                  <a href="/about#roster" onClick={toRule}>
+                    How investors are chosen
+                  </a>
+                </span>
+              )}
             </div>
           )}
-          {!q.trim() && !hits.length && <div className="no-hits">Loading suggestions…</div>}
-        </div>
+        {missed && whyNot(missed) && (
+          <p className="search-why">
+            {missed.firm} isn’t one of the investors Holdterm follows: {whyNot(missed)}.{' '}
+            <a href="/about#roster" onClick={toRule}>
+              How investors are chosen
+            </a>
+          </p>
+        )}
       </div>
     </div>
   )
