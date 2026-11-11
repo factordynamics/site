@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode, type ToggleEvent } from 'react'
 import { booksProgress, type Unreliable } from './data'
 
 // ---------- formatting ----------
@@ -439,22 +439,42 @@ export const AsFiled = ({ why, children }: { why: Unreliable; children?: ReactNo
 /** A figure of a held line: shown as filed when the class says it isn't real (`shares` covers the share count and
  * the price in the filing, `value` the value), as is otherwise. */
 export const Filed = ({ held, fig, children }: { held?: Unreliable | null; fig: 'shares' | 'value'; children: ReactNode }) => (held === 'both' || held === fig ? <AsFiled why={held}>{children}</AsFiled> : <>{children}</>)
-export function ChangeTag({ change, share_change, prev_shares, held }: { change: string | null; share_change?: number | null; prev_shares?: number | null; held?: Unreliable | null }) {
-  // Numbers that don't fit across filings: no trade is counted, and the row says which instead of "No change".
-  // A badge with an info icon, so it reads as a flag rather than a value; phones say it in one word so it doesn't
-  // squeeze the investor's name. The title (and the guide's list of tags) gives the reason.
-  if (held)
-    return (
-      <span className="tag held" title={HELD_WHY[held]}>
+/** Numbers that don't fit across filings: no trade is counted, and the row says which instead of "No change". A
+ * badge with an info icon, so it reads as a flag rather than a value; phones say it in one word so it doesn't squeeze
+ * the investor's name. It is a button: a tap, click, Enter or Space opens the reason in a popover under it (Escape or a
+ * tap elsewhere closes it), and screen readers hear the reason as the button's description. */
+function HeldTag({ held }: { held: Unreliable }) {
+  const id = useId()
+  const btn = useRef<HTMLButtonElement>(null)
+  const place = (e: ToggleEvent<HTMLSpanElement>) => {
+    const pop = e.currentTarget
+    if (e.newState !== 'open' || !btn.current) return
+    const r = btn.current.getBoundingClientRect()
+    const w = pop.offsetWidth
+    pop.style.left = `${Math.max(8, Math.min(r.left, innerWidth - w - 8))}px`
+    // Under the badge, or above it when there's no room below.
+    pop.style.top = `${r.bottom + 6 + pop.offsetHeight > innerHeight - 8 ? r.top - 6 - pop.offsetHeight : r.bottom + 6}px`
+    // A fixed popover would drift from its badge as the page scrolls, so scrolling closes it.
+    addEventListener('scroll', () => pop.hidePopover(), { once: true, capture: true, passive: true })
+  }
+  return (
+    <>
+      <button type="button" ref={btn} className="tag held" popoverTarget={id} aria-describedby={id}>
         <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden>
           <circle cx="8" cy="8" r="6.6" fill="none" stroke="currentColor" strokeWidth="1.6" />
           <path d="M8 7.2v4M8 4.6v.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
         </svg>
         <span className="hide-sm">{HELD_TAG[held]}</span>
         <span className="show-sm">Unclear</span>
-        <span className="sr"> {HELD_WHY[held]}</span>
+      </button>
+      <span id={id} popover="auto" className="held-pop" onToggle={place}>
+        <strong>{HELD_TAG[held]}.</strong> {HELD_WHY[held]}
       </span>
-    )
+    </>
+  )
+}
+export function ChangeTag({ change, share_change, prev_shares, held }: { change: string | null; share_change?: number | null; prev_shares?: number | null; held?: Unreliable | null }) {
+  if (held) return <HeldTag held={held} />
   if (!change || change === 'unchanged') return <span className="dim">No change</span>
   const tone = change === 'new' || change === 'added' ? 'pos' : 'neg'
   const r = (change === 'added' || change === 'trimmed') && share_change != null && prev_shares ? (share_change / prev_shares) * 100 : null
@@ -578,7 +598,7 @@ export function Grid<R>({
                 key={i}
                 className={`${to ? 'link' : ''} ${rowClass?.(r) ?? ''}`}
                 onClick={(e) => {
-                  if (!to || (e.target as HTMLElement).closest('a')) return
+                  if (!to || (e.target as HTMLElement).closest('a, button, [popover]')) return
                   navigate(to)
                 }}
               >

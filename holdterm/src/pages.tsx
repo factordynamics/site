@@ -622,7 +622,7 @@ function HomeBody() {
           {/* One line on every width; the list of who hasn't filed is on Investors, one click away. */}
           {due.length > 0 && (
             <div className="due small">
-              {daysLeft < 0 ? `${plural(due.length, 'investor')} ${due.length === 1 ? 'hasn’t' : 'haven’t'} filed for ${quarterLabel(s.q)} yet. It was due ${day(s.due)}.` : `${plural(due.length, 'investor')} still to file for ${quarterLabel(s.q)}, due ${day(s.due)}.`} <A to="/funds?show=due">See who →</A>
+              {daysLeft < 0 ? `${plural(due.length, 'investor')} ${due.length === 1 ? 'hasn’t' : 'haven’t'} filed for ${quarterLabel(s.q)} yet. It was due ${day(s.due)}.` : `${plural(due.length, 'investor')} still to file for ${quarterLabel(s.q)}, due ${day(s.due)}.`} <A to="/funds?show=due" className="nowrap">See who →</A>
             </div>
           )}
         </Panel>
@@ -1755,14 +1755,32 @@ export function Stock({ ticker }: { ticker: string }) {
   const value = valued.reduce((x, h) => x + h.value, 0)
   const bigHolder = [...valued].sort((a, b) => b.value - a.value)[0]
   const movers = [...holders, ...exited].filter((h) => h.change && h.change !== 'unchanged').sort((a, b) => Math.abs(b.delta_value ?? 0) - Math.abs(a.delta_value ?? 0))
-  const buyer = movers.find((h) => (h.delta_value ?? 0) > 0)
-  const seller = movers.find((h) => (h.delta_value ?? 0) < 0)
   const tickers = new Set(d.classes.map((c) => c.ticker))
   // Filings by the investors Holdterm follows, as on /filings.
   const events = (ev.data?.events ?? []).filter((e) => e.ticker && tickers.has(e.ticker) && inRoster(e.slug) && !ownVehicle(e))
   // When holders' latest 13Fs span quarters, rows from the newest one stand out (fresh filings this season).
   const holderQs = [...new Set(holders.map((h) => h.quarter))].sort()
   const freshQ = holderQs.length > 1 ? holderQs[holderQs.length - 1] : undefined
+  // The summary's biggest buyer and seller. Mid-season it leads with this season's 13Fs, then the earlier ones, so a
+  // Q2 trade doesn't read as the latest news while half the holders have filed for Q3.
+  const most = (l: StockHolder[], when: boolean) => {
+    const b = l.find((h) => (h.delta_value ?? 0) > 0)
+    const s = l.find((h) => (h.delta_value ?? 0) < 0)
+    const at = (h: StockHolder) => (when ? ` in ${quarterLabel(h.quarter)}` : '')
+    // Each clause has its own comma ("bought the most, adding $1.7B"), so the two join with ", and".
+    return [
+      b && `${name(b)} bought the most, ${b.change === 'new' ? `opening a ${usd(b.delta_value)} position` : `adding ${usd(b.delta_value)}`}${at(b)}`,
+      s && `${name(s)} sold the most, ${s.change === 'exited' ? `selling out of ${usd(-(s.delta_value ?? 0))}` : `cutting ${usd(-(s.delta_value ?? 0))}`}${at(s)}`,
+    ]
+      .filter(Boolean)
+      .join(', and ')
+  }
+  const freshMovers = freshQ ? movers.filter((h) => h.quarter === freshQ) : []
+  const freshFiled = freshQ ? [...holders, ...exited].filter((h) => h.quarter === freshQ).length : 0
+  const earlier = most(movers.filter((h) => h.quarter !== freshQ), true)
+  const trades = !freshQ
+    ? earlier && `${earlier}.`
+    : `${freshMovers.length ? `In ${quarterLabel(freshQ)} 13Fs, ${most(freshMovers, false)}.` : freshFiled === 1 ? `The one ${quarterLabel(freshQ)} 13F filed so far didn’t buy or sell it.` : `None of the ${plural(freshFiled, `${quarterLabel(freshQ)} 13F`)} filed so far bought or sold it.`}${earlier ? ` Among earlier 13Fs, ${earlier}.` : ''}`
   const holderCols: Col<StockHolder>[] = [
     // Phones show which 13F under the name instead of an "As of" column, so the name has room to show in full.
     {
@@ -1841,8 +1859,7 @@ export function Stock({ ticker }: { ticker: string }) {
           <>
             {holders.length === 1 ? <>{name(bigHolder)} is the only investor Holdterm follows that owns it, {usd(bigHolder.value)} worth. </> : <>{name(bigHolder)} holds the most, {usd(bigHolder.value)}, or {pct(bigHolder.value / value, 0)} of what these investors hold. </>}
             {/* Each trade is dated by its own 13F's quarter: holders' latest 13Fs can be for different quarters (Sanders' Q3 buy, H&H's Q2 sale). */}
-            {buyer && <>{name(buyer)} bought the most, {buyer.change === 'new' ? `opening a ${usd(buyer.delta_value)} position` : `adding ${usd(buyer.delta_value)}`} in {quarterLabel(buyer.quarter)}. </>}
-            {seller && <>{name(seller)} sold the most, {seller.change === 'exited' ? `selling out of ${usd(-(seller.delta_value ?? 0))}` : `cutting ${usd(-(seller.delta_value ?? 0))}`} in {quarterLabel(seller.quarter)}.</>}
+            {trades}
           </>
         ) : (
           <>None of the investors Holdterm follows reports {issuerName(d.name)} in its latest 13F.</>
@@ -1871,7 +1888,8 @@ export function Stock({ ticker }: { ticker: string }) {
         label={`${issuerName(d.name)} ownership`}
       />
       <TabPanel tab={tab}>
-      <Panel title={tab === 'activity' ? activityTitle(movers) : STOCK_TAB[tab]}>
+      {/* A key for the highlighted rows, which on phones are blue text and could read as links. */}
+      <Panel title={tab === 'activity' ? activityTitle(movers) : STOCK_TAB[tab]} right={freshQ && (tab === 'holders' || tab === 'activity') ? <span className="fresh-key"><b>Blue</b> = filed for {quarterLabel(freshQ)}</span> : undefined}>
         {tab === 'holders' && <Grid rank rows={holders} initial={['w', 'desc']} href={fundHref} cols={holderCols} empty={<Empty title="None of the investors Holdterm follows owns it" hint={`Holdterm follows ${roster.funds.length} concentrated, long-term investors. A stock shows up here once one of them reports it in a 13F.`} action={['See the stocks they own most', '/consensus']} />} />}
         {tab === 'activity' && (
           <>
