@@ -1633,6 +1633,18 @@ a.hb-row:hover {
     display: inline-block;
     max-width: 112px;
   }
+  /* The home page's trades and filings panels: investor names wrap at the same width, so company names show. */
+  .home-trades td .firm {
+    display: inline-block;
+    max-width: 112px;
+  }
+  /* …and the stock column takes a set share, which automatic table layout would otherwise hand to the investor. */
+  .home-trades:not(.home-filings) th:first-child {
+    width: 40%;
+  }
+  .home-filings th:nth-child(3) {
+    width: 45%;
+  }
   /* …and the number columns in those tables shrink to their content, so the name column gets the spare width. */
   .grid:has(.stock-sub) th.num {
     width: 1%;
