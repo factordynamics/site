@@ -5,8 +5,8 @@ import { apiReady } from '../config'
 import { loadLatency, type Latency } from '../lib/account'
 import { useAsync, useTick, useTitle } from '../lib/data'
 import { DATA_ALERTS, DATA_ALERTS_NOTE, DATA_MANUAL, DEPLOY_FREEZE, DEPLOY_POLICY, RESTART_POLICY, HOST_MOVE, HOSTING, INCIDENT_RULE, INCIDENTS } from '../lib/hosting'
-import { DATA, displayName, loadIndex } from '../lib/data'
-import { loadExpected } from '../lib/stocks'
+import { DATA, displayName, loadIndex, money } from '../lib/data'
+import { loadExpected, stockPath } from '../lib/stocks'
 import { isEdgarDay } from '../lib/calendar.mjs'
 
 // /status/: live state of each part of Copybook, read in the browser from the same public sources the site
@@ -87,6 +87,77 @@ function Row({ name, tone, state, children }: { name: string; tone: Tone; state:
   )
 }
 
+type Quality = {
+  generated?: string
+  held?: { rows: number; filers: number }
+  by_reason?: Record<string, { rows: number; filers: number; options?: number }>
+  largest?: { cik: string; name: string; slug: string | null; period?: string; ticker?: string | null; cusip?: string; put_call?: string | null; reason: string; delta_as_filed?: number | null }[]
+}
+
+const HELD_REASON: Record<string, string> = {
+  unreliable_shares: 'share counts that don’t reconcile',
+  price_outlier: 'value far off the filed price',
+  reissue_ratio_not_applied: 'pre-split share counts',
+  unreliable_both: 'shares and value both unreliable',
+}
+
+const plural = (n: number, w: string) => `${n.toLocaleString('en-US')} ${w}${n === 1 ? '' : 's'}`
+
+/** Rows ingest holds out of trades and $ totals, by reason, with the largest lines and what each would have read. */
+function HeldRows({ q }: { q: Quality }) {
+  const held = q.held!
+  const reasons = Object.entries(q.by_reason ?? {}).filter(([, r]) => r.rows > 0)
+  const top = (q.largest ?? []).slice(0, 10)
+  return (
+    <Row name="Rows held as unreliable" tone="up" state={`${plural(held.rows, 'row')} from ${plural(held.filers, 'filer')} held, not counted`}>
+      {reasons.length > 0 && <>{reasons.map(([k, r]) => `${r.rows.toLocaleString('en-US')} ${HELD_REASON[k] ?? k.replace(/_/g, ' ')}`).join(' · ')}. </>}
+      These lines show on stock and fund pages as unreliable instead of a trade, and never count toward $ totals.{' '}
+      <Link to="/methodology/#unreliable" className="font-medium text-accent hover:text-accent-2">
+        How we decide
+      </Link>
+      {top.length > 0 && (
+        <details className="mt-2">
+          <summary className="cursor-pointer font-medium text-ink-2 hover:text-accent">Largest {top.length} held lines</summary>
+          <span className="mt-1.5 block">
+            {top.map((x, i) => {
+              const what = `${x.ticker || x.cusip || '—'}${x.put_call ? ` ${x.put_call.toLowerCase()}s` : ''}`
+              return (
+                <span key={`${x.cik}-${x.cusip}-${x.put_call}-${i}`} className="block border-t border-line py-1.5 first:border-t-0">
+                  <span className="block font-medium text-ink">
+                    {x.slug ? (
+                      <Link to={`/investors/${x.slug}/`} className="hover:text-accent">
+                        {displayName(x.name)}
+                      </Link>
+                    ) : (
+                      displayName(x.name)
+                    )}
+                    {' · '}
+                    {x.ticker ? (
+                      <Link to={stockPath(x.ticker)} className="hover:text-accent">
+                        {what}
+                      </Link>
+                    ) : (
+                      what
+                    )}
+                  </span>
+                  <span className="block">
+                    {HELD_REASON[x.reason] ?? x.reason.replace(/_/g, ' ')}
+                    {x.delta_as_filed ? (
+                      <>
+                        ; would have read <span className="whitespace-nowrap">{`${x.delta_as_filed > 0 ? '+' : '−'}${money(Math.abs(x.delta_as_filed))}`}</span>
+                      </>
+                    ) : null}
+                  </span>
+                </span>
+              )
+            })}
+          </span>
+        </details>
+      )}
+    </Row>
+  )
+}
+
 export function Status() {
   useTitle('Status · Copybook')
   const tick = useTick(60_000, true)
@@ -104,6 +175,8 @@ export function Status() {
   // Data: freshness from the last data build, and ingest's corrections and incidents (data/changelog.json).
   const fresh = useAsync(loadExpected, [tick])
   const log = useAsync(() => fetch(`${DATA}changelog.json`).then((r) => (r.ok ? (r.json() as Promise<{ entries: { id: string; date: string; kind: string; title: string }[] }>) : null)), [])
+  // Ingest's quality file (data/quality.json): 13F rows held out of trades and totals as unreliable. Hidden until it's published.
+  const quality = useAsync(() => fetch(`${DATA}quality.json?m=${Math.floor(Date.now() / 600_000)}`).then((r) => (r.ok ? (r.json() as Promise<Quality>) : null)).catch(() => null), [])
   const builtAt = fresh.data?.generated_at ? Date.parse(fresh.data.generated_at) : null
   const lagS = builtAt ? (Date.now() - builtAt) / 1000 : null
   const filingDay = isEdgarDay(new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }))
@@ -318,6 +391,7 @@ export function Status() {
                 {newest13f ? `Newest 13F in the data: ${displayName(newest13f.manager)}, ${newest13f.at}. ` : ''}
                 Tracked funds are rebuilt about every 20 minutes, every other 13F filer every 3 hours; past 2 hours this turns amber.
               </Row>
+              {quality.data?.held && quality.data.held.rows > 0 && <HeldRows q={quality.data} />}
               <Row name="Filing pages" tone="up" state="Up">
                 Stock, fund and filing pages are static files, so they stay up when the member API is down.
               </Row>
