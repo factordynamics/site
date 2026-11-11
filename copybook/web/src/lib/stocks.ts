@@ -110,6 +110,36 @@ export type Expected = {
   /** The latest 13F had an empty (placeholder) table: which quarter, and the full book shown instead. */
   placeholder?: { quarter: string; showing: string }
 }
+/** d/expected.json: superinvestors still to file this quarter (scripts/stocks.mjs). */
+export type ExpectedSoon = Pick<Expected, 'slug' | 'manager' | 'pattern' | 'expected_date' | 'time_et' | 'time_range'> & { total_value: number }
+export const loadExpected = () => getJSON<{ quarter: string; expected: ExpectedSoon[] }>(`${D}expected.json${fresh()}`).catch(() => null)
+const hr = (m: number) => ({ h: ((Math.floor(m / 60) + 11) % 12) + 1, pm: m >= 720 })
+/** "Thu Nov 12" for an ISO date. */
+export const shortDay = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }).replace(',', '')
+/** "usually 10–11 am ET" from the last filings' times (New York minutes after midnight). */
+export function usualTime(x: Pick<Expected, 'pattern' | 'time_et' | 'time_range'>) {
+  const [a, b] = x.time_range ?? [x.time_et, x.time_et]
+  const s = hr(a)
+  const e = hr(b)
+  const word = x.pattern === 'usually' ? 'usually' : 'often'
+  if (s.h === e.h && s.pm === e.pm) return `${word} around ${s.h} ${s.pm ? 'pm' : 'am'} ET`
+  return `${word} ${s.h}${s.pm === e.pm ? '' : s.pm ? ' pm' : ' am'}–${e.h} ${e.pm ? 'pm' : 'am'} ET`
+}
+/** The next two filing days' largest superinvestors, up to four a day (books within a few percent of each other are effectively tied). */
+export function nextUp(list: ExpectedSoon[], today: string, perDay = 4) {
+  const days = [...new Set(list.filter((x) => x.expected_date! >= today).map((x) => x.expected_date!))].sort().slice(0, 2)
+  return days
+    .map((d) => {
+      const names = list
+        .filter((x) => x.expected_date === d)
+        .sort((a, b) => b.total_value - a.total_value)
+        .slice(0, perDay)
+        .map((x) => x.manager)
+      return `${names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0]} ${shortDay(d).split(' ')[0]}`
+    })
+    .join(', ')
+}
+
 export type Season = {
   quarter: string
   deadline: string

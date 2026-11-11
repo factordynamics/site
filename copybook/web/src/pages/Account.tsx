@@ -171,7 +171,7 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
         ) : (
           <>
             <p className="text-[13px] font-medium text-accent">Account</p>
-            <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em]">Your Copy subscription.</h1>
+            <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em]">{member.seat ? `Your ${PLAN_NAME[member.plan] ?? 'Copy Fund'} seat.` : `Your ${PLAN_NAME[member.plan] ?? 'Copy'} subscription.`}</h1>
           </>
         )}
       </header>

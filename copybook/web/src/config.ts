@@ -9,11 +9,12 @@ export const checkout = {
 }
 // The API base. The build value (api.config.mjs) is the fallback; at load the site reads the current base
 // from api.json on R2, which the API host rewrites when its tunnel URL changes, and remembers the last one
-// it read. Only https bases on hosts we run are accepted, since a member's session token is sent there.
+// it read. Only https bases on hosts we run are accepted (quick tunnels change name on restart, so
+// trycloudflare.com stays a wildcard until the API has its own hostname; the others are pinned), since a member's session token is sent there.
 // A tester can pin one browser to another API with localStorage['copybook-api'] = 'https://…' (there is
 // deliberately no URL parameter for it, since a link could then send a session token elsewhere).
 const okBase = (v: unknown): string | null =>
-  typeof v === 'string' && /^https:\/\/([a-z0-9-]+\.)+(trycloudflare\.com|ts\.net|factordynamics\.com|workers\.dev)(\/[^\s?#]*)?$/i.test(v) ? v.replace(/\/$/, '') : null
+  typeof v === 'string' && /^https:\/\/(([a-z0-9-]+\.)+(trycloudflare\.com|factordynamics\.com)|gene\.tail70ba3\.ts\.net|copybook-api\.factordynamics\.workers\.dev)(\/[^\s?#]*)?$/i.test(v) ? v.replace(/\/$/, '') : null
 const stored = (k: string) => {
   try {
     return localStorage.getItem(k)

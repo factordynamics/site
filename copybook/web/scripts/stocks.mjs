@@ -461,6 +461,19 @@ writeFileSync(join(out, 'd', 'flow.json'), JSON.stringify(flow))
     generated_at: index.generated_at,
   }
   writeFileSync(join(out, 'd', 'season.json'), JSON.stringify(seasonOut))
+  // A small file for filer pages and /season/'s "Next up" line: superinvestors still to file this quarter,
+  // with their usual day and time and book size (for ranking), so a filer page doesn't load all of season.json.
+  const aum = new Map(index.managers.map((m) => [m.slug, m.total_value ?? 0]))
+  writeFileSync(
+    join(out, 'd', 'expected.json'),
+    JSON.stringify({
+      quarter: Q,
+      generated_at: index.generated_at,
+      expected: expected
+        .filter((x) => !x.filed && !x.placeholder && x.expected_date)
+        .map(({ slug, manager, pattern, expected_date, time_et, time_range }) => ({ slug, manager, pattern, expected_date, time_et, time_range, total_value: aum.get(slug) ?? 0 })),
+    }),
+  )
 
   // The season recap (/season/{yyyy}q{n}/): what the superinvestors bought, sold, opened and exited,
   // their biggest single moves, and who filed late or not at all. Rebuilt every build, so late filers

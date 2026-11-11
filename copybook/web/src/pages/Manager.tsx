@@ -9,7 +9,7 @@ import { CsvButton } from '../components/CsvButton'
 import { FollowButton } from '../components/FollowButton'
 import { Share } from '../components/Share'
 import { FundNotice, SinceLast13F, fundStatus } from '../components/FundNotes'
-import { loadCards, loadRecap, recapPath, seasonNow, stockPath } from '../lib/stocks'
+import { loadCards, loadExpected, loadRecap, recapPath, seasonNow, shortDay, stockPath, usualTime } from '../lib/stocks'
 import { investorTitle, recapTitle } from '../lib/titles.mjs'
 import { CuratedRedirect, displayName, pricingTo, useTitle, shortName, dateLabel, loadManager, money, pct, quarterLabel, secFilerUrl, shareClass, sharesFmt, splitApplied, splitRatio, useAsync, type ManagerFile } from '../lib/data'
 
@@ -42,6 +42,9 @@ export function ManagerPage() {
   }, [f])
   const paid = Boolean(member?.active)
   const cards = useAsync(loadCards, [])
+  // Still to file this quarter: its usual day and time, from /season/'s expected list. Gone once it files.
+  const soon = useAsync(loadExpected, [])
+  const due = f ? soon.data?.expected.find((x) => x.slug === f.slug) : undefined
   const card = f && cards.data?.get(f.slug)
 
   const rows = useMemo(() => {
@@ -117,6 +120,14 @@ export function ManagerPage() {
         )}
       </header>
 
+      {f && due && soon.data && (
+        <p className="mt-5 rounded-xl bg-accent-soft px-4 py-2.5 text-[14.5px] leading-snug text-accent-2">
+          <span className="font-medium">
+            {quarterLabel(soon.data.quarter).split(' ')[0]} 13F expected {shortDay(due.expected_date!)}, {usualTime(due)}.
+          </span>{' '}
+          Follow to get it by email, with its moves inside.
+        </p>
+      )}
       {f && <FundNotice f={f} />}
 
       {/* The newest news first: on a phone "Since the last 13F" (Form 4s and 13D/Gs filed after it) sits right

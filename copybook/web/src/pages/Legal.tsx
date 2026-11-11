@@ -83,7 +83,7 @@ const PAGES: Record<'terms' | 'privacy' | 'security', { title: string; lead: str
       ['Backups', HOSTING.backups],
       ['Access logging', HOSTING.logging],
       ['Availability', <>{HOSTING.availability} Live status and incidents are on the <Link to="/status/" className="font-medium text-accent hover:text-accent-2">status page</Link>.</>],
-      ['Sign-in', 'Sign-in is by emailed one-time links; there are no passwords to leak. Session tokens are never put in URLs. CSV downloads use single-use links that expire in 60 seconds.'],
+      ['Sign-in', 'Sign-in is by emailed one-time links; there are no passwords to leak. A sign-in link you ask for works once, within 15 minutes; a Copy Fund invite link works once, within 7 days. Session tokens are never put in URLs. CSV downloads use single-use links that expire in 60 seconds.'],
       ['Your book is private', <>A list of holdings you upload or enter is private to you, or to your team on Copy Fund. It is never shared, except as described under <Link to="/security/#who-can-see-member-data" className="font-medium text-accent hover:text-accent-2">Who can see member data</Link>; it is never shown to other members, and never used in aggregates, rankings or anything we publish.</>],
       ['API keys', 'A key’s secret is shown once, when you create it. Revoke a key from your account page and requests with it fail immediately.'],
       ['Deleting data', <>Remove follows, owned stocks and keys yourself on your account page at any time, or ask us to delete everything through the {contact}. {HOSTING.deletion}</>],

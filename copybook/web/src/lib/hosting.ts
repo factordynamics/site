@@ -5,7 +5,7 @@
 
 export const HOSTING = {
   /** Where the member API runs. */
-  api: 'Copybook’s member API runs on a single dedicated machine in the United States operated by Factor Dynamics. It isn’t in a data centre: it’s on a residential connection, reached through Cloudflare Tunnel, with Tailscale as a backup route.',
+  api: 'Copybook’s member API runs on a single dedicated machine in the United States operated by Factor Dynamics. It isn’t in a data centre: it’s on a residential connection, reached through a temporary Cloudflare quick tunnel while we move the API to its own hostname (api.copybook.factordynamics.com), with Tailscale as a backup route.',
   /** Everything else: alerts, files, payments. */
   files: 'Filing alerts are sent by a Cloudflare Workers job that checks EDGAR every minute, with that machine as its backup. Paid history files and the public alert-latency log are stored in Cloudflare R2. The website and public 13F data are static files served by GitHub Pages. Payments are handled entirely by Stripe.',
   /** What the two hosts share, and how. */

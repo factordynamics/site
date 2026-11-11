@@ -8,7 +8,7 @@ import { dateFmt, dateLabel, money, NUM, quarterLabel, useAsync, useTick, useTit
 import { seasonTitle } from '../lib/titles.mjs'
 import { dayName, isEdgarDay } from '../lib/calendar.mjs'
 import { cap } from '../lib/insiders'
-import { loadCardSet, loadRecap, loadSeason, recapPath, seasonNow, stockPath, type Expected, type Season as SeasonData, type SeasonRow } from '../lib/stocks'
+import { loadCardSet, loadExpected, loadRecap, loadSeason, nextUp, recapPath, seasonNow, stockPath, type Expected, type Season as SeasonData, type SeasonRow } from '../lib/stocks'
 
 // /season/: the 13F filing season as it happens. Built from d/season.json, which every Pages build
 // writes (every 20 minutes during the filing wave).
@@ -43,6 +43,9 @@ export function Season() {
   // Re-read every two minutes while the season is live, so an open tab follows each build.
   const tick = useTick(120_000, seasonNow().live)
   const s = useAsync(() => loadSeason(tick ? Date.now() : undefined), [tick])
+  // "Next up": the next two filing days' largest superinvestors, from d/expected.json.
+  const soon = useAsync(loadExpected, [tick])
+  const next = soon.data ? nextUp(soon.data.expected, new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' })) : ''
   const cards = useAsync(loadCardSet, [])
   const member = useMember()
   const paid = Boolean(member?.active)
@@ -88,6 +91,14 @@ export function Season() {
             {Q || 'The'} 13F filing season · live
           </p>
           <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-h1">Who has filed, and what they bought.</h1>
+          {!passed && next && (
+            <p className="mt-4 rounded-xl bg-accent-soft px-4 py-2.5 text-[15px] leading-snug text-accent-2">
+              <span className="font-medium">Next up: {next}.</span>{' '}
+              <Link to="/pricing/" className="underline underline-offset-2 hover:text-accent">
+                Copy emails you each one’s moves.
+              </Link>
+            </p>
+          )}
           <p className="mt-4 text-[17px] leading-relaxed text-ink-2">
             Every manager with $100M or more in 13F securities, mostly US-listed stocks, must file its {Q || 'quarter-end'} holdings with the SEC within 45 days. We check EDGAR every minute for the funds we track closely; this page refreshes about every 20 minutes.
           </p>
@@ -420,10 +431,10 @@ function Row({ r, i, tab }: { r: SeasonRow; i: number; tab: Tab }) {
           </span>
         </span>
         {tab === 'most_buyers' ? (
-          // Ranked by how many funds bought; the amount is their gross buying, not a net, so it isn't signed.
+          // Ranked by how many funds bought, so the count leads; the amount is their gross buying, not a net.
           <span className="num text-right text-[14px] font-medium" title="Dollar value of the shares these funds bought, before any selling by others">
-            {money(r.buy_value)}
-            <span className="block text-[11.5px] font-normal text-ink-3">$ bought</span>
+            {r.n_buyers ?? r.buyers.length} {(r.n_buyers ?? r.buyers.length) === 1 ? 'fund' : 'funds'}
+            <span className="block text-[11.5px] font-normal text-ink-3">{money(r.buy_value)} bought</span>
           </span>
         ) : (
           <span className={`num text-right text-[14px] font-medium ${value >= 0 ? 'text-up' : 'text-down'}`}>

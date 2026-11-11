@@ -3,9 +3,9 @@ import { Fragment, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { WaitlistForm } from '../components/Waitlist'
 import { Button, Check } from '../components/ui'
-import { attributed, referredCheckout, refCode } from '../lib/attribution'
-import { gapLabel, loadLatency, useMember } from '../lib/account'
-import { money, quarterLabel, useAsync, useTitle } from '../lib/data'
+import { attributed, checkRef, referredCheckout, refCode } from '../lib/attribution'
+import { useMember } from '../lib/account'
+import { money, useAsync, useTitle } from '../lib/data'
 import { loadCoverage, loadStock } from '../lib/stocks'
 import { loadEvents } from '../components/FundNotes'
 import { BOOK_PRO, checkoutEnabled, FUND_SEATS, FUND_WHY, DATA_TERMS, plans, referredDeal, referredTerms, TRIAL_DAYS, trialTerms, type PlanId } from '../config'
@@ -139,12 +139,11 @@ export function Pricing() {
   const filers = cov.data ? cov.data.filers.toLocaleString('en-US') : '8,900+'
   const curated = cov.data?.curated ?? 348
   const TIERS = tiers(filers, curated)
-  // A receipt from the live latency log: the newest 13F alert, once any have gone out this season.
-  const lat = useAsync(loadLatency, [])
-  const receipt = lat.data?.count ? (lat.data.alerts.find((a) => a.form.startsWith('13F')) ?? null) : null
   const COMPARE = compare(filers)
   // A friend's referral link: Copy and Pro show the first charge with the free month taken off.
-  const referred = Boolean(refCode() && !mine && live)
+  // Only once the API confirms the code: a made-up ?ref= shows the normal card.
+  const refOk = useAsync(() => checkRef(refCode()), []).data === true
+  const referred = Boolean(refOk && !mine && live)
   const [params] = useSearchParams()
   const hook = useAsync(() => fromFact(params.get('from')), [params.get('from')])
   const copy = plans.copy
@@ -162,16 +161,13 @@ export function Pricing() {
         <p className="mt-4 text-[16px] leading-relaxed text-ink-2 sm:text-[17px]">
           Reading a portfolio is free. Copy follows the investors and stocks you care about. Every paid plan starts with {TRIAL_DAYS} days free.
         </p>
-        {receipt && (lat.data?.count ?? 0) >= 10 && (
-          <p className="mt-4 text-[13.5px] text-ink-3">
-            {receipt.manager}’s {receipt.quarter ? `${quarterLabel(receipt.quarter)} ` : ''}alert went out {gapLabel(receipt.gap_seconds)} after EDGAR acceptance
-            {lat.data?.median_seconds != null && ` · median this season ${gapLabel(lat.data.median_seconds)}`} ·{' '}
-            <Link to="/speed/" className="font-medium text-accent hover:text-accent-2">
-              every alert timed
-            </Link>
-          </p>
-        )}
-        {refCode() && !mine && (
+        <p className="mt-4 text-[13.5px] text-ink-3">
+          We check EDGAR every minute.{' '}
+          <Link to="/speed/" className="font-medium text-accent hover:text-accent-2">
+            Alert speed
+          </Link>
+        </p>
+        {refOk && !mine && (
           <div className="mt-5">
             <p role="status" className="inline-flex items-center gap-2 rounded-full bg-[#e3f1e8] px-4 py-1.5 text-[14px] font-medium text-[#126b3c]">
               <Check className="size-3.5" /> A member sent you a free month: after the {TRIAL_DAYS}-day trial, your first month is on us.

@@ -91,6 +91,17 @@ export function refCode(): string | null {
   }
 }
 
+/** Whether a referral code is real (GET {api}/ref/{code} answers { valid: true }). Anything else, including
+ *  no such route yet, counts as not valid, so the free-month promise never shows for a made-up code. */
+export const checkRef = (code: string | null): Promise<boolean> =>
+  code
+    ? apiReady
+        .then((base) => fetch(`${base}/ref/${encodeURIComponent(code)}`, { signal: AbortSignal.timeout(5000) }))
+        .then((r) => (r.ok ? (r.json() as Promise<{ valid?: boolean }>) : null))
+        .then((j) => j?.valid === true)
+        .catch(() => false)
+    : Promise.resolve(false)
+
 /** Click handler for a paid Payment Link: with a kept referral code, a checkout that carries it instead. */
 export function referredCheckout(plan: 'copy' | 'pro' | 'fund', interval: 'monthly' | 'yearly', fallback: string) {
   return (e: { preventDefault: () => void }) => {
