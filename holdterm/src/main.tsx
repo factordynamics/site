@@ -541,7 +541,7 @@ function App() {
           <nav aria-label="footer">
             <A to="/guide">How to read Holdterm</A>
             <A to="/about">About</A>
-            <A to="/alerts">Alerts, ${PRICE.monthly}/mo</A>
+            <A to="/alerts">Alerts, ${PRICE.yearly}/yr</A>
             <A to="/account">Account</A>
             <A to="/terms">Terms</A>
             <A to="/privacy">Privacy</A>

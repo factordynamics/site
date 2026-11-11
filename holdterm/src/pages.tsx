@@ -408,7 +408,7 @@ function Upsell() {
       <p>
         <span className="hide-sm">Get an alert like this when the funds you follow file a 13F, 13D or Form 4. </span>
         <span className="show-sm">Email alerts on your funds’ filings. </span>
-        <span className="upsell-price">{PRICE.trialDays} days free, then ${PRICE.monthly}/mo.</span>
+        <span className="upsell-price">{PRICE.trialDays} days free, then ${PRICE.yearly} a year.</span>
       </p>
       <A to="/alerts" className="btn">
         Start free trial<span className="hide-sm"> →</span>
@@ -1249,9 +1249,15 @@ function FundSummary({ book, live, buys, sells, top10 }: { book: Book; live: Hol
 function WeightShift({ prev, now, max }: { prev: number; now: number; max: number }) {
   const w = (v: number) => `${Math.min(100, (v / max) * 100).toFixed(1)}%`
   return (
-    <span className="shift" role="img" aria-label={`weight ${pct(prev)} last quarter, ${pct(now)} now`}>
-      <i className="was" style={{ width: w(prev) }} />
-      <i className={`now ${now >= prev ? 'up' : 'down'}`} style={{ width: w(now) }} />
+    // The numbers sit beside the bars, so a longer bar next to "Trimmed" reads as a price rise, not a contradiction.
+    <span className="shift-cell">
+      <span className="shift" aria-hidden>
+        <i className="was" style={{ width: w(prev) }} />
+        <i className={`now ${now >= prev ? 'up' : 'down'}`} style={{ width: w(now) }} />
+      </span>
+      <span className="shift-nums num">
+        {pct(prev)} → {pct(now)}
+      </span>
     </span>
   )
 }
@@ -2135,7 +2141,8 @@ const CHANNEL_LIST: { name: string; what: string; live: boolean | 'soon' }[] = [
 ]
 export function Alerts() {
   title('Alerts')
-  const [yearly, setYearly] = useState(false)
+  // Yearly is the default offer; monthly is the alternative.
+  const [yearly, setYearly] = useState(true)
   const r = useLoad(loadSamples, [])
   const s = r.data
   const link = yearly ? checkout.yearly : checkout.monthly
@@ -2144,11 +2151,11 @@ export function Alerts() {
   const plan = (
     <div className="ap-plan">
       <div className="filters" role="group" aria-label="Billing period">
-        <button className={!yearly ? 'chip on' : 'chip'} aria-pressed={!yearly} onClick={() => setYearly(false)}>
-          Monthly
-        </button>
         <button className={yearly ? 'chip on' : 'chip'} aria-pressed={yearly} onClick={() => setYearly(true)}>
           Yearly <span className="pos">save {Math.round((1 - PRICE.yearly / (PRICE.monthly * 12)) * 100)}%</span>
+        </button>
+        <button className={!yearly ? 'chip on' : 'chip'} aria-pressed={!yearly} onClick={() => setYearly(false)}>
+          Monthly
         </button>
       </div>
       <div className="price">
@@ -2246,7 +2253,7 @@ export function Alerts() {
       <section className="ap-section ap-cta">
         <div>
           <h2>Try it free for {PRICE.trialDays} days</h2>
-          <p className="dim">Then ${PRICE.monthly} a month or ${PRICE.yearly} a year. The rest of Holdterm stays free, with no ads.</p>
+          <p className="dim">Then ${PRICE.yearly} a year, or ${PRICE.monthly} a month. The rest of Holdterm stays free, with no ads.</p>
         </div>
         {/* The plan picker is at the top of the page; here, one button for the period chosen there. */}
         <div className="ap-cta-act">
@@ -2390,7 +2397,7 @@ export function Account() {
                   Go to your Copybook account
                 </a>
                 <A to="/alerts" className="btn ghost">
-                  Holdterm alerts, ${PRICE.monthly} a month
+                  Holdterm alerts, ${PRICE.yearly} a year
                 </A>
               </>
             ) : member.active && !COVERED.has(member.plan) ? (
@@ -2733,7 +2740,7 @@ export function Guide() {
       <section className="article-cta">
         <div>
           <h2>Know when they move</h2>
-          <p>Get an email within hours of a fund you follow filing a 13F, 13D, 13G or Form 4. {PRICE.trialDays} days free, then ${PRICE.monthly} a month.</p>
+          <p>Get an email within hours of a fund you follow filing a 13F, 13D, 13G or Form 4. {PRICE.trialDays} days free, then ${PRICE.yearly} a year or ${PRICE.monthly} a month.</p>
         </div>
         <A to="/alerts" className="btn">
           Start free trial
@@ -2759,7 +2766,7 @@ export function About() {
           Holdterm follows {roster.funds.length} concentrated, long-term investors through the filings they must make with the SEC: what each one owns, what changed this quarter, what they own in common, and the 5% stakes and insider trades they report between quarters.
         </p>
         <p className="lede">
-          The site is free, with no ads. The one paid product is <A to="/alerts">alerts</A>, at ${PRICE.monthly} a month. Holdterm is run by Factor Dynamics.
+          The site is free, with no ads. The one paid product is <A to="/alerts">alerts</A>, at ${PRICE.yearly} a year or ${PRICE.monthly} a month. Holdterm is run by Factor Dynamics.
         </p>
       </header>
       <section className="anchor">
