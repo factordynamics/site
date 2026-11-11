@@ -1406,7 +1406,10 @@ export async function checkHeld(env: Env, now: number): Promise<Record<string, u
       if (!r) continue; // the build shows no move here
       const prior = r.prev_shares ? { shares: r.prev_shares_as_filed ?? r.prev_shares, value: r.prev_value ?? 0 } : undefined;
       const row: MoveRow = { ...r, split: undefined, ticker: r.ticker ?? h.ticker, delta_pct_of_book: r.delta_pct_of_book ?? null };
-      if (!r.suspect_units && !gateRow(row, prior, ratioOf(r), cons.get(r.cusip))) ok.push(row);
+      const why = r.suspect_units ? 'units' : gateRow(row, prior, ratioOf(r), cons.get(r.cusip));
+      // own_prior can't tell a real trade (a quant fund doubling shares as the price halves) from a split nobody has
+      // listed. A day after acceptance with the build agreeing and still no split in splits.json, it goes out.
+      if (!why || (why === 'own_prior' && now - Date.parse(a.accepted ?? a.filing_date) >= DAY)) ok.push(row);
       else still.push(h);
     }
     log.push({ accession: a.accession, build: b.build, passed: ok.length, held: still.length, dropped: a.held!.length - ok.length - still.length });

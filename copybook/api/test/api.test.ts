@@ -1941,6 +1941,16 @@ describe('copybook api', () => {
     expect(sent[0].text).toContain('(checked position changes)');
     expect(sent[0].text).toContain('Trimmed: APH -$15.3M');
     expect(await env.DB.get('alerts:pending-check')).toBeNull();
+    // A real trade the own-prior check can't tell from an unlisted split (Acadian's CMPX: the price halved, the shares
+    // doubled): held while the build agrees and splits.json lists nothing, then sent a day after acceptance.
+    const ACA = '0001140361-26-042753';
+    hist.m.set('h/acadian/2026Q3.json', new TextEncoder().encode(JSON.stringify({ accession: ACA, quarter: '2026Q3', holdings: [{ ...row('CMPX', '20451W101', 'added', 2_635_682, 1_161_231, 2_734_000, 196_000), prev_value: 2_538_000 }] })));
+    const cmpx = { ...base, slug: 'acadian', slugs: ['acadian'], accession: ACA, moves: { bought_usd: 0, sold_usd: 0, new: [], added: [], trimmed: [], exited: [] }, held: [{ cusip: '20451W101', ticker: 'CMPX', issuer: 'CMPX', display_name: null, put_call: null, change: 'added', reason: 'own_prior' }] };
+    await env.DB.put('alerts:pending-check', JSON.stringify([cmpx]));
+    expect(await checkHeld(env, now)).toMatchObject({ checked: [{ accession: ACA, passed: 0, held: 1 }] });
+    expect(await checkHeld(env, now + 24 * 3600_000)).toMatchObject({ checked: [{ accession: ACA, passed: 1, held: 0 }] });
+    expect(await env.DB.get('alerts:pending-check')).toBeNull();
+    sent = [];
 
     // B: the alert as it went out before the fix (APH "added +$36.5M") reconciles against the build: a correction.
     sent = [];
