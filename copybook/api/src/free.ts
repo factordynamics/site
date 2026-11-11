@@ -497,7 +497,10 @@ export async function inYourNames(env: Env, names: string[], week: Week, now: nu
         const md = (d: string) => new Date(`${d.slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
         const verb = sold ? 'sold' : 'bought';
         const when = `${e.event_date ? `${verb} ${md(e.event_date)}, ` : ''}filed ${md(etDay(Date.parse(e.accepted_at)))}`;
-        locked.push({ text: `${short(e.issuer)}'s ${roleOf(e.role)} ${verb} ${money(e.value_usd)} of ${t} (${when})`, size: e.value_usd });
+        // "Capital One Financial's CEO sold", but "A 10% owner of Sirius XM bought" (an owner, a director: not the company's).
+        const role = roleOf(e.role);
+        const who = role.startsWith('a ') ? `A ${role.slice(2)} of ${short(e.issuer)}` : `${short(e.issuer)}'s ${role}`;
+        locked.push({ text: `${who} ${verb} ${money(e.value_usd)} of ${t} (${when})`, size: e.value_usd });
       } else locked.push({ text: `${e.filer_name} filed a ${e.form.replace(/^SCHEDULE /, '')} on ${t}`, size: 0 });
     }
   }
