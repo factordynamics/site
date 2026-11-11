@@ -605,31 +605,79 @@ function HomeBody() {
           )}
         </Panel>
         <div className="home-side">
-          <Panel className="reserve-10" title={`Largest trades in ${quarterLabel(lead)}`} right={<A to="/flows">All buys and sells →</A>}>
+          <Panel className="reserve-10 home-trades" title={`Largest trades in ${quarterLabel(lead)}`} right={<A to="/flows">All buys and sells →</A>}>
             {books.data ? (
               <Grid
                 rows={moves}
                 href={(x) => stockHref(x.h)}
                 cols={[
-                  { key: 't', label: 'Stock', render: (x) => <StockCell t={x.h.ticker} name={x.h.display_name || x.h.issuer} former={x.h.former} label={x.h.label} />, width: '72px' },
+                  // Phones: the company's name goes under its ticker and what happened under the amount, so each row reads
+                  // "NVDA / Nvidia · Sanders Capital · +$1.7B / Added" without a separate tag column.
+                  {
+                    key: 't',
+                    label: 'Stock',
+                    render: (x) => (
+                      <>
+                        <StockCell t={x.h.ticker} name={x.h.display_name || x.h.issuer} former={x.h.former} label={x.h.label} />
+                        {x.h.ticker && <span className="row-sub stock-sub show-sm">{nameOf(x.h)}</span>}
+                      </>
+                    ),
+                  },
                   { key: 'f', label: 'Investor', link: true, render: (x) => <Firm name={x.b.firm} /> },
-                  { key: 'a', label: '', render: (x) => <span className={`tag ${x.h.value_delta! > 0 ? 'pos' : 'neg'}`}>{moveLabel(x.h)}</span> },
-                  { key: 'v', label: 'Trade size', num: true, render: (x) => <span className={x.h.value_delta! > 0 ? 'pos' : 'neg'}>{signedUsd(x.h.value_delta)}</span> },
+                  { key: 'a', label: '', hideSm: true, render: (x) => <span className={`tag ${x.h.value_delta! > 0 ? 'pos' : 'neg'}`}>{moveLabel(x.h)}</span> },
+                  {
+                    key: 'v',
+                    label: 'Trade size',
+                    num: true,
+                    render: (x) => (
+                      <>
+                        <span className={x.h.value_delta! > 0 ? 'pos' : 'neg'}>{signedUsd(x.h.value_delta)}</span>
+                        <span className="row-sub show-sm">{moveLabel(x.h)}</span>
+                      </>
+                    ),
+                  },
                 ]}
               />
             ) : (
               <Loading what="Loading the largest trades" rows={10} />
             )}
           </Panel>
-          <Panel className="reserve-8" title="Stakes and insider trades, last 30 days" right={<A to="/filings">All filings →</A>}>
+          <Panel
+            className="reserve-8 home-trades home-filings"
+            title={
+              <>
+                Stakes and insider trades<span className="hide-sm">, last 30 days</span>
+              </>
+            }
+            right={<A to="/filings">All filings →</A>}
+          >
             {ev.data ? (
               <Grid
                 rows={events.slice(0, 8)}
                 href={(e) => (e.ticker ? `/s/${e.ticker}` : null)}
                 cols={[
-                  { key: 'f', label: 'Filed', render: (e) => <span className="dim num">{date(e.filing_date)}</span>, width: '72px' },
-                  { key: 'w', label: 'Investor', render: (e) => <Firm name={firmOf(firms, e.slug, e.manager)} /> },
-                  { key: 't', label: 'Stock', render: (e) => <StockCell t={e.ticker} name={issuerName(e.display_name || e.issuer)} former={e.former} /> },
+                  // Phones, as on the Stakes page: the date goes under the investor and the company's name under its ticker.
+                  { key: 'f', label: 'Filed', hideSm: true, render: (e) => <span className="dim num">{date(e.filing_date)}</span>, width: '72px' },
+                  {
+                    key: 'w',
+                    label: 'Investor',
+                    render: (e) => (
+                      <>
+                        <Firm name={firmOf(firms, e.slug, e.manager)} />
+                        <span className="row-sub stock-sub show-sm">Filed {date(e.filing_date)}</span>
+                      </>
+                    ),
+                  },
+                  {
+                    key: 't',
+                    label: 'Stock',
+                    render: (e) => (
+                      <>
+                        <StockCell t={e.ticker} name={issuerName(e.display_name || e.issuer)} former={e.former} />
+                        {e.ticker && <span className="row-sub stock-sub show-sm">{issuerName(e.display_name || e.issuer)}</span>}
+                      </>
+                    ),
+                  },
                   { key: 'a', label: '', render: (e) => <ActionTag e={e} /> },
                 ]}
                 empty="No filings in the last 30 days."
