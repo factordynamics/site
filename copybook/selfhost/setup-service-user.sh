@@ -52,7 +52,7 @@ AGE_SHA256=eb7dd1b518f0a307c99cd97782623c5321da049154b04acd2d98d21aa7bc9b2c     
 AGE_KEYGEN_SHA256=0a0009db842259d6717f7eeb30acb6b90d2a2eb924c6acd0a0db0ca1f1537899
 CLOUDFLARED_SHA256=1f99fb518b83dec2ba8d870a7cc991d82a77e6196295a3d2754ba17ab9f91872 # cloudflared 2026.10.7 linux-amd64 (github.com/cloudflare/cloudflared)
 # sha256 of `git ls-tree -r <commit> -- copybook/selfhost` without *.md, backup.pub and this script (code_hash below).
-SELFHOST_CODE_SHA256=74ddf8c7d578b861c3b1eae7405829240269b56c5061eae18ceef3b6551a2e5f
+SELFHOST_CODE_SHA256=6e60a24669443ea26625855c59f34da66f3ef2adaf988fb9fc038d4db8ee8702
 SECRET_KEYS='SESSION_SECRET|STRIPE_WEBHOOK_SECRET|STRIPE_SECRET_KEY|RESEND_API_KEY|HEALTH_TOKEN|CLOUDFLARE_API_TOKEN|CF_API_TOKEN'
 
 run() { if [ "$DRY" = 1 ]; then printf '+ %s\n' "$*"; else "$@"; fi; }
@@ -180,7 +180,7 @@ if [ "$DRY" = 1 ]; then echo "+ age-keygen (in memory) -> backup.pub; age -p -o 
   k=$("$DST/bin/age-keygen" 2>/dev/null)
   printf '%s\n' "$k" | "$DST/bin/age-keygen" -y > "$DST/backup.pub"; cp "$DST/backup.pub" "$STATUS/backup.pub"
   echo "new backup public key: $(cat "$DST/backup.pub")"
-  echo "Choose a passphrase for $OFFLINE_KEY (age asks twice) and save it in 1Password."
+  echo "Choose a passphrase for $OFFLINE_KEY (age asks twice) and save it in your password manager."
   printf '%s\n' "$k" | "$DST/bin/age" -p -o "$OFFLINE_KEY"; unset k
   echo "Check: enter the passphrase once more."
   [ "$(printf ok | "$DST/bin/age" -R "$DST/backup.pub" | "$DST/bin/age" -d -i "$OFFLINE_KEY")" = ok ] && echo "the stick's key opens backups made to the new public key" || die "offline key check failed"

@@ -19,13 +19,13 @@ changes (api.json and the front ends follow within 2 minutes).
    is copied from the agents' account. Only data (state, encrypted backups) and allow-listed secrets are copied.
    Ask the agent for "DRY_RUN=1 setup-service-user.sh" output from that morning first: it must say the pins match.
 
-2. Mount a USB stick and run, in your own terminal (not inside tmux, whose scrollback other processes of your account
+2. Mount a USB stick and run, in your own terminal (not inside a terminal multiplexer, whose scrollback other processes of your account
    can read):
      sudo OFFLINE_KEY=/run/media/$USER/<stick>/copybook-backup-key.age ~/copybook-api/ops/setup-service-user.sh
    It first builds and boot-tests the API as the service user while the current one keeps serving (a few minutes);
    any failed check stops it there with nothing changed for members. It makes a new backup key in memory: gene keeps
    only the public key, and the private key goes only to the file on your stick, protected by a passphrase it asks
-   for (twice, then once more to check). Save the passphrase in 1Password and copy the .age file to a second offline
+   for (twice, then once more to check). Save the passphrase in your password manager and copy the .age file to a second offline
    place: without it no backup can be decrypted. Last, it makes every sudo from your account ask for the password
    (no 5-minute reuse), so nothing else running as you can borrow a sudo you just typed; expect a prompt on each sudo
    below. If the API
@@ -129,7 +129,8 @@ What still isn't closed, stated plainly:
 - Agents share the machine's main user account, which keeps password sudo (every use needs your password, with no
   cached credential; its few no-password commands read no files). So isolation stops accidental reads, not a
   deliberately malicious agent: one could capture the password you type in that account. Do the steps above in a
-  plain terminal. Closing that needs a separate admin account that agents never run under, used from a text console
-  (Ctrl+Alt+F3), with sudo removed from this one: optional, about 10 minutes, ask the agent for the steps.
+  plain terminal. Closing that needs a separate admin account that agents never run under, used from a text console,
+  with sudo removed from this one. Optional and skipped by default (it changes daily use); revisit if a fund asks for
+  a tier that holds non-public positions.
 - The agents' Stripe key can read customers, which payments' work needs.
 - Older agent session logs keep what agents saw then (masked since Nov 11: counts, row IDs, a***@domain).
