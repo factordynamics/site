@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { TRIAL_DAYS } from '../config'
-import { ApiError, call, getToken } from '../lib/account'
+import { adoptSession, ApiError, call, getToken } from '../lib/account'
 import { utmTags } from '../lib/attribution'
 import { pricingTo } from '../lib/data'
 import { possessive } from '../lib/names.mjs'
@@ -15,16 +15,26 @@ import { Button, Check } from './ui'
 // (a trial button) and `secondary` makes Follow free the quieter button; `quietLabel` keeps the field's label for screen readers only, where the box already says it.
 export const CAP_MSG = 'Free accounts follow up to 10 investors. Remove one, or start Copy for unlimited follows.'
 
+// Account mail Resend refused (payments sends it after the 00:00 UTC reset).
+const queuedLine = (at?: string) => `Your sign-in link arrives after ${at ? localTime(at) : '00:00 UTC (7 pm ET)'}.`
 // What /signup emails, by subject as payments sends them (copybook/api free.ts), so a reader knows what to look for.
 const SUBJECT = { first: "You're on the Copybook weekly", follow: 'Follow saved. Your Copybook sign-in link', link: 'Your Copybook sign-in link' }
 // The reader's own clock, with its zone ("6:37 AM EST").
 const localTime = (t: number | string) => new Date(t).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
 export const inboxLine = (subject: string) => `Check your inbox: your sign-in link is in the email “${subject}”.`
 export const alreadyLine = (at?: string) => `You’re already signed up. Your sign-in link is in the email we sent ${at ? `at ${localTime(at)}` : 'within the last hour'}.`
-type SignupRes = { ok: boolean; created?: boolean; code?: string; sent_at?: string; sign_in_sent_at?: string; welcome?: string; following?: boolean; follow?: 'added' | 'already' | 'cap_reached' | 'sign_in'; sign_in_email?: 'not_needed' | 'sent' | 'rate_limited' | 'already_sent' }
-/** After a successful /signup: the line saying which email holds the sign-in link, or that one went out already. */
+type SignupRes = { ok: boolean; created?: boolean; code?: string; sent_at?: string; sign_in_sent_at?: string; welcome?: 'sent' | 'queued' | 'test_inbox' | 'not_sent'; send_at?: string; token?: string; session?: string; following?: boolean; follow?: 'added' | 'already' | 'cap_reached' | 'sign_in'; sign_in_email?: 'not_needed' | 'sent' | 'rate_limited' | 'already_sent' | 'queued' | 'test_inbox' | 'not_sent' }
+/** After a successful /signup: keeps a new account's provisional session (so this device is signed in at once),
+ *  and returns the line saying which email holds the sign-in link, when it comes, or that one went out already. */
 export function signupDone(r: SignupRes): string | null {
-  if (r.created) return inboxLine(SUBJECT.first)
+  const signedIn = Boolean(r.created && r.token)
+  if (signedIn) adoptSession(r.token!)
+  const here = signedIn ? ' You’re signed in on this device now.' : ''
+  const mail = r.created ? r.welcome : r.sign_in_email
+  if (mail === 'queued') return `${queuedLine(r.send_at)}${here}`
+  if (mail === 'test_inbox') return `A test address: the email went to the test inbox.${here}`
+  if (mail === 'not_sent') return signedIn ? `The email didn’t go out, but you’re signed in on this device now.` : 'The sign-in email didn’t go out. Please try again in a few minutes.'
+  if (r.created) return `${inboxLine(SUBJECT.first)}${here}`
   if (r.code === 'already_member' || r.code === 'already_sent' || r.sign_in_email === 'already_sent' || r.sign_in_email === 'rate_limited') return alreadyLine(r.sign_in_sent_at ?? r.sent_at)
   if (r.sign_in_email === 'sent') return inboxLine(r.follow === 'added' ? SUBJECT.follow : SUBJECT.link)
   return null

@@ -35,6 +35,8 @@ type StatusFile = {
   freshness?: { last_13f?: { manager: string; accepted_at: string } | null }
   /** Payments' check that the index.json fields alert routing reads are present and hold known values. */
   index_contract?: { ok: boolean; build?: string | null; problems?: string[]; checked_at?: string }
+  /** Payments' plain sending policy for account and alert email under the daily cap. */
+  mail_quota?: { policy?: string } | null
   restarts?: { unplanned_7d: number; deploys_7d: number; short_unconfirmed_7d: number; planned_7d?: number; rows?: { at: string; started_at?: string | null; down_seconds: number; kind: 'deploy' | 'unplanned' | 'short_unconfirmed' | 'planned'; build?: string | null; prev_build?: string | null; note?: string }[] }
 }
 const KIND = { deploy: 'Deploy', unplanned: 'Unplanned restart', short_unconfirmed: 'Brief restart we couldn’t attribute', planned: 'Planned' } as const
@@ -258,6 +260,7 @@ export function Status() {
                   </span>
                 )}
                 {pollerHost === 'cloudflare' || pollerHost == null ? 'Checks EDGAR every minute from Cloudflare, with the API machine as backup.' : 'Cloudflare’s checks paused; the API machine is polling EDGAR as backup.'}
+                {st.data?.mail_quota?.policy && <span className="mt-1.5 block text-[12.5px] leading-relaxed text-ink-3">Email: {st.data.mail_quota.policy}</span>}
               </Row>
               {rec && (
                 <Row name="Alert accuracy" tone={(typeof rec.wrong_undisclosed === 'number' ? rec.wrong_undisclosed + (rec.totals_undisclosed ?? 0) : recRows.length ? undisclosed.length : rec.wrong + (rec.wrong_totals ?? 0)) ? 'warn' : 'up'} state={rec.checked ? `Alerts reconciled: ${rec.checked} checked` : 'Alerts reconciled: not checked yet'}>

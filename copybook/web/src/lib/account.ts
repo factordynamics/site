@@ -256,6 +256,13 @@ export function sharedGet<T>(path: string): Promise<T> {
   return p
 }
 
+/** A new free account's provisional session (POST /signup 201 `token`): this device is signed in at once, until
+ *  the emailed link or a subscription replaces it. Pages mounted after this read it; nothing cached is kept. */
+export function adoptSession(token: string) {
+  setToken(token)
+  forgetMe()
+}
+
 export async function startSession(body: { checkout_session: string } | { login: string }) {
   const r = await call<{ token: string; member: Member }>('/session', { body })
   setToken(r.token)
