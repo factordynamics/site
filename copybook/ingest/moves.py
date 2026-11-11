@@ -348,7 +348,9 @@ def write_links(quarter: str | None) -> list[str]:
     held = {o: v if v.get("units_basis") else v | {"units_reason": v.get("units_reason") or "units unchecked: found "
             "this run; checked on the holders next run"} for o, v in links.items() if not v.get("units_basis")}
     links = {o: v for o, v in links.items() if o not in held}
+    from datetime import datetime, timezone
     write(DATA / "cusip_links.json", {
+        "generated": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "note": "Reissued CUSIPs, old -> new. Found in 13F filings (filers = how many showed it this run) and confirmed "
                 "by the SEC's Official List of Section 13(f) Securities, which deletes the old CUSIP in the list that "
                 "adds the new one (list_quarter, list_url); units, rights and warrants never link. Each link's share "
@@ -624,7 +626,9 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
         by_issuer: dict[str, float] = {}
         for r in rows:
             c = linked(r.get("cusip"))
-            if r.get("suspect_duplicate"):
+            if r.get("suspect_duplicate"):  # the filer is counted once, on the new code; its row says so
+                if len(c) >= 6:
+                    per.setdefault(c[:6], {}).setdefault(cik, [0, 0, 0, 0, False, 0, False, None, False, False])[8] = True
                 continue
             if len(c) < 6 or c.startswith("000000") or r.get("put_call") or r.get("shares_type") == "PRN" \
                     or not_common(r.get("title")):
@@ -636,8 +640,10 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
             bad_value = bool(r.get("price_outlier"))
             if bad_value:
                 r = r | {"value": 0, "prev_value": 0, "value_delta": 0}
-            a = per.setdefault(c[:6], {}).setdefault(cik, [0, 0, 0, 0, False, 0, False])
+            a = per.setdefault(c[:6], {}).setdefault(cik, [0, 0, 0, 0, False, 0, False, None, False, False])
             a[6] = a[6] or bad_value
+            a[9] = a[9] or bad_value
+            a[7] = a[7] or r.get("prev_cusip")
             # A held reissue (units unconfirmed) whose codes share an issuer prefix (BYND 08862E109 -> 08862E307):
             # its exit and new line would net to a false trim at mismatched units, so the change is unknown.
             if r.get("change") in ("new", "exited") and (r.get("cusip") or "").upper() in held_codes:
@@ -659,13 +665,14 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
     full.mkdir(exist_ok=True)
     index, keep, written, site = {}, set(), set(), {}
     cols = ["cik", "name", "slug", "type", "curated", "period", "shares", "prev_shares", "value", "prev_value", "change",
-            "weight", "accession", "filing_date", "accepted_at", "original_accession"]
+            "weight", "accession", "filing_date", "accepted_at", "original_accession", "prev_cusip", "suspect_duplicate",
+            "price_outlier", "value_basis"]
     for code, hs in per.items():
         blank = lambda: {"holders": 0, "new": 0, "added": 0, "trimmed": 0, "exited": 0, "unchanged": 0,
                          "no_prior": 0, "top10": 0, "over5pct": 0, "net": 0, "net_by_period": {}, "by_period": {}}
         rows, counts, deltas = [], blank(), {}
         lenses = {name: blank() for name in LENSES}
-        for cik, (sh, ps, v, pv, known, delta, unsure) in hs.items():
+        for cik, (sh, ps, v, pv, known, delta, unsure, prev_cusip, dup, bad_value) in hs.items():
             known = known and not unsure
             change = None
             if known:
@@ -690,7 +697,8 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                          q, round(sh), round(ps) if known else None, round(v), round(pv) if known else None, change,
                          round(weight, 6) if weight is not None else None,
                          fl["accession"], fl["filing_date"], fl["accepted_at"],
-                         fl.get("original_accession") or fl["accession"]])
+                         fl.get("original_accession") or fl["accession"], prev_cusip, dup,
+                         bad_value, "filed_price_outlier" if bad_value else "filed"])
         if not counts["holders"]:
             continue
         # net is one quarter's trades, as /v1: the latest quarter any holder reports (net_quarter); net_by_period

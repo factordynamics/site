@@ -669,7 +669,8 @@ def cusip_links() -> dict[str, dict]:
                                                      "quarter and the new one the next"}
                 continue
             v["units_check"] = {k: c.get(k) for k in ("to_quarter", "holders", "exact_at_1", "exact_at_ratio",
-                                                     "median_ratio", "split_ratio", "evidence")}
+                                                     "median_ratio", "split_ratio", "evidence")} | {
+                k: c[k] for k in ("cash_per_old_share", "note") if c.get(k) is not None}
             if not c.get("units_ok"):
                 HELD_LINKS[o] = v | {"units_reason": c.get("reason")}
                 continue
@@ -872,7 +873,14 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
                     h = h | {"suspect_units": True}
                 elif abs(delta) > 1.5 * max(h["value"], p["value"]):  # no trade is worth more than that
                     delta = h["value"] - p["value"]
-        rows.append(h | {"row_type": "holding"} | units(h, p, r, k, q_to, q_from) | extra(p, change, delta, ds, r, prn))
+        row = h | {"row_type": "holding"} | units(h, p, r, k, q_to, q_from) | extra(p, change, delta, ds, r, prn)
+        # A linked reissue with a share ratio (HON 1-for-2) whose filer still reports the pre-split count under the new
+        # CUSIP (Newport Trust 6,432,598 -> 12,865,197): not a purchase. Flagged, change unknown, out of net and alerts.
+        if p is not None and not prn and p["cusip"] != h["cusip"] and r != 1.0 and amount(p) > 0 \
+                and abs(now / amount(p) - 1) <= 0.005:
+            row |= {"suspect_units": True, "suspect_units_basis": "own_prior", "suspect_reason": "reissue_ratio_not_applied",
+                    "change": None, "share_change": None, "value_delta": 0, "delta_pct_of_book": 0.0}
+        rows.append(row)
     for key in dup:  # the duplicate's own prior line is the new code's position, not a sale
         before.pop(key, None)
     for p in sorted(before.values(), key=lambda x: x["value"], reverse=True):

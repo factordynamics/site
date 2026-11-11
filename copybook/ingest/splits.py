@@ -55,7 +55,14 @@ FILED = {
                       "value_paid_out": True},
     ("29390K102", "2026Q2"): {"ratio": 0.333333, "ticker": "NVRI", "issuer": "Enviri",
                       "evidence": '8-K 0001193125-26-251752 (June 1, 2026): each Enviri share became one CLEH share, then one New Enviri share per three CLEH shares; CLEH shares then became $15.00 cash each (Veolia). A separation, not a split: 1/3 share plus cash per old share',
-                      "value_paid_out": True},
+                      "value_paid_out": True, "cash_per_old_share": 15.0,
+                      "note": "Each old Enviri share became 1/3 New Enviri share plus $15.00 cash; the cash leg is not a sale"},
+    ("26614N201", "2026Q2"): {"ratio": 0.333333, "ticker": "DD", "issuer": "DuPont de Nemours",
+                      "evidence": '8-K 0001666700-26-000046: 1-for-3 reverse stock split',
+                      "value_paid_out": False},
+    ("87877F103", "2026Q3"): {"ratio": 1.0, "ticker": "TGLS", "issuer": "Tecnoglass",
+                      "evidence": '8-K 0001493152-26-032342: re-domicile from the Cayman Islands to Florida, July 7, 2026; each ordinary share became one share of common stock (new CUSIP 87877F 103)',
+                      "value_paid_out": False},
     ("08862E307", "2026Q3"): {"ratio": 0.033333, "ticker": "BYND", "issuer": "Beyond Meat",
                       "evidence": '8-K 0001655210-26-000059: 1-for-30 reverse stock split, effective Aug 13, 2026',
                       "value_paid_out": False},
@@ -206,23 +213,39 @@ def relink(book: dict[str, tuple[float, float]], links: dict[str, str]) -> dict[
     return out
 
 
-def link_check(pairs: list[tuple[dict, dict]], old: str, new: str, split: float | None) -> dict | None:
-    """Whether a reissue's share units match: holders of old last quarter and new this one. units_ok when a split was
-    found on the linked pair (applied as a split) or holders at exactly 1:1 are at least 10% and outnumber those at
-    any other split ratio. Otherwise the link would net mismatched units (a reverse split without enough holders)."""
+# holders_1to1 needs this many holders at exactly 1:1, this share of them, and the median within MEDIAN_1TO1 of 1:1.
+# A 25% share would unlink XOM (514 of 2,333 at 1:1, median 1.0) and TEVA (62 of 257): holders trade through a
+# reissue, so the median carries the evidence and the floor stops a pair resting on 2 holders (DMRA 2 of 16).
+MIN_EXACT_1TO1, MIN_SHARE_1TO1, MEDIAN_1TO1 = 5, 0.10, 0.01
+
+
+def link_check(pairs: list[tuple[dict, dict]], old: str, new: str, split: float | None, filed: dict | None = None) -> dict | None:
+    """Whether a reissue's share units match: holders of old last quarter and new this one. units_ok when the issuer's
+    filing states the ratio (FILED, 1:1 included: TGLS's re-domicile), a split was found on the linked pair, or at
+    least MIN_EXACT_1TO1 holders and MIN_SHARE_1TO1 of them sit at exactly 1:1, outnumbering any other ratio, with the
+    median within MEDIAN_1TO1 of 1:1.
+    Otherwise the link would net mismatched units or rest on too little evidence (DMRA: 2 of 16), and is held."""
     rs = [b[new][0] / a[old][0] for a, b in pairs if a.get(old, (0, 0))[0] > 0 and b.get(new, (0, 0))[0] > 0]
     if not rs:
         return None
+    if filed:
+        split = filed["ratio"]
     exact = lambda k: sum(1 for r in rs if abs(r / k - 1) <= EXACT)
     at1 = exact(1)
     other = max(exact(k) for k in RATIOS)
     med = statistics.median(rs)
-    ok = bool(split and split != 1) or (at1 >= max(1, 0.1 * len(rs)) and at1 > other)
-    return {"new": new, "holders": len(rs), "exact_at_1": at1, "exact_at_ratio": exact(split) if split and split != 1 else at1,
-            "median_ratio": round(med, 4),
-            "split_ratio": split if split and split != 1 else None, "units_ok": ok,
-            "reason": None if ok else (f"units unconfirmed: median share ratio {med:.3f} over {len(rs)} holders, "
-                                       f"{at1} at exactly 1:1, no split found")}
+    by_holders = at1 >= max(MIN_EXACT_1TO1, MIN_SHARE_1TO1 * len(rs)) and at1 > other and abs(med - 1) <= MEDIAN_1TO1
+    ok = bool(filed) or bool(split and split != 1) or by_holders
+    out = {"new": new, "holders": len(rs), "exact_at_1": at1,
+           "exact_at_ratio": exact(split) if split and split != 1 else at1, "median_ratio": round(med, 4),
+           "split_ratio": split if filed or (split and split != 1) else None, "units_ok": ok,
+           "reason": None if ok else (f"units unconfirmed: median share ratio {med:.3f} over {len(rs)} holders, "
+                                      f"{at1} at exactly 1:1 (needs {MIN_EXACT_1TO1} and {MIN_SHARE_1TO1:.0%}, median "
+                                      f"within {MEDIAN_1TO1:.0%} of 1), no split or filing found")}
+    for k in ("cash_per_old_share", "note"):
+        if filed and filed.get(k) is not None:
+            out[k] = filed[k]
+    return out
 
 
 def update(transitions: dict[tuple[str, str], dict[str, tuple[dict, dict]]], issuers: dict[str, dict],
@@ -236,6 +259,8 @@ def update(transitions: dict[tuple[str, str], dict[str, tuple[dict, dict]]], iss
     seen: dict[str, dict] = {}
     from ingest.datasets import prev_quarter
     for (cusip, q_to), f in FILED.items():
+        if f["ratio"] == 1:
+            continue
         known[(cusip, q_to)] = {"cusip": cusip, "ticker": f["ticker"], "issuer": f["issuer"],
                                 "from_quarter": prev_quarter(q_to), "to_quarter": q_to,
                                 "effective_after": quarter_end(prev_quarter(q_to)).isoformat(),
@@ -279,9 +304,10 @@ def update(transitions: dict[tuple[str, str], dict[str, tuple[dict, dict]]], iss
             print(f"splits: {meta.get('ticker') or cusip} {q_to} ratio {ev['ratio']} "
                   f"({ev['exact_holders']}/{ev['holders']} holders exact, XBRL {xr})")
         for old, new in (links or {}).items():
-            c = link_check(list(pairs.values()), old, new, (known.get((new, q_to)) or {}).get("ratio"))
+            f = FILED.get((new, q_to))
+            c = link_check(list(pairs.values()), old, new, (known.get((new, q_to)) or {}).get("ratio"), f)
             if c:
-                c["evidence"] = (known.get((new, q_to)) or {}).get("evidence") or (
+                c["evidence"] = (f or known.get((new, q_to)) or {}).get("evidence") or (
                     "holders and SEC XBRL shares outstanding" if c.get("split_ratio") else "holders at exactly 1:1")
             if c and c["holders"] > (seen.get(old) or {}).get("holders", 0):
                 seen[old] = c | {"to_quarter": q_to, "pairs": len(pairs)}

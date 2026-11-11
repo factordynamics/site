@@ -201,6 +201,12 @@ class MoveMathTest(unittest.TestCase):
         cur = {"quarter": "2026Q2", "holdings": [self.row("438516205", "HON", 22_778_297, 22_778_297 * 198)]}
         r = build.with_changes(cur, prev)[0]
         self.assertEqual((r["change"], r["prev_shares"], r["share_change"]), ("trimmed", 24_415_938, -1_637_641))
+        # Newport Trust still reported the pre-split count under the new CUSIP: no 2x purchase, flagged instead.
+        prev = {"quarter": "2026Q1", "holdings": [self.row("438516106", "HON", 6_432_598, 6_432_598 * 200)]}
+        cur = {"quarter": "2026Q2", "holdings": [self.row("438516205", "HON", 6_432_598, 6_432_598 * 198)]}
+        r = build.with_changes(cur, prev)[0]
+        self.assertEqual((r["change"], r["suspect_units"], r["suspect_reason"], r["value_delta"]),
+                         (None, True, "reissue_ratio_not_applied", 0))
 
     def test_reissue_links_only_through_cusip_links(self):
         # ONEOK 682680103 -> 30609A109 (SEC 13(f) list, 2026Q3), across free-text titles.
