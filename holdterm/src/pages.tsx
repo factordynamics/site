@@ -735,7 +735,7 @@ export function Fund({ slug }: { slug: string }) {
   const [tab, setTab] = useState<ITab>('holdings')
   // A missing or held-back book is a real "not found"; anything else (offline, a mirror hiccup) can be retried.
   if (b.error) return missing(b.error) ? <NotFound what={`no 13F book for "${slug}"`} /> : <Failed error={b.error} what="this portfolio" />
-  if (!b.data) return <PageLoading what="Loading this portfolio" stats={6} rows={15} />
+  if (!b.data) return <PageLoading what="Loading this portfolio" stats={5} rows={15} />
   const book = b.data
   title(`${book.firm} 13F portfolio`)
   const filer = meta && meta.filer_slug !== slug ? ix.data?.managers.find((m) => m.slug === meta.filer_slug) : null
@@ -768,23 +768,21 @@ export function Fund({ slug }: { slug: string }) {
             {book.firm} {!inRoster(slug) && <span className="badge">Not one of the investors Holdterm follows</span>} {stale && <span className="badge warn">Latest usable 13F is for {quarterLabel(book.quarter)}</span>}
           </h1>
           {book.pm && <p className="lede">Portfolio manager {book.pm}</p>}
+          {/* One plain line: which report, when, and a link to it. The legal filer name and CIK are in the link's tooltip. */}
           <div className="meta">
             <span>
-              Source:{' '}
-              <a href={book.sec_url} target="_blank" rel="noreferrer">
-                {quarterLabel(book.quarter)} 13F, filed {date(book.filing_date)} on SEC EDGAR ↗
-              </a>
+              {quarterLabel(book.quarter)} 13F<span className="hide-sm"> · quarter ended {date(book.report_date)}</span> · filed {date(book.filing_date)}, {plural(lagDays(book), 'day')} later
             </span>
-            <span title={`SEC accession ${book.accession}`}>
-              Filed as {filer ? filer.name : book.name} (CIK {(filer?.cik ?? book.cik).replace(/^0+/, '')})
-            </span>
+            <a href={book.sec_url} target="_blank" rel="noreferrer" title={`Filed as ${filer ? filer.name : book.name} (CIK ${(filer?.cik ?? book.cik).replace(/^0+/, '')}), SEC accession ${book.accession}`}>
+              View the filing on SEC EDGAR ↗
+            </a>
+            {filer && firmName(filer.slug, filer.name) !== book.firm && <span>Filed by {firmName(filer.slug, filer.name)}</span>}
           </div>
         </div>
         <Follow kind="investors" id={slug} />
       </div>
-      <FundSummary book={book} live={live} buys={buys} sells={sells} bought={bought} sold={-sold} top10={top10} newN={stock.filter((x) => x.change === 'new').length} exitN={stock.filter((x) => x.change === 'exited').length} />
+      <FundSummary book={book} live={live} buys={buys} sells={sells} top10={top10} />
       <div className="stats fund-stats">
-        <Stat label="as of" value={quarterLabel(book.quarter)} sub={`Quarter ended ${day(book.report_date)}, filed ${day(book.filing_date)}`} />
         <Stat
           label="portfolio value"
           value={usd(book.long_value)}
@@ -904,31 +902,28 @@ function noteAmount(h: Holding) {
   const p = h.principal_amount || h.shares
   return p ? `${usd(p)} principal` : '—'
 }
-const longDate = (d: string) => `${['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][Number(d.slice(5, 7)) - 1]} ${Number(d.slice(8, 10))}, ${d.slice(0, 4)}`
 const plural = (n: number, one: string, many = one + 's') => `${num(n)} ${n === 1 ? one : many}`
 const nameOf = (h: Holding) => issuerName(h.display_name || h.issuer).replace(/\s+(class|cl\.?)\s+[a-z]\b.*$/i, '')
 /** "a, b and c" */
 const listing = (xs: (string | false | 0)[]) => xs.filter(Boolean).join(', ').replace(/, ([^,]*)$/, ' and $1')
 /** The fund's latest 13F in two or three plain sentences, for readers who don't parse stat cards. */
-function FundSummary({ book, live, buys, sells, bought, sold, top10, newN, exitN }: { book: Book; live: Holding[]; buys: Holding[]; sells: Holding[]; bought: number; sold: number; top10: number; newN: number; exitN: number }) {
+const lagDays = (b: Book) => Math.round((Date.parse(b.filing_date) - Date.parse(b.report_date)) / 86_400_000)
+function FundSummary({ book, live, buys, sells, top10 }: { book: Book; live: Holding[]; buys: Holding[]; sells: Holding[]; top10: number }) {
   const top = [...live].sort((a, c) => c.weight - a.weight)[0]
-  const lag = Math.round((Date.parse(book.filing_date) - Date.parse(book.report_date)) / 86_400_000)
   const shape = top10 >= 0.8 ? ', a very concentrated portfolio' : top10 >= 0.6 ? ', a concentrated portfolio' : ''
   return (
     <p className="summary">
-      On {longDate(book.report_date)}, {book.firm} held {plural(live.length, 'US-listed stock')} worth {usd(book.long_value)}, reported in a 13F filed {lag} days later.{' '}
+      {/* The cards below give the totals; the summary says what they can't: how concentrated it is and what moved most. */}
       {top && (
         <>
-          Its largest holding is {nameOf(top)} at {pct(top.weight, 1)}
+          {book.firm}’s largest holding is {nameOf(top)} at {pct(top.weight, 1)}
           {live.length > 10 ? `, and the ten largest make up ${pct(top10, 0)}${shape}` : ''}.{' '}
         </>
       )}
       {!book.prev_long_value ? (
         <>This is its first 13F on file, so there are no trades to compare.</>
-      ) : bought || sold ? (
+      ) : buys.length || sells.length ? (
         <>
-          Over the quarter it bought {usd(bought)} of stock and sold {usd(sold)}
-          {newN || exitN ? `, opening ${plural(newN, 'new position')} and closing ${num(exitN)}` : ''}.{' '}
           {listing([buys[0] && `The biggest buy was ${nameOf(buys[0])}`, sells[0] && `${buys[0] ? 'the' : 'The'} biggest sale ${nameOf(sells[0])}`])}.
         </>
       ) : (
