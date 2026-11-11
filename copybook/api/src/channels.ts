@@ -485,10 +485,40 @@ function hookMoves(m: Moves): Moves {
   // No direction either: an add or trim reads change \"unknown\" (as hl/'s held rows; \"trimmed\" would assert a trade);
   // new and exited stand. value and prev_value are the facts.
   // A \"value\" row stays in its group (a real trade by shares) with value_delta null; it is outside bought_usd and sold_usd.
-  const v = (rows: MoveRow[]) => rows.map(({ value_change: _vc, ...r }: MoveRow & { value_change?: number }) => (r.unreliable === 'value' ? { ...r, value_delta: null as unknown as number, delta_pct_of_book: null, counted: false } : r));
+  const v = (rows: MoveRow[]) => rows.map(({ value_change: _vc, class_switch: _cs, ...r }: MoveRow & { value_change?: number }) => (r.unreliable === 'value' ? { ...r, value_delta: null as unknown as number, delta_pct_of_book: null, counted: false } : r));
   const g = { ...c, new: v(c.new), added: v(c.added), trimmed: v(c.trimmed), exited: v(c.exited) };
   // A row stored with a computed value_change (alerts from before b884d6f) loses it: value and prev_value are the facts.
   return c.not_counted?.length ? { ...g, not_counted: c.not_counted.map(({ value_change: _vc, ...r }: MoveRow & { value_change?: number }) => ({ ...r, change: r.change === 'new' || r.change === 'exited' ? r.change : 'unknown', value_delta: null as unknown as number, delta_pct_of_book: null, counted: false })) } : g;
+}
+
+/**
+ * An endpoint pinned to the summed rows (webhook_schema_version 2026-11-09, until Feb 22, 2027): the class lines of one
+ * issuer (tagged issuer_cusip6) as one row, as pinned /v1 rows: cusip null, the issuer's change (mixed when the classes
+ * went opposite ways, listed under added or trimmed by its net), dollar sums, shares null, each class in classes[].
+ * Bodies without class lines are unchanged.
+ */
+export function pinnedMoves(c: Channels, body: string): string {
+  if (c.webhook?.schema_version !== SUMMED_PIN.version || !body.includes('"issuer_cusip6"')) return body;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const b = JSON.parse(body) as { moves?: Record<string, any> };
+  const m = b.moves;
+  if (!m) return body;
+  const lists = ['new', 'added', 'trimmed', 'exited'] as const;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const groups = new Map<string, any[]>();
+  for (const l of lists) for (const r of m[l] ?? []) if (r.issuer_cusip6) groups.set(`${r.issuer_cusip6}|${r.put_call ?? ''}`, [...(groups.get(`${r.issuer_cusip6}|${r.put_call ?? ''}`) ?? []), r]);
+  const out: Record<string, unknown[]> = Object.fromEntries(lists.map((l) => [l, (m[l] ?? []).filter((r: { issuer_cusip6?: string }) => !r.issuer_cusip6)]));
+  for (const g of groups.values()) {
+    const sum = (k: string) => (g.some((r) => r[k] == null) ? null : g.reduce((s, r) => s + r[k], 0));
+    const head = [...g].sort((x, y) => Math.abs(y.value_delta ?? 0) - Math.abs(x.value_delta ?? 0))[0];
+    const change = head.issuer_change;
+    const delta = sum('value_delta');
+    const row = { ...head, cusip: null, change, net_direction: (delta ?? 0) > 0 ? 'buy' : (delta ?? 0) < 0 ? 'sell' : 'flat', shares: null, prev_shares: null, value: sum('value'), prev_value: sum('prev_value'), value_delta: delta, delta_pct_of_book: sum('delta_pct_of_book'), classes: g.map((r) => ({ cusip: r.cusip, ticker: r.ticker, change: r.change, shares: r.shares, prev_shares: r.prev_shares, value: r.value, prev_value: r.prev_value, value_delta: r.value_delta })) };
+    delete row.class_mix;
+    const to = change === 'mixed' ? ((delta ?? 0) >= 0 ? 'added' : 'trimmed') : change;
+    out[to].push(row);
+  }
+  return JSON.stringify({ ...b, moves: { ...m, ...out } });
 }
 
 export function webhookPayloads(env: Env, filings: Alert13F[], events: AlertEvent[], detectedAt: number): { id: string; body: string }[] {
@@ -589,7 +619,7 @@ export async function sendWebhooks(env: Env, m: Member, c: Channels, filings: Al
     // The same endpoint gets each alert once, however many members (a Fund team) connected it.
     if (posted.has(`${c.webhook.url}|${p.id}`)) continue;
     posted.add(`${c.webhook.url}|${p.id}`);
-    const body = withNotice(c, p.body, now);
+    const body = withNotice(c, pinnedMoves(c, p.body), now);
     const r = await sendWebhook(c, p.id, body);
     if (!r) continue;
     if (/^2\d\d$/.test(r.status)) noteDelivered('webhook', filings.filter((a) => p.id.startsWith(a.accession)), events.filter((e) => p.id.startsWith(e.id)));

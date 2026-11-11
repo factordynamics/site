@@ -3814,6 +3814,76 @@ describe('copybook api', () => {
     expect(sent).toHaveLength(0);
   });
 
+  it('per-class moves (Nov 23): each class priced on its own; with the schema-6 index, class lines are counted and tagged, a mixed issuer reads "A sold, B bought", pinned webhooks get the summed row', async () => {
+    const { perShareMedians, withClasses } = await import('../src/alerts');
+    const { movesOf } = await import('../src/edgar');
+    const { pinnedMoves } = await import('../src/channels');
+    // gene's hl/084670 and hl/02079K, 2026Q3 (Nov 11): summed filers (schema 5, cusip null, classes[]) and one-class ones.
+    type C = [string, string, number, number, number, number];
+    const A = '084670108', B = '084670702', GL = '02079K305', GC = '02079K107';
+    const filers: Record<string, C[][]> = {
+      '084670': [
+        [[A, 'BRK.A', 6959, 14533, 5198407795, 10883037050], [B, 'BRK.B', 9597287, 10400007, 4778969198, 5204059591]], // FMR
+        [[B, 'BRK.B', 10680834, 10534399, 5318521053, 5271307686], [A, 'BRK.A', 245, 247, 183016225, 184965950]], // BNY Mellon
+        [[B, 'BRK.B', 7385848, 7475812, 3678059824, 3740583089], [A, 'BRK.A', 3, 3, 2241015, 2246550]], // Dimensional
+        [[A, 'BRK.A', 294, 294, 219619470, 220161900]], [[A, 'BRK.A', 110, 110, 82170550, 82373500]], [[A, 'BRK.A', 66, 66, 49302330, 49424100]],
+        [[B, 'BRK.B', 42631638, 41525290, 21199946939, 20742623735]], [[B, 'BRK.B', 4558653, 3348757, 2269981261, 1675684515]], [[B, 'BRK.B', 4241407, 3946324, 2112008616, 1974701066]],
+      ],
+      '02079K': [
+        [[GL, 'GOOGL', 247668909, 250714005, 85217918055, 89597664038], [GC, 'GOOG', 116879493, 121958993, 39825518868, 43091771129]], // FMR
+        [[GL, 'GOOGL', 151886875, 150078198, 52098746537, 53474675238], [GC, 'GOOG', 116620784, 114777169, 39565527037, 40378891105]], // Geode
+        [[GC, 'GOOG', 30852760, 31462848, 10512769381, 11116768056], [GL, 'GOOGL', 30318266, 31851371, 10431909051, 11382724332]], // Nuveen
+        [[GC, 'GOOG', 27347980, 27472939, 9318550705, 9707013537]], [[GC, 'GOOG', 2104137, 2129711, 716963641, 752490788]], [[GC, 'GOOG', 2099142, 3291594, 715261645, 1163018908]],
+        [[GL, 'GOOGL', 5308000, 5469800, 1826801280, 1953046788]], [[GL, 'GOOGL', 4463569, 5491465, 1535824822, 1962484847]], [[GL, 'GOOGL', 4300481, 4607821, 1479709502, 1646696991]],
+      ],
+    };
+    const sum = (cs: C[], i: number) => cs.reduce((s, c) => s + Number(c[i]), 0);
+    // Schema 5 as ingest publishes it today: a summed row's shares are BRK.B equivalents (A x 1500), GOOG/GOOGL's null.
+    const v5 = (code: string) => JSON.stringify({ issuer: code, schema: 5, columns: ['cik', 'period', 'shares', 'prev_shares', 'value', 'prev_value', 'put_call', 'classes', 'cusip', 'issuer_cusip6'], rows: filers[code].map((cs, i) => {
+      const brk = (c: C, k: number) => Number(c[k]) * (c[0] === A ? 1500 : 1);
+      const one = cs.length === 1;
+      return [String(i + 1).padStart(10, '0'), '2026Q3', one ? cs[0][2] : code === '084670' ? cs.reduce((s, c) => s + brk(c, 2), 0) : null, one ? cs[0][3] : code === '084670' ? cs.reduce((s, c) => s + brk(c, 3), 0) : null, sum(cs, 4), sum(cs, 5), null, one ? null : cs.map((c) => ({ cusip: c[0], ticker: c[1], shares: c[2], prev_shares: c[3], value: c[4], prev_value: c[5] })), one ? cs[0][0] : null, code];
+    }) });
+    // Schema 6 (Nov 21): one row per class.
+    const v6 = (code: string) => JSON.stringify({ issuer: code, schema: 6, columns: ['cik', 'period', 'shares', 'prev_shares', 'value', 'prev_value', 'put_call', 'cusip', 'ticker', 'issuer_cusip6'], rows: filers[code].flatMap((cs, i) => cs.map((c) => [String(i + 1).padStart(10, '0'), '2026Q3', c[2], c[3], c[4], c[5], null, c[0], c[1], code])) });
+    for (const code of ['084670', '02079K']) await hist.put(`hl/${code}.json`, v5(code));
+    // The price check reads each class's own figures: BRK.A at its $747,005 (the whole index's median is BRK.B's $498).
+    const med = await perShareMedians(env, [A, B, GC], '2026Q3');
+    expect([med.get(A)!.cur, Math.round(med.get(B)!.cur!), Math.round(med.get(GC)!.cur! * 100) / 100]).toEqual([747005, 498, 340.74]);
+    // A filer that switched GOOGL to GOOG and trimmed BRK.A for BRK.B.
+    const mv = (ticker: string, cusip: string, change: string, shares: number, prev_shares: number, value: number, value_delta: number) => ({ change, ticker, display_name: null, issuer: ticker, cusip, put_call: null, shares, prev_shares, value, value_delta, delta_pct_of_book: null });
+    const changed = [mv('GOOGL', GL, 'exited', 0, 1_000_000, 0, -344_080_000), mv('GOOG', GC, 'new', 1_000_000, 0, 340_740_000, 340_740_000), mv('BRK.A', A, 'trimmed', 8, 10, 5_976_040, -1_494_010), mv('BRK.B', B, 'added', 4000, 1000, 1_991_800, 1_493_850)];
+    const r0 = { moves: movesOf(changed), changed };
+    // Before the schema-6 index nothing changes: the GOOGL/GOOG pair is held as a possible CUSIP change.
+    expect(await withClasses(env, '2026Q3', r0)).toBe(r0);
+    expect([r0.moves.new.length, r0.moves.exited.length, r0.moves.not_counted?.map((x) => [x.ticker, x.cusip_pair])]).toEqual([0, 0, [['GOOGL', true], ['GOOG', true]]]);
+    for (const code of ['084670', '02079K']) await hist.put(`hl/${code}.json`, v6(code));
+    const r = await withClasses(env, '2026Q3', r0);
+    const lines = [...r.moves.new, ...r.moves.added, ...r.moves.trimmed, ...r.moves.exited].map((x) => [x.ticker, x.change, x.issuer_cusip6, x.issuer_change, x.class_mix]);
+    expect(lines).toEqual([
+      ['GOOG', 'new', '02079K', 'mixed', 'GOOGL sold, GOOG bought'],
+      ['BRK.B', 'added', '084670', 'mixed', 'BRK.A sold, BRK.B bought'],
+      ['BRK.A', 'trimmed', '084670', 'mixed', 'BRK.A sold, BRK.B bought'],
+      ['GOOGL', 'exited', '02079K', 'mixed', 'GOOGL sold, GOOG bought'],
+    ]);
+    expect([r.moves.not_counted, r.moves.bought_usd, r.moves.sold_usd]).toEqual([undefined, 340_740_000 + 1_493_850, 344_080_000 + 1_494_010]);
+    // The email: one line per class, each saying the classes went opposite ways.
+    const a = { slug: 'x', slugs: ['x'], manager: 'Test', name: 'Test LP', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-12', accession: '0000000001-26-000001', sec_url: 'https://www.sec.gov/x', accepted: '2026-11-12T20:05:04Z', moves: r.moves, tickers: [] };
+    const mail = alertMail(env, 'x@example.com', [a], [], { investors: [], stocks: [], owned: [] } as never);
+    expect([mail.text.match(/mixed: GOOGL sold, GOOG bought/g)?.length, mail.text.match(/mixed: BRK\.A sold, BRK\.B bought/g)?.length, mail.html!.includes('mixed: BRK.A sold, BRK.B bought')]).toEqual([2, 2, true]);
+    // The webhook: keyed by class, tagged; an endpoint pinned to 2026-11-09 gets each issuer as one summed row.
+    const body = webhookPayloads(env, [a as never], [], Date.now())[0].body;
+    const hook = JSON.parse(body).moves;
+    expect([hook.new[0].cusip, hook.new[0].issuer_cusip6, hook.new[0].issuer_change, 'class_switch' in hook.new[0]]).toEqual([GC, '02079K', 'mixed', false]);
+    expect(pinnedMoves({ webhook: { url: 'https://h', secret: 's' } } as never, body)).toBe(body);
+    const pinned = JSON.parse(pinnedMoves({ webhook: { url: 'https://h', secret: 's', schema_version: '2026-11-09' } } as never, body)).moves;
+    expect([pinned.new, pinned.added, pinned.exited]).toEqual([[], [], []]);
+    expect(pinned.trimmed.map((x: Record<string, unknown>) => [x.issuer_cusip6, x.cusip, x.change, x.net_direction, x.value_delta, x.shares, (x.classes as { cusip: string }[]).map((c) => c.cusip)])).toEqual([
+      ['02079K', null, 'mixed', 'sell', -3_340_000, null, [GC, GL]],
+      ['084670', null, 'mixed', 'sell', -160, null, [B, A]],
+    ]);
+  });
+
   it('13F alert dollars at real scale: Berkshire Q2 2026 GOOGL add of $8,770,349,040 reads +$8.8B', () => {
     const row = (ticker: string, shares: number, prev_shares: number, value: number, value_delta: number, d: number) => ({ ticker, display_name: null, issuer: ticker, cusip: ticker, put_call: null, shares, prev_shares, value, value_delta, delta_pct_of_book: d });
     // From EDGAR 0001193125-26-352200 vs 0001193125-26-226661.

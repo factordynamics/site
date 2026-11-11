@@ -3,7 +3,7 @@ import { refreshBooks } from './book';
 import { countAlerts, logSent, pausedFilingMail, resumeUrl, runRevenue, yearlyPeakLine } from './revenue';
 import { DEADLINES, deadlineMs, inFilingWeek } from './seasons';
 import { alertMail, digestMail, FOOTER, type FeedItem, feedItems, holdtermAlertMail, type Mail, sendMail, weeklyNamesMail } from './email';
-import { guardShares, markUnreliable, unreliableSide, offFilers, reissuedTicker, isReissued, reissueRatio, loadReissues, bookSuspect, companyFilings, computeMoves, filingId, posKey, gateMoves, gateRow, movesOf, netRenamed, type Consensus, type HeldRow, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, prevQuarterEnd, prior13F, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
+import { guardShares, markUnreliable, unreliableSide, offFilers, reissuedTicker, isReissued, reissueRatio, loadReissues, bookSuspect, companyFilings, computeMoves, tagClasses, filingId, posKey, gateMoves, gateRow, movesOf, netRenamed, type Consensus, type HeldRow, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, prevQuarterEnd, prior13F, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
 import { isActive, isPaused, isPro, testAddress, type Env, type Member } from './env';
 import { getFollows, getMember, listMembers, putMember, type Follows } from './members';
 import { unsubscribeUrl } from './free';
@@ -967,10 +967,44 @@ export async function nameRows(env: Env, m: Moves | undefined, extra: any[] = []
 
 const prevQuarter = (q: string) => (q.endsWith('Q1') ? `${Number(q.slice(0, 4)) - 1}Q4` : `${q.slice(0, 5)}${Number(q[5]) - 1}`);
 
+/** An issuer's holder index (R2 hl/{issuer6}.json, else the public top 25). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function holderIndex(env: Env, code: string): Promise<any | null> {
+  const obj = await env.HIST.get(`hl/${code}.json`);
+  const res = obj ? null : await fetch(`${env.DATA_URL}hl/${code}.json`);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const d: any = obj ? await new Response(obj.body).json() : res?.ok ? await res.json() : null;
+  return d?.columns && d.rows ? d : null;
+}
 /**
- * Other filers' value per share for each CUSIP, from the holder index (R2 hl/{issuer6}.json, else the public
- * top 25): the median for `quarter` (rows of that period) and for the quarter before (their prior values),
- * each from at least 3 filers. Share rows only.
+ * One class's figures from each holder-index row: the row itself on a one-class row (its cusip), each classes[] entry on
+ * a summed one (schema 5: cusip null, BRK's shares in BRK.B units), so a class is never priced with another's shares.
+ * A row from an index without CUSIPs (before schema 5) is the issuer's.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function classEntries(d: any): { period: unknown; put_call: unknown; cusip: string | null; ticker: string | null; shares: number; prev_shares: number; value: number; prev_value: number }[] {
+  const at = (k: string) => (d.columns as string[]).indexOf(k);
+  const [iP, iS, iPs, iV, iPv, iPc, iC, iCl, iT] = ['period', 'shares', 'prev_shares', 'value', 'prev_value', 'put_call', 'cusip', 'classes', 'ticker'].map(at);
+  return (d.rows as unknown[][]).flatMap((r) => {
+    const cls = iCl >= 0 && Array.isArray(r[iCl]) && (r[iCl] as unknown[]).length ? (r[iCl] as Record<string, unknown>[]) : null;
+    const one = (c: Record<string, unknown> | null) => ({
+      period: r[iP],
+      put_call: c ? (c.put_call ?? r[iPc]) : r[iPc],
+      cusip: (c ? (c.cusip as string | null) : iC >= 0 ? (r[iC] as string | null) : null)?.toUpperCase() ?? null,
+      ticker: (c ? (c.ticker as string | null) : iT >= 0 ? (r[iT] as string | null) : null) ?? null,
+      shares: Number(c ? c.shares : r[iS]),
+      prev_shares: Number(c ? c.prev_shares : r[iPs]),
+      value: Number(c ? c.value : r[iV]),
+      prev_value: Number(c ? c.prev_value : r[iPv]),
+    });
+    return cls ? cls.map(one) : [one(null)];
+  });
+}
+
+/**
+ * Other filers' value per share for each CUSIP, from the holder index: the median for `quarter` (rows of that period)
+ * and for the quarter before (their prior values), each from at least 3 filers. Share rows of that class only: the
+ * issuer's whole index priced BRK.A at BRK.B's $498 (gene's hl/084670, Nov 11; BRK.A's own median is $747,005).
  */
 export async function perShareMedians(env: Env, cusips: string[], quarter: string): Promise<Map<string, PerShare>> {
   const out = new Map<string, PerShare>();
@@ -978,22 +1012,15 @@ export async function perShareMedians(env: Env, cusips: string[], quarter: strin
   const median = (xs: number[]) => (xs.length >= 3 ? [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)] : null);
   for (const cusip of cusips) {
     try {
-      const code = cusip.slice(0, 6).toUpperCase();
-      const obj = await env.HIST.get(`hl/${code}.json`);
-      const res = obj ? null : await fetch(`${env.DATA_URL}hl/${code}.json`);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const d: any = obj ? await new Response(obj.body).json() : res?.ok ? await res.json() : null;
-      if (!d?.columns || !d.rows) continue;
-      const at = (k: string) => (d.columns as string[]).indexOf(k);
-      const [iP, iS, iPs, iV, iPv, iPc] = ['period', 'shares', 'prev_shares', 'value', 'prev_value', 'put_call'].map(at);
+      const d = await holderIndex(env, cusip.slice(0, 6).toUpperCase());
+      if (!d) continue;
       const cur: number[] = [];
       const prev: number[] = [];
-      for (const r of d.rows as unknown[][]) {
-        if (iPc >= 0 && r[iPc]) continue;
-        const s = Number(r[iS]), v = Number(r[iV]), ps = Number(r[iPs]), pv = Number(r[iPv]);
-        if (r[iP] === quarter && s > 0 && v > 0) cur.push(v / s);
-        if (r[iP] === prevQ && s > 0 && v > 0) prev.push(v / s);
-        if (r[iP] === quarter && ps > 0 && pv > 0) prev.push(pv / ps);
+      for (const e of classEntries(d)) {
+        if (e.put_call || (e.cusip && e.cusip !== cusip.toUpperCase())) continue;
+        if (e.period === quarter && e.shares > 0 && e.value > 0) cur.push(e.value / e.shares);
+        if (e.period === prevQ && e.shares > 0 && e.value > 0) prev.push(e.value / e.shares);
+        if (e.period === quarter && e.prev_shares > 0 && e.prev_value > 0) prev.push(e.prev_value / e.prev_shares);
       }
       out.set(cusip, { cur: median(cur), prev: median(prev) });
     } catch {
@@ -1001,6 +1028,42 @@ export async function perShareMedians(env: Env, cusips: string[], quarter: strin
     }
   }
   return out;
+}
+
+/**
+ * Per-class moves (the lead, Nov 11; from ingest's schema-6 holder index, the Nov 21 data): for a filing with lines on
+ * two or more CUSIPs of one issuer, the issuer's listed classes (held by 3+ filers this quarter) and their tickers.
+ * Before schema 6 nothing is listed, so alerts read as they did.
+ */
+export async function liveClasses(env: Env, rows: MoveRow[], quarter: string): Promise<Map<string, Map<string, string | null>>> {
+  const by = new Map<string, Set<string>>();
+  for (const r of rows) if (r.cusip && !r.prn) by.set(r.cusip.slice(0, 6).toUpperCase(), (by.get(r.cusip.slice(0, 6).toUpperCase()) ?? new Set()).add(r.cusip.toUpperCase()));
+  const out = new Map<string, Map<string, string | null>>();
+  for (const [code, set] of by) {
+    if (set.size < 2) continue;
+    try {
+      const d = await holderIndex(env, code);
+      if (!d || Number(d.schema ?? 0) < 6) continue;
+      const n = new Map<string, { filers: number; ticker: string | null }>();
+      for (const e of classEntries(d)) {
+        if (e.period !== quarter || e.put_call || !e.cusip || !(e.shares > 0)) continue;
+        const x = n.get(e.cusip) ?? { filers: 0, ticker: e.ticker };
+        n.set(e.cusip, { filers: x.filers + 1, ticker: x.ticker ?? e.ticker });
+      }
+      const cls = new Map([...n].filter(([, x]) => x.filers >= 3).map(([c, x]) => [c, x.ticker] as [string, string | null]));
+      if (cls.size >= 2) out.set(code, cls);
+    } catch {
+      // The lines stay as they were (an exit and a new line held as a possible CUSIP change).
+    }
+  }
+  return out;
+}
+/** A filing's moves with its class lines tagged (tagClasses) once ingest's per-class index lists the classes. */
+export async function withClasses<T extends { moves: Moves; changed: MoveRow[] }>(env: Env, quarter: string, r: T): Promise<T> {
+  const live = await liveClasses(env, r.changed, quarter);
+  if (!live.size) return r;
+  const changed = tagClasses(r.changed, live);
+  return changed === r.changed ? r : { ...r, changed, moves: movesOf(changed) };
 }
 
 /** Stock splits in the data run's splits.json that took effect in this quarter, by CUSIP and ticker (a share-count change that's no unit error). */
@@ -1205,7 +1268,7 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
           await lookupTickers(env, exitedNamed ? [...r.moves.new, ...r.changed.filter((x) => x.change === 'new').sort((a, b) => b.value - a.value).slice(0, 30)] : r.moves.new);
           r = netRenamed(r);
           // The publish gate: a row whose price doesn't check out is named "pending check" and left out.
-          const g = gateMoves(r, book, await splitsFor(env, q), await consensusFor(env, q, r.changed.map((x) => x.cusip)));
+          const g = await withClasses(env, q, gateMoves(r, book, await splitsFor(env, q), await consensusFor(env, q, r.changed.map((x) => x.cusip))));
           r = g;
           held = g.held;
           moves = r.moves;
@@ -1434,7 +1497,7 @@ export async function geneMoves(env: Env, now: number, budgetMs = 45_000): Promi
       // EDGAR tables carry no tickers: look up every changed row, so owned and watched names match and a CUSIP
       // change nets into one share-based move.
       await lookupTickers(env, raw.changed);
-      const r = gateMoves(netRenamed(raw), book, await splitsFor(env, q), await consensusFor(env, q, raw.changed.map((x) => x.cusip)));
+      const r = await withClasses(env, q, gateMoves(netRenamed(raw), book, await splitsFor(env, q), await consensusFor(env, q, raw.changed.map((x) => x.cusip))));
       ready.push({ ...p, moves: r.moves, changed: keepChanged(r.changed), tickers: [...new Set([...r.changed, ...r.held].map((x) => x.ticker).filter((t): t is string => !!t))], followup: true, moves_pending: undefined, held: r.held.length ? r.held : undefined });
     } catch (e) {
       failed.push(`${p.accession}: ${e}`);
@@ -2142,7 +2205,7 @@ export async function reconcileDry(env: Env, now: number, o: { offset?: number; 
           const q = quarterOf(f.report_date);
           const raw = computeMoves(f.holdings, book, undefined, await splitsFor(env, q), await perShareMedians(env, perShareSuspects(f.holdings, book).slice(0, 6), q));
           await lookupTickers(env, raw.changed);
-          const g = gateMoves(netRenamed(raw), book, await splitsFor(env, q), await consensusFor(env, q, raw.changed.map((x) => x.cusip)));
+          const g = await withClasses(env, q, gateMoves(netRenamed(raw), book, await splitsFor(env, q), await consensusFor(env, q, raw.changed.map((x) => x.cusip))));
           const nowRows = alertRows(g.moves);
           const nowByRow = classify(a, nowRows, compareToBuild(nowRows, b.rows), new Map(), b.rows);
           const diff = nowRows.size ? [...nowByRow, ...totalRows(a, [g.moves], nowByRow, b.rows, g.held)] : nowByRow;

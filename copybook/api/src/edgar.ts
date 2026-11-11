@@ -123,6 +123,16 @@ export interface MoveRow {
   matched_cusip?: string | null;
   /** Ingest's flag: this line and another CUSIP of the same issuer are one position filed under the wrong class. */
   cusip_mismatch?: boolean;
+  /**
+   * Per-class moves (Nov 23, from ingest's schema-6 holder index): a line on one of several listed classes of an issuer
+   * that moved in this filing (tagClasses). issuer_change is the classes together (one word when they agree, else
+   * mixed), class_mix "BRK.A sold, BRK.B bought" when they went opposite ways; class_switch keeps such a pair (an exit
+   * of one class and a new line in another) counted rather than held as a possible CUSIP change.
+   */
+  issuer_cusip6?: string;
+  issuer_change?: 'new' | 'added' | 'trimmed' | 'exited' | 'mixed';
+  class_mix?: string;
+  class_switch?: boolean;
   /** On a line whose value can't be trusted: other filers' median value per share, for \"filed value implausible\". */
   median_per_share?: number;
   /** Ingest's reason for holding the line (hl/ held_reason), e.g. mixed_scale or pre_split. */
@@ -705,6 +715,33 @@ export function gateMoves(r: { moves: Moves; changed: MoveRow[] }, prev: Positio
 }
 
 /**
+ * Lines on two or more listed classes of one issuer in a filing (the lead's Nov 23 per-class moves): `live` is each
+ * issuer's classes by CUSIP with their tickers, from ingest's schema-6 holder index (empty before it: nothing changes).
+ * Each such line stays its own move and is tagged with the issuer's combined change, and "A sold, B bought" when the
+ * classes went opposite ways. A line on a CUSIP the index doesn't list as a class is left as it was.
+ */
+export function tagClasses(rows: MoveRow[], live: Map<string, Map<string, string | null>>): MoveRow[] {
+  const key = (r: MoveRow) => `${r.cusip.slice(0, 6).toUpperCase()}|${(r.put_call ?? '').toUpperCase()}`;
+  const groups = new Map<string, MoveRow[]>();
+  for (const r of rows) {
+    const cls = live.get(r.cusip.slice(0, 6).toUpperCase());
+    if (!r.prn && r.change && r.change !== 'unchanged' && r.change !== 'exchanged' && cls?.has(r.cusip.toUpperCase())) groups.set(key(r), [...(groups.get(key(r)) ?? []), r]);
+  }
+  const tag = new Map<MoveRow, Partial<MoveRow>>();
+  for (const [k, g] of groups) {
+    if (new Set(g.map((r) => r.cusip.toUpperCase())).size < 2) continue;
+    const cls = live.get(k.slice(0, 6))!;
+    const name = (r: MoveRow) => cls.get(r.cusip.toUpperCase()) || r.ticker || r.cusip;
+    const buy = g.filter((r) => r.change === 'new' || r.change === 'added');
+    const sell = g.filter((r) => r.change === 'exited' || r.change === 'trimmed');
+    const issuer_change = buy.length && sell.length ? 'mixed' : buy.length ? (buy.every((r) => r.change === 'new') ? 'new' : 'added') : sell.every((r) => r.change === 'exited') ? 'exited' : 'trimmed';
+    const class_mix = issuer_change === 'mixed' ? `${sell.map(name).join(', ')} sold, ${buy.map(name).join(', ')} bought` : undefined;
+    for (const r of g) tag.set(r, { issuer_cusip6: k.slice(0, 6), issuer_change, ...(class_mix ? { class_mix } : {}), class_switch: true });
+  }
+  return tag.size ? rows.map((r) => (tag.has(r) ? { ...r, ...tag.get(r) } : r)) : rows;
+}
+
+/**
  * An exit and a new line in one filing under one issuer prefix (the CUSIP's first 6 characters) and option type, one of
  * each: maybe one position filed under the wrong class (Mizuho Securities USA's ORCL, Q2 68389X204 -> Q3 68389X105,
  * ingest's cusip_mismatch) or a real class switch (GOOG/GOOGL, ingest's class_switch). Alerts are built before ingest
@@ -722,7 +759,8 @@ export function holdCusipPairs(rows: MoveRow[]): MoveRow[] {
   }
   // Ingest's cusip_mismatch flag holds a line on its own, pair or not.
   const pairs = new Set([...n].filter(([, c]) => c.new === 1 && c.exited === 1).map(([k]) => k));
-  const hold = (r: MoveRow) => !r.cusip_pair && ((open(r) && pairs.has(key(r))) || r.cusip_mismatch === true);
+  // Two listed classes of one issuer (tagClasses, from ingest's per-class index) are a class switch, not a CUSIP change.
+  const hold = (r: MoveRow) => !r.cusip_pair && ((open(r) && pairs.has(key(r)) && !r.class_switch) || r.cusip_mismatch === true);
   // The two lines name one issuer, by its ticker where either has one (\"ORCL\", not \"ORCL\" beside \"Oracle\").
   const name = new Map<string, MoveRow>();
   for (const r of rows) if (hold(r) && r.ticker && !name.has(key(r))) name.set(key(r), r);

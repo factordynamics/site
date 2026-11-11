@@ -533,6 +533,8 @@ const rowName = (r: MoveRow) => (r.ticker || (r.display_name || r.issuer || r.cu
 /** 4,380,656 as "4.38M", 44,294 as "44K". */
 const compact = (n: number) => (n >= 1e6 ? `${+(n / 1e6).toPrecision(3)}M` : n >= 1e4 ? `${Math.round(n / 1e3)}K` : n.toLocaleString('en-US'));
 /** " · Unusual size · check the filing" after a large but real move. */
+/** A class line of an issuer whose classes went opposite ways (tagClasses): " · mixed: BRK.A sold, BRK.B bought". */
+const classNote = (r: MoveRow) => (r.class_mix ? ` · mixed: ${r.class_mix}` : '');
 const odd = (r: MoveRow) => `${r.unusual ? ` · ${UNUSUAL}` : ''}${r.filer_value && r.unreliable !== 'value' ? ` · ${FILER_VALUE}` : ''}${unreliableNote(r) ? ` · ${unreliableNote(r)}` : ''}`;
 
 /** A marked row's note (markUnreliable): what can't be trusted, and that it isn't in the totals. */
@@ -810,7 +812,7 @@ function filingBlock(env: Env, a0: Alert13F, f: Follows): string {
         if (misfiled(r)) return `${rowName(r)} ${shareMove(r)} (${usd(r.value_delta)})${misfiledNote(a, r)}${flag(r.ticker, f)}`;
         const pos = label === 'Trimmed' || label === 'Added' ? positionChange(label, r) : '';
         const bits = [pos && (pos.startsWith('sold ') ? `${pos} of the position` : pos), bookPct(r) && `${bookPct(r)} of book`].filter(Boolean);
-        return `${rowName(r)} ${amount(r)}${bits.length ? ` (${bits.join(', ')})` : ''}${flag(r.ticker, f)}${odd(r)}`;
+        return `${rowName(r)} ${amount(r)}${bits.length ? ` (${bits.join(', ')})` : ''}${flag(r.ticker, f)}${odd(r)}${classNote(r)}`;
       });
       lines.push(`  ${label}: ${parts.join(', ')}`);
     }
@@ -1052,7 +1054,7 @@ function filingHtml(env: Env, a0: Alert13F, f: Follows): string {
     out.push(table(['Stock', 'Shares', 'Value', '% of book'], a.reveal.rows.map((r) => [`<b>${esc(rowName(r))}</b>${esc(flag(r.ticker, f))}`, r.shares.toLocaleString('en-US'), usd(r.value, false), bookPct(r)]), [1, 2, 3]));
   } else if (mv) {
     out.push(`<p style="margin:2px 0">Bought ${usd(mv.bought_usd, false)}, sold ${usd(mv.sold_usd, false)} this quarter.</p>`);
-    const rows = MOVE_LABELS.flatMap(([label, k]) => mv[k].map((r) => [esc(label), `<b>${esc(rowName(r))}</b>${esc(flag(r.ticker, f))}${misfiled(r) ? `<br><span style="color:#6b7280;font-size:12px">${esc(misfiledNote(a, r).slice(2))}</span>` : ''}${r.unusual ? `<br><span style="color:#b45309;font-size:12px">${UNUSUAL}</span>` : ''}${r.filer_value && r.unreliable !== 'value' ? `<br><span style="color:#b45309;font-size:12px">${esc(FILER_VALUE)}</span>` : ''}${unreliableNote(r) ? `<br><span style="color:#b45309;font-size:12px">${esc(unreliableNote(r))}</span>` : ''}`, amount(r), `<span style="white-space:nowrap">${esc(positionChange(label, r))}</span>`, r.unreliable === 'value' ? '' : bookPct(r)]));
+    const rows = MOVE_LABELS.flatMap(([label, k]) => mv[k].map((r) => [esc(label), `<b>${esc(rowName(r))}</b>${esc(flag(r.ticker, f))}${misfiled(r) ? `<br><span style="color:#6b7280;font-size:12px">${esc(misfiledNote(a, r).slice(2))}</span>` : ''}${r.class_mix ? `<br><span style="color:#6b7280;font-size:12px">mixed: ${esc(r.class_mix)}</span>` : ''}${r.unusual ? `<br><span style="color:#b45309;font-size:12px">${UNUSUAL}</span>` : ''}${r.filer_value && r.unreliable !== 'value' ? `<br><span style="color:#b45309;font-size:12px">${esc(FILER_VALUE)}</span>` : ''}${unreliableNote(r) ? `<br><span style="color:#b45309;font-size:12px">${esc(unreliableNote(r))}</span>` : ''}`, amount(r), `<span style="white-space:nowrap">${esc(positionChange(label, r))}</span>`, r.unreliable === 'value' ? '' : bookPct(r)]));
     out.push(table(['Move', 'Stock', 'Value change', 'Position', 'Trade, % of book'], rows, [2, 4]));
     for (const r of mv.exchanged ?? []) out.push(`<p style="margin:6px 0 2px">${esc(exchangeLine(r))}</p>`);
     if (a.held?.length || a.moves?.not_counted?.length) out.push(`<p style="margin:6px 0 2px;color:#b45309">${esc(heldLine(a))}</p>`);
