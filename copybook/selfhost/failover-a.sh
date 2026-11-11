@@ -33,6 +33,13 @@ case "${1:-status}" in
     for _ in $(seq 36); do [ "$(curl -s -m 10 -o /dev/null -w '%{http_code}' "$WD/health")" = 200 ] && { echo "Worker serving"; exit 0; }; sleep 5; done
     echo "Worker still redirecting after 3 min; check the loop guard"; exit 1 ;;
   back)
+    # First gene applies what members changed on the Worker (removed seats, deleted keys), so a revocation made during
+    # the failover holds the moment gene serves again, not at gene's next minute.
+    if [ -n "${HEALTH_TOKEN:-}" ]; then
+      echo "gene sync before fail-back: $(curl -s -m 30 -X POST -H "authorization: Bearer $HEALTH_TOKEN" http://127.0.0.1:8787/ops/sync)"
+    else
+      echo "HEALTH_TOKEN not set: gene applies the Worker's changes at its next minute"
+    fi
     base=$(cat "$ROOT/state.api-published"); put "$base"; rm -f "$PIN"
     echo "tunnel base $base; /health $(curl -s -m 15 -o /dev/null -w '%{http_code}' "$base/health")" ;;
   status)

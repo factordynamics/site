@@ -2743,13 +2743,13 @@ describe('copybook api', () => {
   it('a retired copy (MOVED_TO) sends every request to the same path on the live host', async () => {
     // It follows the runner's api.json (the current tunnel), so emailed links on this hostname survive a tunnel move.
     const orig = globalThis.fetch;
-    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => (String(u) === 'https://pub.test/api.json' ? Response.json({ api: 'https://abc-def.trycloudflare.com/copybook', at: '2026-11-09T05:30:24Z' }) : orig(u, init)));
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => (String(u).split('?')[0] === 'https://pub.test/api.json' ? Response.json({ api: 'https://abc-def.trycloudflare.com/copybook', at: '2026-11-09T05:30:24Z' }) : orig(u, init)));
     // Every API request is answered on this name from the live host, Authorization and body included (the quant: a 307 to
     // the tunnel lost the API key on the hop and leaked the tunnel's name).
     const LIVE = 'https://abc-def.trycloudflare.com/copybook';
     const seen: { url: string; method: string; auth: string | null; proxy: string | null; body: string }[] = [];
     vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => {
-      if (String(u) === 'https://pub.test/api.json') return Response.json({ api: LIVE, at: '2026-11-09T05:30:24Z' });
+      if (String(u).split('?')[0] === 'https://pub.test/api.json') return Response.json({ api: LIVE, at: '2026-11-09T05:30:24Z' });
       if (!String(u).startsWith(LIVE)) return orig(u, init);
       const h = new Headers(init?.headers);
       seen.push({ url: String(u), method: init?.method ?? 'GET', auth: h.get('authorization'), proxy: h.get('x-copybook-proxy'), body: init?.body ? await new Response(init.body).text() : '' });
@@ -2776,6 +2776,20 @@ describe('copybook api', () => {
       const hb = await (await at(hp)).json();
       expect([hb.this_host, hb.proxied, hb.api_host, hb.upstream, typeof hb.by_kind?.real]).toEqual(['cloudflare', true, 'gene', { this_host: 'gene', by_kind: { real: 2 }, api_build: 'gene00000001' }, 'number']);
     }
+    // api.json moves (to this Worker, then back): within 10 s every request follows it (the drill: isolates kept the
+    // old base 61 s, so a revoked key still worked on the host that had stopped serving).
+    const live0 = LIVE;
+    let api = 'https://copybook-api.factordynamics.workers.dev';
+    const proxied = async () => (await (await at('/health')).json()).proxied;
+    const fetch1 = globalThis.fetch;
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => (String(u).split('?')[0] === 'https://pub.test/api.json' ? Response.json({ api }) : fetch1(u, init)));
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 6_000 });
+    expect(await proxied()).toBe(false);
+    api = live0;
+    vi.setSystemTime(Date.now() + 6_000);
+    expect(await proxied()).toBe(true);
+    vi.useRealTimers();
+    vi.stubGlobal('fetch', fetch1);
     // The live host unreachable: 503 with Retry-After, not a redirect.
     const down = await at('/v1/down'.replace('/v1', ''));
     expect([down.status, down.headers.get('retry-after'), down.headers.get('location')]).toEqual([503, '30', null]);
@@ -2795,7 +2809,7 @@ describe('copybook api', () => {
     // A private feed is fetched from the live host and answered here (200), so readers keep this name.
     const tok = 'feedtok_abcdefghijklmnopqrstu';
     vi.stubGlobal('fetch', async (u: string, init?: RequestInit) =>
-      String(u) === 'https://pub.test/api.json' ? Response.json({ api: 'https://abc-def.trycloudflare.com/copybook', at: '2026-11-09T05:30:24Z' })
+      String(u).split('?')[0] === 'https://pub.test/api.json' ? Response.json({ api: 'https://abc-def.trycloudflare.com/copybook', at: '2026-11-09T05:30:24Z' })
       : String(u) === `https://abc-def.trycloudflare.com/copybook/feed/${tok}.json` ? Response.json({ version: 'https://jsonfeed.org/version/1.1', items: [] }, { headers: { 'content-type': 'application/feed+json' } })
       : orig(u, init));
     const wenv = { ...env, MOVED_TO: 'https://gene.tail70ba3.ts.net/copybook/', PUBLIC_URL: 'https://pub.test/' } as Env;
@@ -2803,7 +2817,7 @@ describe('copybook api', () => {
     expect([fr.status, fr.headers.get('content-type'), fr.headers.get('location'), (await fr.json()).version]).toEqual([200, 'application/feed+json', null, 'https://jsonfeed.org/version/1.1']);
     // No response from the Worker is a permanent redirect.
     vi.stubGlobal('fetch', async (u: string, init?: RequestInit) =>
-      String(u) === 'https://pub.test/api.json' ? Response.json({ api: LIVE }) : String(u).startsWith(LIVE) ? new Response(null, { status: 308, headers: { location: `${LIVE}/x` } }) : orig(u, init));
+      String(u).split('?')[0] === 'https://pub.test/api.json' ? Response.json({ api: LIVE }) : String(u).startsWith(LIVE) ? new Response(null, { status: 308, headers: { location: `${LIVE}/x` } }) : orig(u, init));
     for (const [method, path] of [['GET', '/me'], ['POST', '/resume?t=x'], ['GET', '/v1/filers'], ['GET', '/unsubscribe?t=x'], ['HEAD', `/feed/${tok}.rss`], ['GET', '/']]) {
       const res = await worker.fetch(new Request(`https://copybook-api.factordynamics.workers.dev${path}`, { method }), wenv);
       expect([path, [301, 308].includes(res.status)]).toEqual([path, false]);
@@ -2814,9 +2828,9 @@ describe('copybook api', () => {
     await env.DB.put('feed:cus_feedhost', JSON.stringify([{ id: 'i1', url: 'https://gene.tail70ba3.ts.net/copybook/why?t=1', title: 'T', text: 'See https://abc-def.trycloudflare.com/copybook/why?t=2', published: '2026-11-11T00:00:00Z' }]));
     const gf = await (await handleRequest(new Request(`https://api.test/feed/${tok}.json`), { ...env, FEED_URL: 'https://gene.tail70ba3.ts.net/copybook' } as Env)).json();
     expect([gf.feed_url, gf.items[0].url, gf.items[0].content_text]).toEqual([`https://copybook-api.factordynamics.workers.dev/feed/${tok}.json`, 'https://copybook-api.factordynamics.workers.dev/why?t=1', 'See https://copybook-api.factordynamics.workers.dev/why?t=2']);
-    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => (String(u) === 'https://pub.test/api.json' ? Response.json({ api: 'https://abc-def.trycloudflare.com/copybook', at: '2026-11-09T05:30:24Z' }) : orig(u, init)));
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => (String(u).split('?')[0] === 'https://pub.test/api.json' ? Response.json({ api: 'https://abc-def.trycloudflare.com/copybook', at: '2026-11-09T05:30:24Z' }) : orig(u, init)));
     // Failed over to this host (api.json names it, read again after the minute's cache): served here, no 308 to itself.
-    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => (String(u) === 'https://pub.test/api.json' ? Response.json({ api: 'https://copybook-api.factordynamics.workers.dev' }) : orig(u, init)));
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => (String(u).split('?')[0] === 'https://pub.test/api.json' ? Response.json({ api: 'https://copybook-api.factordynamics.workers.dev' }) : orig(u, init)));
     const later = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 61_000);
     const own = await worker.fetch(new Request('https://copybook-api.factordynamics.workers.dev/health'), { ...env, MOVED_TO: 'https://gene.tail70ba3.ts.net/copybook/', PUBLIC_URL: 'https://pub.test/' } as Env);
     later.mockRestore();

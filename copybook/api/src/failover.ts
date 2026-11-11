@@ -201,7 +201,7 @@ async function apply(env: Env, mine: Index, cap = isCloudflare(env) ? 40 : 2000)
  * gene, every minute: what changed in its KV since the last minute (any writer: requests, Durable Objects, its
  * own cron), published; then Cloudflare's changes applied (and remembered as published, so they aren't echoed).
  */
-async function geneSync(env: Env, now: number): Promise<{ published: number; applied: number }> {
+export async function geneSync(env: Env, now: number): Promise<{ published: number; applied: number }> {
   const hashes = JSON.parse((await env.DB.get('sync:hashes')) ?? '{}') as Record<string, string>;
   const seen = new Set<string>();
   const changed = new Map<string, number>();

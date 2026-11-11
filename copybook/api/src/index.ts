@@ -688,6 +688,13 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
 
   // Operator: test contact requests (reviewers' probes) out of the store, by time prefix of their id (lead:{ISO time}-…).
   // Only ones marked test, unless all is true; a real one also comes off leads:count. Emails come back masked.
+  // gene, before a fail-back (failover-a.sh back): what members changed on the Worker (removed seats, deleted keys) is
+  // applied now, not at the next minute, so a revocation made during the failover holds the moment gene serves again.
+  if (req.method === 'POST' && path === '/ops/sync') {
+    const fo = await import('./failover');
+    if (!(await isOperator(env, req)) || fo.isCloudflare(env)) return json({ ok: false, error: 'not found' }, 404, h);
+    return json({ ok: true, ...(await fo.geneSync(env, Date.now())) }, 200, h);
+  }
   if (req.method === 'POST' && path === '/ops/erase-leads') {
     if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
     const b = await body(req);
@@ -1866,12 +1873,15 @@ async function serve(req: Request, env: Env): Promise<Response> {
   return Promise.race([handled, late]).finally(() => clearTimeout(timer));
 }
 
+const MOVED_TTL_MS = 5_000;
 let moved: { at: number; base: string } | null = null;
 async function movedBase(env: Env): Promise<string> {
-  if (moved && Date.now() - moved.at < 60_000) return moved.base;
+  // At most 5 s old in an isolate, and fetched under a 5-s key so no edge copy is older: within 10 s of api.json moving,
+  // every isolate serves (or stops serving) here, so a revocation holds on whichever host serves (the drill: 61 s).
+  if (moved && Date.now() - moved.at < MOVED_TTL_MS) return moved.base;
   let base = env.MOVED_TO!.replace(/\/+$/, '');
   try {
-    const r = env.PUBLIC_URL ? await fetch(`${env.PUBLIC_URL}api.json`, { signal: AbortSignal.timeout(2000) }) : null;
+    const r = env.PUBLIC_URL ? await fetch(`${env.PUBLIC_URL}api.json?t=${Math.floor(Date.now() / MOVED_TTL_MS)}`, { signal: AbortSignal.timeout(2000) }) : null;
     const api = r?.ok ? ((await r.json()) as { api?: string }).api : undefined;
     if (api && /^https:\/\/[a-z0-9.-]+(\/[a-z0-9-]+)?\/?$/.test(api)) base = api.replace(/\/+$/, '');
   } catch {
