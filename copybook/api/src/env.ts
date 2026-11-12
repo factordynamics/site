@@ -155,6 +155,8 @@ export interface Member {
   marketing_off?: boolean;
   /** A free signup that later subscribed: the paid member's customer id. */
   converted_to?: string;
+  /** The earlier member this record took over at a repeat checkout (carryPriorMember): that address had an account. */
+  merged_from?: string;
   /** The trial-ended note offering monthly, sent for this subscription. */
   winback_sent?: string;
   /** Referral: the code that brought this member, and the referrer's customer id. */

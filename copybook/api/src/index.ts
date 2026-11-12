@@ -1363,7 +1363,10 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       const prior = email ? await memberByEmail(env, email) : null;
       const freeRec = email ? (JSON.parse((await env.DB.get(`cus:${await (await import('./free')).freeId(email)}`)) ?? 'null') as Member | null) : null;
       const before = (r: Member | null) => !!r && (!r.created_at || Date.parse(r.created_at) < startedAt);
-      const existed = before(freeRec) || (!!prior && prior.customer !== cs.customer && before(prior));
+      // Whatever customer Stripe used and whichever lands first: when the webhook has already merged an earlier account into
+      // this checkout's customer (carryPriorMember), the merged record keeps the earlier created_at, so it counts too (the
+      // trader, Nov 12: a repeat checkout by a test address got a session and the earlier account's view).
+      const existed = before(freeRec) || before(prior) || !!prior?.merged_from;
       const sub = await stripe(env, 'GET', `subscriptions/${cs.subscription}`);
       // A second free trial for this email: cancelled ($0), no member; /account/ offers plain checkout and a sign-in.
       if (await (await import('./referrals')).blockRepeatTrial(env, sub, cs.customer_details?.email)) return json({ ok: true, code: 'trial_used', sign_in: 'email', member: null, error: "You've already used your free trial. Subscribe to keep Copy: $9/mo or $79/yr (founding price)." }, 200, h);

@@ -1030,6 +1030,7 @@ export async function carryPriorMember(env: Env, m: Member): Promise<Member> {
     alerts: Array.isArray(prior.alerts) || Array.isArray(m.alerts) ? [...new Set([...(Array.isArray(m.alerts) ? m.alerts : []), ...(Array.isArray(prior.alerts) ? prior.alerts : []), ...(investors ?? [])])] : (m.alerts ?? prior.alerts),
     source: m.source ?? prior.source ?? null,
     created_at: prior.created_at ?? m.created_at,
+    merged_from: prior.customer,
     ...(prior.verified ? { verified: true, email_pending: undefined } : {}),
     ...(prior.paused_at ? { paused_at: prior.paused_at } : {}),
     welcomed: m.welcomed || prior.welcomed,

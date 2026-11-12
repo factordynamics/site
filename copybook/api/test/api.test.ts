@@ -472,6 +472,11 @@ describe('copybook api', () => {
     await webhook({ type: 'checkout.session.completed', data: { object: { mode: 'subscription', subscription: 'sub_rp2', customer: 'cus_rp2', customer_details: { email: 'RP@Example.com' } } } });
     await webhook({ type: 'customer.subscription.created', data: { object: { ...(stripeObjects['subscriptions/sub_rp2'] as object), metadata: { trial_repeat_blocked: 'true' } } } });
     expect([await env.DB.get('cus:cus_rp2'), await env.DB.get('email:rp@example.com'), Number(await env.DB.get('ops:trial_repeat_blocked')) - blocked0, JSON.parse((await env.DB.get('follows:cus_rp'))!).investors]).toEqual([null, 'cus_rp', 1, ['irving-kahn']]);
+    // Its browser, back after the webhook (the real trial_used path): no session and no view of the earlier account.
+    stripeObjects['checkout/sessions/cs_test_rp2'] = { id: 'cs_test_rp2', status: 'complete', created: now() - 20, subscription: 'sub_rp2', customer: 'cus_rp2', customer_details: { email: 'rp@example.com' } };
+    stripeObjects['subscriptions/sub_rp2'] = { ...(stripeObjects['subscriptions/sub_rp2'] as object), metadata: { trial_repeat_blocked: 'true' } };
+    const rp = await (await call('/session', { body: { checkout_session: 'cs_test_rp2' } })).json();
+    expect([rp.code, rp.token, rp.member]).toEqual(['trial_used', undefined, null]);
     // A test address keeps its repeat trial (critics walk it again) but still merges into one account: the new record
     // takes the earlier one's follows, and the earlier one opens it.
     await putMember('cus_tm1', 'copybook-test-merge@example.com', 'trialing', ['irving-kahn']);
@@ -498,6 +503,21 @@ describe('copybook api', () => {
     await webhook({ type: 'customer.subscription.created', data: { object: stripeObjects['subscriptions/sub_cv'] } });
     const conv = await (await call('/session', { body: { checkout_session: 'cs_test_conv' } })).json();
     expect([conv.ok, conv.code, conv.token]).toEqual([true, 'existing_account', undefined]);
+    // The same when the webhook merged the earlier account into the new customer first (the trader, Nov 12: a repeat
+    // checkout by copybook-test-trader-2017 read "Welcome to Copy"): typing an existing member's address at checkout never
+    // signs this browser in or shows that account, on the test-exempt trial path, a paid checkout, and an unconfirmed one.
+    for (const [old, nu, email, status, verified] of [['cus_xa1', 'cus_xa2', 'copybook-test-xacct@example.com', 'trialing', true], ['cus_xb1', 'cus_xb2', 'real-xacct@example.com', 'active', true], ['cus_xc1', 'cus_xc2', 'copybook-test-unconf@example.com', 'trialing', false]] as const) {
+      await env.DB.put(`cus:${old}`, JSON.stringify({ customer: old, email, status: 'canceled', plan: 'copy', subscription: `sub_${old}`, created_at: new Date(Date.now() - 86_400_000).toISOString(), ...(verified ? { verified: true } : { email_pending: true }) }));
+      await env.DB.put(`email:${email}`, old);
+      await putFollows(old, { investors: ['irving-kahn'] });
+      stripeObjects[`customers/${nu}`] = { id: nu, email };
+      stripeObjects[`subscriptions/sub_${nu}`] = sub(`sub_${nu}`, nu, status);
+      stripeObjects[`checkout/sessions/cs_test_${nu.replace("_", "")}`] = { id: `cs_test_${nu.replace("_", "")}`, status: 'complete', created: now() - 20, subscription: `sub_${nu}`, customer: nu, customer_details: { email } };
+      await webhook({ type: 'customer.subscription.created', data: { object: stripeObjects[`subscriptions/sub_${nu}`] } });
+      expect(await env.DB.get(`email:${email}`)).toBe(nu);
+      const x = await (await call('/session', { body: { checkout_session: `cs_test_${nu.replace("_", "")}` } })).json();
+      expect([email, x.ok, x.code, x.token, x.member]).toEqual([email, true, 'existing_account', undefined, null]);
+    }
 
     stripeObjects['checkout/sessions/cs_test_open'] = { id: 'cs_test_open', status: 'open', created: now(), subscription: null };
     expect((await fullCheckout('cs_test_open')).status).toBe(409);

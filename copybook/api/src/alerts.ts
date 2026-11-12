@@ -338,15 +338,15 @@ async function liveDests(env: Env, m: Member, ch: Channels) {
  */
 export const NUDGE_SUBJECT = 'Monday is 13F deadline day';
 export function nudgeText(env: Env, now = Date.now()): string {
-  return `Monday, Nov 16, is the 13F deadline. Most of the funds you follow usually file that afternoon, and on a day like that our alert emails can reach our daily sending limit. If they do, they wait until ${resetEt(now)}.
+  return `Monday, Nov 16, is the 13F deadline. Many funds file that afternoon, and on a day like that our alert emails can reach our daily sending limit. If they do, 13F alert emails wait until ${resetEt(now)}.
 
 Alerts to a chat channel never wait. Connect Discord before Monday: in a Discord server you manage, open a channel's settings, choose Integrations, then Webhooks, New Webhook and Copy Webhook URL, and paste that URL under Alerts on your account page.
 
 Connect a channel: ${env.SITE_URL}account/?utm_source=email&utm_campaign=13f-q3-2026&utm_content=nudge-chat
 
-Once its test message arrives, alerts go there as each fund files. Once it's connected, alerts go there instead of email. You can keep email on too in your account.
+Saving it posts "Connected ✓" to that channel. Once it's connected, alerts go there instead of email. You can keep email on too in your account.
 
-Your private feed (under Alerts in your account) also gets every alert, whatever happens to email.
+A private feed (under Alerts in your account) also gets every alert, whatever happens to email.
 
 — Copybook`;
 }
