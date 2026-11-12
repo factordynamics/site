@@ -39,6 +39,7 @@ from ingest.parse import (
     parse_info_table,
     scale_if_thousands,
     debt_cusip,
+    cusip_check_ok,
     in_dollars,
     unit_verdict,
     consensus_prices,
@@ -1112,6 +1113,81 @@ def as_filed(book: dict | None) -> dict | None:
                                 if h.get("cusip_as_filed") else h for h in book["holdings"]]}
 
 
+_SECURITIES: dict[str, dict] | None = None  # cusip -> {ticker, name}: data/securities.json, the known-CUSIP universe
+_CUSIP_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+_ISIN_COUNTRIES = {"US", "CA", "GB", "DK", "SG", "DE", "FR", "NL", "CH", "JP", "KY", "BM", "IE", "LU", "AU", "SE", "NO",
+                   "FI", "IT", "ES", "HK", "CN", "KR", "TW", "IL", "BR", "MX", "JE", "GG", "VG", "PA", "BE", "AT", "XS"}
+_NAME_STOP = {"INC", "CORP", "CORPORATION", "CO", "COMPANY", "LTD", "LIMITED", "PLC", "THE", "SA", "S", "A", "NV", "AG",
+              "HLDGS", "HOLDINGS", "GROUP", "CL", "CLASS", "COM", "ORD", "SHS", "NEW"}
+
+
+def securities() -> dict[str, dict]:
+    global _SECURITIES
+    if _SECURITIES is None:
+        try:
+            _SECURITIES = {c: v for c, v in json.loads((DATA / "securities.json").read_text()).items() if isinstance(v, dict)}
+        except (OSError, ValueError):
+            _SECURITIES = {}
+    return _SECURITIES
+
+
+def _name_words(name: str | None) -> list[str]:
+    return [w for w in re.findall(r"[A-Z0-9]+", re.sub(r"\([^)]*\)", " ", (name or "").upper())) if w not in _NAME_STOP]
+
+
+def same_issuer(h: dict, sec: dict) -> bool:
+    """The filed nameOfIssuer names the candidate: its ticker (in the filed name's parentheses or the line's ticker),
+    or the first word of the name, compared on its first four letters (\"General Motors Co (GM)\", \"GENERAL MTRS CO\")."""
+    t = (sec.get("ticker") or "").upper()
+    filed = (h.get("issuer") or "").upper()
+    if t and (t == (h.get("ticker") or "").upper() or f"({t})" in filed.replace(" ", "")):
+        return True
+    a, b = _name_words(filed), _name_words(sec.get("name"))
+    return bool(a and b and (a[0] == b[0] or (min(len(a[0]), len(b[0])) >= 4 and a[0][:4] == b[0][:4])))
+
+
+def repair_candidates(h: dict) -> list[str]:
+    """Known, held CUSIPs (securities.json, consensus) one character away from a filed CUSIP that fails its check digit, on its first
+    eight characters (the check digit is the candidate's own), whose issuer the filed name matches."""
+    c = (h.get("cusip") or "").upper()
+    if len(c) != 9 or cusip_check_ok(c) or (c[:2].isalpha() and c[:2] in _ISIN_COUNTRIES):
+        return []  # valid already, or an ISIN fragment (US5128073, DK0061412): never repaired
+    # A candidate is a CUSIP other filers hold (a cross-filer price in some quarter): a single filer's own typo that
+    # happens to pass its check digit (34959E117, one filer, beside Fortinet's 34959E109) is never a candidate.
+    known, out, held = securities(), set(), {c for _, c in consensus()}
+    bases = {c[:8]} | {c[:i] + ch + c[i + 1:8] for i in range(8) for ch in _CUSIP_CHARS if ch != c[i]}
+    for base in bases:
+        for d in "0123456789":
+            if cusip_check_ok(base + d):
+                if base + d in known and base + d in held and same_issuer(h, known[base + d]):
+                    out.add(base + d)
+                break
+    return sorted(out)
+
+
+def repair_cusips(book: dict | None) -> dict | None:
+    """A share line whose CUSIP fails its check digit is read as the one known CUSIP of the same issuer within one
+    character (lead, Nov 12: Greenhaven 2026Q3 35045V100 \"General Motors Co (GM)\", $993.8M, is GM 37045V100):
+    cusip_repaired with filed_cusip, counted. None or several candidates: the line stays as filed (moves holds it,
+    cusip_check_digit). Options, notes and ISIN fragments are never repaired."""
+    if not book:
+        return book
+    out = []
+    for h in book.get("holdings") or []:
+        if h.get("put_call") or h.get("shares_type") == "PRN" or h.get("cusip_repaired"):
+            out.append(h)
+            continue
+        got = repair_candidates(h)
+        out.append(h | {"cusip": got[0], "cusip_repaired": True, "filed_cusip": h["cusip"],
+                        "ticker": h.get("ticker") or securities()[got[0]].get("ticker")} if len(got) == 1 else h)
+    return book | {"holdings": out}
+
+
+def _unstale(h: dict) -> dict:
+    """h without the fields with_changes recomputes; a repaired line keeps its filed CUSIP."""
+    return {f: v for f, v in h.items() if f not in STALE or (f == "filed_cusip" and h.get("cusip_repaired"))}
+
+
 def with_changes(latest: dict, prev: dict | None) -> list[dict]:
     """Holdings with prior-quarter fields, plus exited positions as value-0 rows.
 
@@ -1129,9 +1205,9 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
     value_delta over the share-position book (equity_value). PRN notes compare
     principal amounts and never count as shares (share_change null).
     """
-    latest, prev = classify_options(as_filed(latest)), classify_options(as_filed(prev))
+    latest, prev = classify_options(repair_cusips(as_filed(latest))), classify_options(repair_cusips(as_filed(prev)))
     if prev is None:  # no prior quarter: the cross-filer check still runs on each share line
-        return [hold({f: v for f, v in h.items() if f not in STALE} | {f: None for f in CHANGE_FIELDS} | {"row_type": "holding"}
+        return [hold(_unstale(h) | {f: None for f in CHANGE_FIELDS} | {"row_type": "holding"}
                 | units(h, None, 1.0, 1.0, latest.get("quarter"), None), latest.get("quarter")) for h in latest["holdings"]]
     eq = latest.get("equity_value") or sum(h["value"] for h in latest["holdings"] if is_equity(h)) or None
     q_from, q_to = prev.get("quarter"), latest.get("quarter")
@@ -1224,7 +1300,7 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
         return out
 
     for h in latest["holdings"]:
-        h = {f: v for f, v in h.items() if f not in STALE}
+        h = _unstale(h)
         k = (h["cusip"], h["put_call"] or "")
         if k in switch:
             h = h | {"class_switch": True}
