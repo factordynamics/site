@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ChangeBars } from '../components/charts'
 import { Arrow, Badge, Button, Check, Lock, Monogram, NotCounted, Panel, Skeleton, Stat, Ticker } from '../components/ui'
-import { needsVerify, ApiError, isFree, openPortal, useMemberState } from '../lib/account'
+import { errText, needsVerify, ApiError, isFree, openPortal, useMemberState } from '../lib/account'
 import { CsvButton } from '../components/CsvButton'
 import { dateLabel, loadIndex, money, pct, quarterLabel, sharesFmt, shortName, useAsync, useTitle, withOption, unreliable, type Holding } from '../lib/data'
 import { stockPath } from '../lib/stocks'
@@ -429,6 +429,8 @@ function PositionMatrix({ quarters, sel }: { quarters: Quarter[]; sel: number })
 }
 
 function Paywall({ name, quarters, kind }: { name: string; quarters?: string[]; kind: 'guest' | 'inactive' | 'free' }) {
+  // A provisional session's 403 verify_email, said under the button that asked (no page-wide toast).
+  const [verify, setVerify] = useState('')
   const qs = [...(quarters ?? [])].sort()
   const span = qs.length > 1 ? `${quarterLabel(qs[0])} to ${quarterLabel(qs[qs.length - 1])}` : ''
   const fake = [52, 61, 58, 70, 66, 78, 84, 92]
@@ -473,7 +475,8 @@ function Paywall({ name, quarters, kind }: { name: string; quarters?: string[]; 
               <Button
                 onClick={() =>
                   openPortal().catch((e) => {
-                    if (checkout.portal && !needsVerify(e)) window.location.href = checkout.portal
+                    if (needsVerify(e)) setVerify(errText(e, ''))
+                    else if (checkout.portal) window.location.href = checkout.portal
                   })
                 }
               >
@@ -490,6 +493,11 @@ function Paywall({ name, quarters, kind }: { name: string; quarters?: string[]; 
               </Button>
             )}
           </div>
+          {verify && (
+            <p role="status" className="mt-3 text-[13.5px] text-ink-2">
+              {verify}
+            </p>
+          )}
         </div>
       </div>
     </div>

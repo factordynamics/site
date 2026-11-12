@@ -144,7 +144,7 @@ function SignedIn({ member, welcome, back = false, upgraded, kept, resumed = fal
     setPortalErr('')
     openPortal().catch((e) => {
       setBusy(false)
-      if (needsVerify(e)) return
+      if (needsVerify(e)) return setPortalErr(errText(e, ''))
       if (checkout.portal) window.location.href = checkout.portal
       else setPortalErr(errText(e, 'The billing portal didn’t open. Please try again, or email us.'))
     })

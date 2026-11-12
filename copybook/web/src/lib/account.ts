@@ -163,11 +163,8 @@ export class ApiError extends Error {
     this.retryAt = body?.retry_at ? Date.parse(body.retry_at) : typeof wait === 'number' ? Date.now() + wait * 1000 : undefined
     this.sentAt = body?.sign_in_sent_at ?? body?.sent_at
     this.alreadyMember = body?.already_member === true
-    // A provisional session (signup or checkout hand-off) refused a control: every page shows the reason once.
-    if (body?.code === 'verify_email' && typeof window !== 'undefined') {
-      markProvisional()
-      window.dispatchEvent(new CustomEvent('copybook:verify', { detail: body.error ?? VERIFY_MSG }))
-    }
+    // A provisional session (signup or checkout hand-off) refused a control: the control says why, inline, where it is.
+    if (body?.code === 'verify_email' && typeof window !== 'undefined') markProvisional()
   }
 }
 
