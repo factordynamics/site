@@ -37,7 +37,7 @@ import {
   type Manager,
   type StockHolder,
 } from './data'
-import { A, AsFiled, Bar, Filed, BooksProgress, cap, ChangeTag, date, day, daysAgo, Empty, Failed, Grid, Loading, PageLoading, num, Panel, pct, price, signedUsd, StackBar, Stat, TabPanel, Tabs, TabsSkel, Tick, type SkelCol, usd, useLoad, type Col } from './lib'
+import { A, AsFiled, Bar, Filed, BooksProgress, cap, ChangeTag, date, day, daysAgo, Empty, Failed, Grid, Loading, PageLoading, num, Panel, pct, price, signedUsd, StackBar, Stat, TabPanel, Tabs, TabsSkel, Tick, type SkelCol, usd, useLoad, useTabParam, type Col } from './lib'
 import { HBars, ValueHistory } from './charts'
 import { firmName, fundPath, issuerName, shortFirm } from './names'
 import EXCLUSIONS from '../scripts/roster-exclusions.json'
@@ -999,7 +999,8 @@ export function Fund({ slug }: { slug: string }) {
     return [...own.events, ...filer.events].filter((e) => !seen.has(e.id) && seen.add(e.id)).sort((a, c) => c.filing_date.localeCompare(a.filing_date))
   }, [slug])
   const firms = useFirms()
-  const [tab, setTab] = useState<ITab>('holdings')
+  // ?tab= names: /m/pershing-square?tab=history.
+  const [urlTab, setTab] = useTabParam<ITab>({ holdings: 'holdings', buys: 'bought', sells: 'sold', options: 'options', notes: 'bonds', filings: 'history', events: 'stakes' }, 'holdings')
   // A missing or held-back book is a real "not found"; anything else (offline, a mirror hiccup) can be retried.
   // An address that isn't a followed investor is not found. A followed investor whose file is missing is a data
   // problem a retry may fix, so it gets the error page; one held back by the data checks says so.
@@ -1043,6 +1044,8 @@ export function Fund({ slug }: { slug: string }) {
   const live = book.holdings.filter((x) => x.value > 0 && isStockLine(x))
   const opts = book.holdings.filter((x) => x.put_call && (x.value > 0 || x.prev_value))
   const notes = book.holdings.filter((x) => isNoteOrPref(x) && (x.value > 0 || x.prev_value)).sort((a, c) => c.value - a.value || (c.prev_value ?? 0) - (a.prev_value ?? 0))
+  // A linked tab this fund doesn't have (no options this quarter) opens on Holdings.
+  const tab: ITab = (urlTab === 'options' && !opts.length) || (urlTab === 'notes' && !notes.length) ? 'holdings' : urlTab
   const stock = book.holdings.filter(isStockLine)
   const buys = stock.filter((x) => (x.value_delta ?? 0) > 0).sort((a, c) => (c.value_delta ?? 0) - (a.value_delta ?? 0))
   const sells = stock.filter((x) => (x.value_delta ?? 0) < 0).sort((a, c) => (a.value_delta ?? 0) - (c.value_delta ?? 0))
@@ -1901,7 +1904,8 @@ export function Stock({ ticker }: { ticker: string }) {
     return m
   }, [])
   const firms = useFirms(!s.data)
-  const [tab, setTab] = useState<STab>('holders')
+  // ?tab= names: /s/AAPL?tab=trades.
+  const [urlTab, setTab] = useTabParam<STab>({ holders: 'holders', activity: 'trades', options: 'options', filings: 'stakes' }, 'holders')
   title(s.data ? `${issuerName(s.data.name)} (${ticker}): who owns it` : `${ticker}: who owns it`)
   if (s.error) return missing(s.error) ? <NotFound what={`None of the investors Holdterm follows reports ${ticker} in its latest 13F`} q={ticker} /> : <Failed error={s.error} what={ticker} />
   if (!s.data) return <PageLoading what={`Loading ${ticker}`} stats={4} rows={12} />
@@ -1917,6 +1921,8 @@ export function Stock({ ticker }: { ticker: string }) {
     return { ...h, prev_shares: prev, delta_value: delta, change: h.shares > prev ? (prev ? 'added' : 'new') : h.shares < prev ? 'trimmed' : 'unchanged' }
   }
   const pick = (l: StockHolder[]) => l.filter((h) => inRoster(h.slug)).map(viaBook)
+  // A linked tab this stock doesn't have (no options) opens on Investors.
+  const tab: STab = urlTab === 'options' && !pick(d.options).length ? 'holders' : urlTab
   const name = (h: StockHolder) => firmOf(firms, h.slug, h.firm || h.manager)
   const holders = pick(d.holders)
   const exited = pick(d.exited)

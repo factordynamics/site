@@ -39,6 +39,22 @@ export function navigate(to: string) {
 }
 // Guarded so the build can import the formatters (vite.config.ts) outside a browser.
 if (typeof window !== 'undefined') window.addEventListener('popstate', () => listeners.forEach((l) => l()))
+/** A page's tab, kept in the address as ?tab=<name> so a tab can be linked to and survives a reload. The default
+ * tab has no parameter. The address is replaced, not pushed: Back leaves the page, as before. */
+export function useTabParam<T extends string>(names: Record<T, string>, def: T): [T, (t: T) => void] {
+  const [tab, set] = useState<T>(() => {
+    const q = new URLSearchParams(location.search).get('tab')
+    return (Object.keys(names) as T[]).find((k) => names[k] === q) ?? def
+  })
+  const pick = (t: T) => {
+    set(t)
+    const u = new URL(location.href)
+    if (t === def) u.searchParams.delete('tab')
+    else u.searchParams.set('tab', names[t])
+    history.replaceState(history.state, '', u.pathname + u.search + u.hash)
+  }
+  return [tab, pick]
+}
 export function usePath() {
   const [p, set] = useState(location.pathname)
   useEffect(() => {
