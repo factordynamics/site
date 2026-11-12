@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { readWinter } from '../lib/meShape.mjs'
 import { Link } from 'react-router-dom'
 import { call } from '../lib/account'
 import { dateFmt, money } from '../lib/data'
@@ -47,12 +48,12 @@ export function WinterPreview({ className = '' }: { className?: string }) {
   const [tries, setTries] = useState(0)
   useEffect(() => {
     let off = false
-    call<{ winter_preview?: Winter | null }>('/me?include=winter', {
+    call<{ member?: { winter_preview?: Winter | null } }>('/me?include=winter', {
       auth: true,
       cache: 'no-store',
       timeout: 20_000,
     })
-      .then((r) => !off && setW(r.winter_preview ?? null))
+      .then((r) => !off && setW(readWinter<Winter>(r)))
       .catch(() => null)
     return () => {
       off = true

@@ -150,6 +150,9 @@ function SignedIn({ member, welcome, back = false, upgraded, kept, resumed = fal
     })
   }
   const { status, follows } = useFollows()
+  // Fresh from the API on every visit, for every member: the setup steps and counts never read a stale cache
+  // (copybook-follows-last) after follows were made elsewhere (retail, Nov 12).
+  useEffect(() => void refreshFollows(), [])
   const [editing, setEditing] = useState(false)
   const cancelling = Boolean(member.cancel_at_period_end)
   const paused = Boolean(member.paused_until)
@@ -1053,13 +1056,23 @@ function NoCard({ end, day, founding }: { end?: string; day?: string; founding: 
     const t = [setTimeout(go, 600), setTimeout(go, 1800)]
     return () => t.forEach(clearTimeout)
   }, [asked])
+  // Cancel's seasonal answer links here ("add a card"): monthly preselected, since monthly is what can pause.
+  useEffect(() => {
+    const on = (e: Event) => {
+      setPlan((e as CustomEvent<'yearly' | 'monthly'>).detail ?? 'monthly')
+      box.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      setTimeout(() => box.current?.querySelector<HTMLInputElement>('input:checked')?.focus({ preventScroll: true }), 400)
+    }
+    window.addEventListener('copybook:add-card', on)
+    return () => window.removeEventListener('copybook:add-card', on)
+  }, [])
   const on = day ? ` on ${day}` : ''
   const opts = [
     { id: 'yearly' as const, label: `Yearly $${prices.yearly}${on}`, sub: `History back to 2013${founding ? ' · founding price kept' : ''}` },
     { id: 'monthly' as const, label: `$${prices.monthly}/month${on}`, sub: founding ? 'Founding price kept · cancel anytime' : 'Cancel anytime' },
   ]
   return (
-    <div ref={box} className="mt-4 rounded-xl bg-accent-soft px-3.5 py-3 text-[14px] text-accent-2">
+    <div ref={box} id="add-card" className="mt-4 scroll-mt-24 rounded-xl bg-accent-soft px-3.5 py-3 text-[14px] text-accent-2">
       <p>No card on file: without one, the trial simply ends{end ? ` ${end}` : ''}.</p>
       {/* The trial lock, as /pricing/ states it (trader, Nov 11): a trial started before Feb 1 keeps the founding price. */}
       {founding && <p className="mt-1 text-[13px] text-accent-2/85">You started before Feb 1, so the founding price stays: ${prices.monthly}/month or ${prices.yearly}/year, locked while you stay subscribed.</p>}
@@ -1164,6 +1177,23 @@ function Leave({ member, onChange }: { member: Member; onChange: (m: Member) => 
           ))}
         </div>
       </fieldset>
+      {/* A cardless trial can't pause (payments' pause_offer is null): say what happens instead (retail, Nov 12). */}
+      {reason === 'seasonal' && member.status === 'trialing' && member.has_payment_method === false && (
+        <p className="mt-3 text-[13px] leading-relaxed text-ink-2">
+          Your trial ends on its own{member.trial_end ? ` on ${new Date(Number(member.trial_end) * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' })}` : ''} and nothing is charged. If you{' '}
+          <a
+            href="#add-card"
+            onClick={(e) => {
+              e.preventDefault()
+              window.dispatchEvent(new CustomEvent('copybook:add-card', { detail: 'monthly' }))
+            }}
+            className="font-medium text-accent underline underline-offset-2 hover:text-accent-2"
+          >
+            add a card
+          </a>
+          , monthly can pause until February at your founding price.
+        </p>
+      )}
       {reason && (reason === 'feature' || reason === 'other') && (
         <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="What would have made it worth keeping? (optional)" className="mt-3 w-full rounded-xl bg-card px-3 py-2 text-[14px] shadow-[0_0_0_1px_var(--color-line-2)] outline-none focus:shadow-[0_0_0_2px_var(--color-accent)]" />
       )}
@@ -1206,8 +1236,6 @@ function FreeFollows() {
   const idx = useAsync(loadIndex, [])
   const soon = useAsync(loadExpected, [])
   const [err, setErr] = useState<string | null>(null)
-  // Fresh from the API on every visit; the cached list only shows while it answers or if it's down.
-  useEffect(() => void refreshFollows(), [])
   if (status !== 'ready' || !follows.investors.length) return null
   const name = (slug: string) => idx.data?.managers.find((m) => m.slug === slug)?.manager ?? soon.data?.expected.find((x) => x.slug === slug)?.manager ?? slug
   return (
