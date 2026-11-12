@@ -117,10 +117,11 @@ export function CopySetup({ welcome }: { welcome?: boolean }) {
     },
     {
       done: connected || keepEmail,
-      title: 'Connect a channel (or keep email)',
+      // Chat first (the trader, Nov 12): chat alerts never wait on the daily email limit.
+      title: connected || keepEmail ? 'Connect a chat channel' : 'Connect a chat channel (or keep email)',
       // A working chat or webhook replaces alert email unless keep_email is on (payments, Nov 11).
-      body: chat ? (ch?.keep_email ? 'Alerts reach your chat and your inbox.' : 'Alerts go to your chat instead of email. Tick “Also email me alerts” below for both.') : connected ? 'Alerts reach your feed and your inbox.' : keepEmail ? 'Email only. You can add Slack, Discord, Telegram or a feed any time below.' : 'Add Telegram or Slack so alerts never wait on email limits.',
-      act: { label: connected ? 'Channels' : 'Connect', href: '#channels' },
+      body: chat ? (ch?.keep_email ? 'Alerts reach your chat and your inbox.' : 'Alerts go to your chat instead of email. Tick “Also email me alerts” below for both.') : connected ? 'Alerts reach your feed and your inbox.' : keepEmail ? 'Email only. Add Telegram, Slack or Discord any time below, so alerts reach you at once even on a day our email limit is reached.' : 'Telegram, Slack or Discord: alerts reach your chat the moment we see the filing, even on a day our daily email limit is reached.',
+      act: { label: connected ? 'Channels' : 'Connect chat', href: '#channels' },
       alt:
         connected || keepEmail
           ? undefined
@@ -183,14 +184,14 @@ export function CopySetup({ welcome }: { welcome?: boolean }) {
             </span>
             {!(s.done && i === 3) && (
               <span className="flex shrink-0 flex-wrap gap-2">
+                <Button size="sm" variant={i === next ? 'primary' : 'outline'} to={s.act.to} href={s.act.href} onClick={s.act.onClick} disabled={s.act.disabled}>
+                  {s.act.label}
+                </Button>
                 {s.alt && (
                   <Button size="sm" variant="ghost" onClick={s.alt.onClick} to={s.alt.to} href={s.alt.href}>
                     {s.alt.label}
                   </Button>
                 )}
-                <Button size="sm" variant={i === next ? 'primary' : 'outline'} to={s.act.to} href={s.act.href} onClick={s.act.onClick} disabled={s.act.disabled}>
-                  {s.act.label}
-                </Button>
               </span>
             )}
           </li>

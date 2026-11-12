@@ -70,6 +70,7 @@ export function Speed() {
   // Once /latency tags each alert curated or any_filer, show the split.
   const cov = (d?.alerts ?? []) as (Alert & { coverage?: 'curated' | 'any_filer' })[]
   const tagged = cov.filter((a) => a.coverage)
+  const limitDays = emailLimitDays(d, all)
   const coverage = tagged.length ? ` Of the latest ${tagged.length}: ${tagged.filter((a) => a.coverage === 'curated').length} for funds we track closely, ${tagged.filter((a) => a.coverage === 'any_filer').length} for other filers.` : ''
 
   return (
@@ -78,12 +79,24 @@ export function Speed() {
         <p className="text-[13px] font-medium text-accent">Speed</p>
         <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-h1">From EDGAR to you, timed.</h1>
         <p className="mt-4 text-[17px] leading-relaxed text-ink-2">
-          {empty ? 'No live alerts timed yet. Once they go out, every live alert this season appears here' : 'Every live alert this filing season'}: when EDGAR accepted the filing, when we delivered it, and the gap in seconds. Every live alert is counted. The raw log is public at{' '}
+          {empty ? 'No live alerts timed yet. Once they go out, every live alert this season appears here' : 'Every live alert this filing season'}: when EDGAR accepted the filing, when we delivered it, and the gap in seconds. {all.some((r) => r.byLimit && !r.counted) ? 'Every live alert is listed, and the emails our daily email limit held back are tagged.' : 'Every live alert is counted.'} The raw log is public at{' '}
           <a href={import.meta.env.VITE_LATENCY_URL} className="font-mono text-[15px] text-accent hover:text-accent-2">
             latency.json
           </a>
           .
         </p>
+        {/* Days our daily email limit held alert emails back: said under the hero, so the figures below never read as if they hadn't. */}
+        {limitDays.map(([day, text]) => (
+          <p key={day} className="mt-3 flex gap-2 rounded-[10px] bg-[#fbecd3]/60 px-3.5 py-2.5 text-[14px] leading-snug text-[#5c3a00]">
+            <span aria-hidden className="mt-[7px] size-1.5 shrink-0 rounded-full bg-[#d98a00]" />
+            <span>
+              <span className="num font-medium">{text}</span>{' '}
+              <a href="#alerts" className="font-medium underline underline-offset-2 hover:text-[#3d2600]">
+                See them
+              </a>
+            </span>
+          </p>
+        ))}
       </header>
 
       {/* Per form first: the blend is mostly 13G, so it leads with nothing anyone buys. 13F is timed to the
@@ -152,7 +165,7 @@ export function Speed() {
             <span className="font-medium text-ink">End:</span> when the alert left us for its destination (for email, when our mail provider accepted it). Your inbox or chat app can add a few seconds. For 13F alerts the clock stops when the email with the filing’s moves is sent, not at a first notice.
           </li>
           <li>
-            <span className="font-medium text-ink">Counted:</span> live alerts only. Replays, backfills and test messages are left out, and slow alerts stay in.
+            <span className="font-medium text-ink">Counted:</span> live alerts only. Replays, backfills and test messages are left out, and slow alerts stay in. Emails our daily email limit held back are listed and tagged “delayed by limit”, with each day it happened under the headline; feed, chat and webhook alerts aren’t affected by it.
           </li>
           <li>
             <span className="font-medium text-ink">Coverage:</span> 13F alerts for the managers we track closely and for any other filer a member follows (peers and linked 13Fs included), and Form 4 and 13D/G alerts on the names members follow. All of them are timed.{coverage} How the data is built is on the{' '}
@@ -416,6 +429,9 @@ type LogRow = Alert & {
   audience?: string | null
   covered_at?: string | null
   followers_alerted_at?: string | null
+  email_delayed?: boolean | null
+  delayed_email_limit?: boolean | null
+  coalesced?: boolean | null
 }
 type Row = SpeedRow<LogRow>
 /** 13D, 13G or Form 4 for the per-form cards; 13F and other forms stand alone. */
@@ -424,6 +440,31 @@ const formKey = (f: string) => (/13D/.test(f) ? '13D' : /13G/.test(f) ? '13G' : 
 const HOST_FROM = '2026-11-11T08:40:00Z'
 const POLLER: Record<string, string> = { cloudflare: 'Cloudflare', server: 'Our server' }
 const formLabel = (f: string) => (/^4(\/A)?$/.test(f) ? `Form ${f}` : f.replace(/^SCHEDULE\s+/, ''))
+/**
+ * "Mon Nov 16: N alert emails delayed by our daily email limit; …", newest day first. Payments' per-day email counts
+ * (latency.json email_limit_days) once published; until then, the alerts tagged delayed_email_limit, by UTC day accepted.
+ */
+type LimitDay = { day: string; delayed_emails?: number; coalesced_emails?: number }
+function emailLimitDays(d: Latency | null | undefined, rows: Row[]): [string, string][] {
+  const dayLabel = (day: string) => new Date(`${day}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }).replace(',', '')
+  const tail = 'feed and chat channels unaffected.'
+  const pub = (d as { email_limit_days?: LimitDay[] } | null | undefined)?.email_limit_days
+  if (Array.isArray(pub))
+    return pub
+      .filter((x) => (x.delayed_emails ?? 0) + (x.coalesced_emails ?? 0) > 0)
+      .sort((a, b) => b.day.localeCompare(a.day))
+      .map((x) => {
+        const parts = [x.delayed_emails ? `${x.delayed_emails.toLocaleString('en-US')} alert ${x.delayed_emails === 1 ? 'email' : 'emails'} delayed` : '', x.coalesced_emails ? `${x.coalesced_emails.toLocaleString('en-US')} combined into fewer emails` : ''].filter(Boolean)
+        return [x.day, `${dayLabel(x.day)}: ${parts.join(' and ')} by our daily email limit; ${tail}`]
+      })
+  const byDay = new Map<string, number>()
+  for (const r of rows) {
+    // The day the limit held it: the alert's acceptance day (a delayed email itself goes after the 00:00 UTC reset).
+    const t = r.byLimit ? r.accepted_at : null
+    if (t) byDay.set(t.slice(0, 10), (byDay.get(t.slice(0, 10)) ?? 0) + 1)
+  }
+  return [...byDay.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([day, n]) => [day, `${dayLabel(day)}: emails for ${n.toLocaleString('en-US')} ${n === 1 ? 'alert' : 'alerts'} delayed by our daily email limit; ${tail}`])
+}
 const num = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? x : null)
 // Shown wherever team delivery appears, until payments backfills earlier rows from the webhook log (then drop it).
 const TEAM_NOTE = 'Team delivery times recorded from Nov 11, 09:40 UTC.'
@@ -457,6 +498,7 @@ function AlertLog({ rows: all, delayedByLimit }: { rows: Row[]; delayedByLimit: 
   const p = Math.min(page, pages - 1)
   const shown = rows.slice(p * PAGE, p * PAGE + PAGE)
   const flagged = rows.filter((r) => r.excluded || r.later).length
+  const limited = rows.filter((r) => r.byLimit && !r.counted).length
   // Per poller: only alerts since the host was recorded, and no pre-fix moves (those were a bug, not a poller).
   const recent = counted.filter((r) => r.accepted_at >= HOST_FROM && !r.preFix)
   const pollers = [...new Set(recent.map((r) => r.host ?? ''))]
@@ -475,7 +517,8 @@ function AlertLog({ rows: all, delayedByLimit }: { rows: Row[]; delayedByLimit: 
               <caption className="px-4 pt-3 text-left text-[12.5px] text-ink-3 sm:px-5">
                 {counted.length.toLocaleString('en-US')} alerts, EDGAR accepted {acc.length ? dayET(acc[0]) : '—'}
                 {acc.length && dayET(acc[0]) !== dayET(acc[acc.length - 1]) ? ` – ${dayET(acc[acc.length - 1])}` : ''}
-                {flagged ? `; ${flagged} ${flagged === 1 ? 'replay, test or repeat send' : 'replays, tests and repeat sends'} listed below but not counted` : ''}.
+                {flagged ? `; ${flagged} ${flagged === 1 ? 'replay, test or repeat send' : 'replays, tests and repeat sends'} listed below but not counted` : ''}
+                {limited ? `; ${limited} ${limited === 1 ? 'alert' : 'alerts'} whose email waited for our daily email limit, listed below and tagged` : ''}.
               </caption>
               <thead>
                 <tr className="border-b border-line text-left text-[12px] text-ink-3">
@@ -558,6 +601,15 @@ function AlertLog({ rows: all, delayedByLimit }: { rows: Row[]; delayedByLimit: 
                           <>
                             {' '}
                             <span className="ml-0.5 inline-block whitespace-nowrap rounded-full bg-[#fde2e2] px-2 py-0.5 text-[11.5px] font-medium text-[#8a1c1c]">{a.audience === 'stock_watchers' ? 'missed for stock watchers' : a.never ? 'missed, never sent' : 'missed, sent late'}</span>
+                          </>
+                        )}
+                        {a.byLimit && (
+                          <>
+                            {' '}
+                            <span className="ml-0.5 inline-block whitespace-nowrap rounded-full bg-[#fbecd3] px-2 py-0.5 text-[11.5px] font-medium text-[#7a4b00]">
+                              {a.coalesced && !(a.delayed_email_limit || a.email_delayed) ? 'coalesced by limit' : 'delayed by limit'}
+                              {a.counted ? '' : ', not in medians'}
+                            </span>
                           </>
                         )}
                         {(a.replay || a.test || a.later) && (

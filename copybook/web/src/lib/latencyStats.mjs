@@ -23,8 +23,13 @@ export function speedRows(l) {
     const seconds = a.never ? null : missed && a.delay_seconds != null ? a.delay_seconds : (late.get(a.accession)?.seconds ?? a.gap_seconds ?? null)
     // Payments' in_stats (from Nov 11) marks each accession's first live send; a later send of the same filing
     // is listed but not counted, so no filing counts twice.
-    const later = a.in_stats === false && !excluded && !missed
-    return { ...a, seconds, excluded, missed, later, preFix: late.has(a.accession) && !missed, counted: !excluded && !missed && !later && Number.isFinite(seconds) }
+    // An email some member got late because the day's email limit was used up (payments' delayed_email_limit), or a
+    // coalesced send while email was short: tagged, never dropped. One payments leaves out of its figures (in_stats
+    // false) is listed as delayed, not as a repeat send.
+    const byLimit = Boolean(a.delayed_email_limit || a.email_delayed || a.coalesced) && !excluded && !missed
+    const later = a.in_stats === false && !excluded && !missed && !byLimit
+    const counted = !excluded && !missed && !later && !(byLimit && a.in_stats === false) && Number.isFinite(seconds)
+    return { ...a, seconds, excluded, missed, later, byLimit, preFix: late.has(a.accession) && !missed, counted }
   })
 }
 

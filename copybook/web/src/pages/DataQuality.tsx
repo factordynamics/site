@@ -16,7 +16,8 @@ type Quality = {
   by_reason?: Record<string, Reason>
   parity?: { quarter?: string; issuers: number; matched: number; checked_at?: string }
 }
-type Build = { store?: string; name?: string; build?: string; published_at?: string; quarters?: string[] | string }
+// meta/builds.json is the R2 body the API reads: { quarters, stores: { hl | changes | filer_view: { build_id, built_at } } }.
+type Build = { build_id?: string; built_at?: string }
 type Gate = { id: string; name: string; fails_when: string; stays_live: string; result?: string; checked_at?: string; detail?: string }
 
 /** A published file, or null when it isn't published yet (404). A network failure throws. */
@@ -33,6 +34,7 @@ const REASON: Record<string, [string, string]> = {
   option_cusip_no_putcall: ['Option CUSIP without put or call', 'An option’s CUSIP filed with no put or call, so it can’t be told apart from stock.'],
   cusip_check_digit: ['CUSIP fails its check digit', 'The filed CUSIP doesn’t validate, so the security it names isn’t certain.'],
   possible_cusip_change: ['Possible CUSIP change', 'A position that may have moved to a new CUSIP between quarters; held until it’s confirmed.'],
+  class_sum_mismatch: ['Share classes don’t add up', 'An issuer’s share-class lines don’t sum to its total, so its holders by stock are held.'],
   different_security: ['Different security, not compared', 'A note and the same issuer’s common stock: each reads as its own line, never as one trade.'],
   price_outlier: ['Value far off the filed price', 'The filed value implies a price far from the security’s other filings, so the units are suspect.'],
   reissue_ratio_not_applied: ['Pre-split share counts', 'Shares filed before a split or reissue ratio was applied.'],
@@ -63,7 +65,7 @@ const n = (x: number) => x.toLocaleString('en-US')
 export function DataQuality() {
   useTitle('Data quality: the gates every publish passes · Copybook')
   const q = useAsync(() => opt<Quality>('quality.json'), [])
-  const builds = useAsync(() => opt<{ stores?: Record<string, Build> | Build[] } | Build[]>('meta/builds.json').catch(() => null), [])
+  const builds = useAsync(() => opt<{ quarters?: string[]; stores?: Record<string, Build> }>('meta/builds.json').catch(() => null), [])
   const gates = useAsync(() => opt<{ generated?: string; gates?: Gate[] }>('gates.json').catch(() => null), [])
   // Until meta/builds.json is published: the stamps the stores carry themselves.
   const stamps = useAsync(async () => {
@@ -78,14 +80,10 @@ export function DataQuality() {
   const hasUsd = reasons.some(([, r]) => r.usd != null)
   const parity = q.data?.parity
 
-  const rawBuilds = builds.data ? (Array.isArray(builds.data) ? builds.data : builds.data.stores) : null
-  const storeRows: { store: string; build?: string; at?: string; quarters?: string }[] = rawBuilds
-    ? (Array.isArray(rawBuilds) ? rawBuilds.map((b) => [b.store ?? b.name ?? '', b] as const) : Object.entries(rawBuilds)).map(([store, b]) => ({
-        store: STORE[store] ?? store,
-        build: b.build,
-        at: b.published_at,
-        quarters: Array.isArray(b.quarters) ? (b.quarters.length > 1 ? `${b.quarters[0]}–${b.quarters[b.quarters.length - 1]}` : b.quarters[0]) : b.quarters,
-      }))
+  const qs = builds.data?.quarters?.slice().sort()
+  const span = qs?.length ? (qs.length > 1 ? `${qs[0]}–${qs[qs.length - 1]}` : qs[0]) : undefined
+  const storeRows: { store: string; build?: string; at?: string; quarters?: string }[] = builds.data?.stores && Object.keys(builds.data.stores).length
+    ? Object.entries(builds.data.stores).map(([store, b]) => ({ store: STORE[store] ?? store, build: b.build_id, at: b.built_at, quarters: span }))
     : [
         ...(stamps.data?.idx ? [{ store: 'Fund books', build: stamps.data.idx.build_id, at: stamps.data.idx.data_built_at ?? stamps.data.idx.generated_at }] : []),
         ...(stamps.data?.hlr?.generated_at ? [{ store: 'Holders by stock', at: stamps.data.hlr.generated_at }] : []),
