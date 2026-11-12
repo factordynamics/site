@@ -1,8 +1,8 @@
-import { addToFeed, flushChannelLatency, getChannels, getFailures, runWebhookRetries, sendChats, sendWebhooks } from './channels';
+import { addToFeed, type Channels, flushChannelLatency, getChannels, getFailures, runWebhookRetries, sendChats, sendWebhooks } from './channels';
 import { refreshBooks } from './book';
 import { countAlerts, logSent, pausedFilingMail, resumeUrl, runRevenue, yearlyPeakLine } from './revenue';
 import { DEADLINES, deadlineMs, inFilingWeek } from './seasons';
-import { alertMail, digestMail, FOOTER, type FeedItem, feedItems, holdtermAlertMail, type Mail, sendMail, weeklyNamesMail } from './email';
+import { alertMail, digestMail, FOOTER, type FeedItem, feedItems, holdtermAlertMail, type Mail, resetEt, sendMail, weeklyNamesMail } from './email';
 import { guardShares, markUnreliable, unreliableSide, offFilers, reissuedTicker, isReissued, reissueRatio, loadReissues, bookSuspect, companyFilings, computeMoves, tagClasses, filingId, posKey, gateMoves, gateRow, movesOf, netRenamed, type Consensus, type HeldRow, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, prevQuarterEnd, prior13F, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
 import { isActive, isPaused, isPro, testAddress, type Env, type Member } from './env';
 import { getFollows, getMember, listMembers, putMember, type Follows } from './members';
@@ -279,20 +279,146 @@ export const FILING_HOLD = 20;
 export const CAP_NOTE = 'Email limit reached today; this alert is in your feed';
 
 /**
- * A paid or trialing member's email with a 13F in it, over the day's room: queued for the 00:00 UTC reset, marked
- * "Delayed by our daily email limit", first in the next day's room (the lead, Nov 11). Every other email over the room
- * is skipped (capSkipped).
+ * What goes first in the day's email room (the lead, Nov 12): members' 13Fs, and in their names a new 13D stake or a Form 4
+ * open-market buy. Not cut at FILING_HOLD; past the room a paid or trialing member's are queued for the reset and go
+ * then as one digest (sendDelayedDigests). Everything else (13G and amendments, Form 4 sells, routine filings) is skipped
+ * first, with the feed note.
  */
-const queuesOverCap = (m: Member, filings: number) => filings > 0 && m.plan !== 'free' && (m.status === 'active' || m.status === 'trialing');
-const DELAY_LINE = 'Delayed by our daily email limit: this email waited for the 00:00 UTC reset. The alert reached your feed, chat and webhooks when it was filed.\n\n';
-const markDelayed = <T extends Mail>(mail: T): T => ({ ...mail, text: DELAY_LINE + mail.text, ...(mail.html ? { html: mail.html.replace(/^(<div[^>]*>)/, `$1<p style="color:#b45309;font-size:13px">${DELAY_LINE.trim()}</p>`) } : {}) });
+export const priorityEvent = (e: AlertEvent) => (e.kind === 'form4' && e.action === 'buy') || (e.kind === '13d' && e.action === 'new_stake');
+const hasPriority = (x: { filings: unknown[]; events: AlertEvent[] }) => x.filings.length > 0 || x.events.some(priorityEvent);
+const queuesOverCap = (m: Member) => m.plan !== 'free' && (m.status === 'active' || m.status === 'trialing');
+/** This host's alerts waiting for the reset, per member (host-local like the mail queue, so one host sends each). */
+const CAPQ = 'host:mail-capq';
+type CapQ = Record<string, { day: string; at: number; filings: Alert13F[]; events: AlertEvent[] }>;
+
+/**
+ * Past the day's room: a paid or trialing member's 13Fs and priority events join their digest for the reset; the rest
+ * (all of a free member's) is skipped with the feed note. Returns what happened, for the run's counts.
+ */
+async function overRoom(env: Env, m: Member, ch: Channels, filings: Alert13F[], events: AlertEvent[], now: number): Promise<{ queued: boolean; skipped: boolean }> {
+  const q = queuesOverCap(m);
+  const first = q ? await unmailed(env, m.customer, filings, events.filter(priorityEvent), now) : { filings: [], events: [] };
+  const queued = first.filings.length + first.events.length > 0;
+  if (queued) {
+    const all = JSON.parse((await env.DB.get(CAPQ)) ?? '{}') as CapQ;
+    const cur = all[m.customer];
+    all[m.customer] = { day: cur?.day ?? new Date(now).toISOString().slice(0, 10), at: cur?.at ?? now, filings: [...(cur?.filings ?? []), ...first.filings], events: [...(cur?.events ?? []), ...first.events] };
+    await env.DB.put(CAPQ, JSON.stringify(all));
+    await (await import('./email')).noteDelayed(env, [...first.filings.map((a) => a.accession), ...first.events.map((e) => e.id)], cur ? 0 : 1);
+  }
+  const skipped = q ? events.some((e) => !priorityEvent(e)) : filings.length + events.length > 0;
+  if (skipped) await capSkipped(env, m, ch, now);
+  return { queued, skipped };
+}
+
+/**
+ * The delayed digest's first line, by what the member has (the lead, Nov 12): the channels the alerts reached, or, with
+ * no working chat or webhook, how to connect one. Never names a channel the member doesn't have.
+ */
+export async function delayLine(env: Env, m: Member, ch: Channels, n: number, now = Date.now()): Promise<string> {
+  const LABELS = { telegram: 'Telegram', discord: 'Discord', slack: 'Slack', webhook: 'webhook' } as const;
+  const live = (await liveDests(env, m, ch)).map((d) => LABELS[d]);
+  const reached = [...(ch.feed_token ? ['feed'] : []), ...live];
+  const list = reached.length > 1 ? `${reached.slice(0, -1).join(', ')} and ${reached[reached.length - 1]}` : reached[0];
+  const r = reached.length ? `${n > 1 ? 'These alerts' : 'This alert'} reached your ${list} when ${n > 1 ? 'they were' : 'it was'} filed.` : '';
+  const head = `Delayed by our daily email limit: this email waited until ${resetEt(now)}.`;
+  return [head, r, live.length ? '' : `You have no instant channel yet. Connect one so this never waits: ${env.SITE_URL}account/`].filter(Boolean).join(' ');
+}
+
+/** A member's working, verified chat or webhook destinations (what replaces alert email). */
+async function liveDests(env: Env, m: Member, ch: Channels) {
+  const fails = await getFailures(env, m.customer);
+  return (['telegram', 'discord', 'slack', 'webhook'] as const).filter((d) => !!ch[d] && !!ch.verified?.[d] && !fails[d] && (d !== 'webhook' || isPro(m)));
+}
+
+/**
+ * The Sat Nov 14 nudge (the lead and marketing, plan rev 91): once, to paying and trialing members with follows and no
+ * working chat channel. Discord is the channel named: a webhook URL pasted on the account page (Telegram needs the
+ * member's own @BotFather bot, Slack an app). `dry` counts without sending; `only` sends to one address (a test inbox).
+ */
+export const NUDGE_SUBJECT = 'Monday is 13F deadline day';
+export function nudgeText(env: Env, now = Date.now()): string {
+  return `Monday, Nov 16, is the 13F deadline. Most of the funds you follow usually file that afternoon, and on a day like that our alert emails can reach our daily sending limit. If they do, they wait until ${resetEt(now)}.
+
+Alerts to a chat channel never wait. Connect Discord before Monday: in a Discord server you manage, open a channel's settings, choose Integrations, then Webhooks, New Webhook and Copy Webhook URL, and paste that URL under Alerts on your account page.
+
+Connect a channel: ${env.SITE_URL}account/?utm_source=email&utm_campaign=13f-q3-2026&utm_content=nudge-chat
+
+Once its test message arrives, alerts go there as each fund files. Once it's connected, alerts go there instead of email. You can keep email on too in your account.
+
+Your private feed (under Alerts in your account) also gets every alert, whatever happens to email.
+
+— Copybook`;
+}
+
+export async function chatNudge(env: Env, now: number, o: { dry?: boolean; only?: string }): Promise<Record<string, unknown>> {
+  const out = { eligible: 0, sent: 0, already: 0, skipped_test: 0 };
+  const mails: Mail[] = [];
+  const keys: string[] = [];
+  for (const m of await listMembers(env)) {
+    if (!m.email || m.email_pending || !isActive(m) || m.plan === 'free' || m.plan === 'holdterm' || m.alerts === 'off' || !(m.status === 'active' || m.status === 'trialing')) continue;
+    if (o.only ? m.email.toLowerCase() !== o.only.toLowerCase() : m.test || testAddress(m.email)) {
+      out.skipped_test += Number(!o.only);
+      continue;
+    }
+    const f = await getFollows(env, m);
+    if (!f.investors.length && !f.stocks.length && !f.owned.length && !(Array.isArray(m.alerts) && m.alerts.length) && m.alerts !== 'all') continue;
+    if ((await liveDests(env, m, await getChannels(env, m.customer))).length) continue;
+    out.eligible++;
+    const k = `nudge:chat:${m.customer}`;
+    if (!o.only && (await env.DB.get(k))) {
+      out.already++;
+      continue;
+    }
+    mails.push({ to: m.email, subject: NUDGE_SUBJECT, text: `${nudgeText(env, now)}${FOOTER}` });
+    keys.push(k);
+  }
+  if (o.dry || !mails.length) return { ...out, dry: !!o.dry };
+  const status = await sendMail(env, mails, { tier: 'low' });
+  for (const k of keys) await env.DB.put(k, new Date(now).toISOString(), { expirationTtl: 30 * 86400 });
+  return { ...out, sent: mails.length, status };
+}
+
+/** After the reset, once per member: every alert that waited, as one email (the lead, Nov 12), first in the new day's room. */
+export async function sendDelayedDigests(env: Env, now = Date.now()): Promise<Record<string, unknown>> {
+  const raw = await env.DB.get(CAPQ);
+  if (!raw) return {};
+  const all = JSON.parse(raw) as CapQ;
+  const today = new Date(now).toISOString().slice(0, 10);
+  const due = Object.entries(all).filter(([, x]) => x.day < today);
+  if (!due.length) return {};
+  for (const [c] of due) delete all[c];
+  await env.DB.put(CAPQ, JSON.stringify(all));
+  const mails: Mail[] = [];
+  for (const [c, x] of due) {
+    const m = await getMember(env, c);
+    if (!m?.email || !isActive(m) || m.alerts === 'off') continue;
+    const ch = await getChannels(env, c);
+    const am = alertMail(env, m.email, x.filings, x.events, await getFollows(env, m), m);
+    const day = new Date(x.at).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/New_York' });
+    const line = await delayLine(env, m, ch, x.filings.length + x.events.length, now);
+    const link = (t: string) => t.replace(/(https:\/\/\S+)$/, '<a href="$1" style="color:#b45309">$1</a>');
+    mails.push({
+      ...am,
+      subject: x.filings.length ? `${day}'s 13Fs from your funds, delayed by our daily email limit` : `${day}'s alerts in your names, delayed by our daily email limit`,
+      text: `${line}\n\n${am.text}`,
+      ...(am.html ? { html: am.html.replace(/^(<div[^>]*>)/, `$1<p style="color:#b45309;font-size:13px">${link(line.replace(/&/g, '&amp;').replace(/</g, '&lt;'))}</p>`) } : {}),
+      filing: true,
+      ids: [...x.filings.map((a) => a.accession), ...x.events.map((e) => e.id)],
+    });
+  }
+  if (!mails.length) return {};
+  const status = await sendMail(env, mails, { tier: 'alert' });
+  await logSent(env, mails.length, now);
+  return { mail_digests: { n: mails.length, status } };
+}
 
 /**
  * Over the day's email room (both providers; Mailgun counts when configured, so failover needs no change here): an
  * email without a member's 13F is skipped (a 13F one is queued, queuesOverCap). The alert already went to the member's feed, chat and webhooks;
  * the feed gets one note a day saying why there was no email, and the day's count feeds /status/ (the lead, Nov 11).
  */
-async function capSkipped(env: Env, m: Member, ch: { feed_token?: string | null }, now: number): Promise<void> {
+async function capSkipped(env: Env, m: Member, ch: Pick<Channels, 'feed_token'>, now: number): Promise<void> {
   const day = new Date(now).toISOString().slice(0, 10);
   const k = `mail:capskip:${day}`;
   const c = JSON.parse((await env.DB.get(k)) ?? 'null') as { count: number; first_at: string; members: number } | null;
@@ -304,7 +430,7 @@ async function capSkipped(env: Env, m: Member, ch: { feed_token?: string | null 
     const key = `feed:${m.customer}`;
     const items = JSON.parse((await env.DB.get(key)) ?? '[]') as FeedItem[];
     const at = new Date(now).toISOString().replace(/\.\d{3}Z$/, 'Z');
-    const note: FeedItem = { id: `capnote:${day}`, title: CAP_NOTE, text: `${CAP_NOTE}. Today's other alerts arrive here, in chat and by webhook as they happen; email resumes after 00:00 UTC.`, url: `${env.SITE_URL}account/`, published: at, sent: at };
+    const note: FeedItem = { id: `capnote:${day}`, title: CAP_NOTE, text: `${CAP_NOTE}. Today's other alerts arrive here as they happen; email resumes at ${resetEt(now)}.`, url: `${env.SITE_URL}account/`, published: at, sent: at };
     if (!items.some((x) => x.id === note.id)) await env.DB.put(key, JSON.stringify([note, ...items].slice(0, 50)));
   }
 }
@@ -373,7 +499,7 @@ export async function flushHeld(env: Env, now: number): Promise<Record<string, u
   const sentWith: { filings: Alert13F[]; events: AlertEvent[] }[] = [];
   let room: number | undefined;
   let skipped = 0;
-  const late: Mail[] = [];
+  let late = 0;
   for (const c of due) {
     const w = JSON.parse((await env.DB.get(`mailwin:${c}`)) ?? 'null') as Held | null;
     await env.DB.delete(`mailwin:${c}`);
@@ -386,14 +512,10 @@ export async function flushHeld(env: Env, now: number): Promise<Record<string, u
     // The same room rule as fanOut: past it the batch is skipped (it went to feed, chat and webhooks as it happened).
     if (!test) {
       room ??= await (await import('./email')).mailRoom(env);
-      if (room - mails.length - (w.filings.length ? 0 : FILING_HOLD) <= 0) {
-        if (queuesOverCap(m, w.filings.length)) {
-          const u = await unmailed(env, c, w.filings, w.events, now);
-          if (u.filings.length || u.events.length) late.push(markDelayed({ ...alertMail(env, m.email, u.filings, u.events, f, m), filing: true, ids: [...u.filings.map((a) => a.accession), ...u.events.map((e) => e.id)] }));
-          continue;
-        }
-        await capSkipped(env, m, await getChannels(env, c), now);
-        skipped++;
+      if (room - mails.length - (hasPriority(w) ? 0 : FILING_HOLD) <= 0) {
+        const r = await overRoom(env, m, await getChannels(env, c), w.filings, w.events, now);
+        late += Number(r.queued);
+        skipped += Number(r.skipped);
         continue;
       }
     }
@@ -404,8 +526,7 @@ export async function flushHeld(env: Env, now: number): Promise<Record<string, u
     sentWith.push(u);
   }
   await env.DB.put(HELD, JSON.stringify(index));
-  if (late.length) await (await import('./email')).delay(env, late);
-  if (!mails.length) return { held_flushed: 0, ...(skipped ? { cap_skipped: skipped } : {}), ...(late.length ? { cap_delayed: late.length } : {}) };
+  if (!mails.length) return { held_flushed: 0, ...(skipped ? { cap_skipped: skipped } : {}), ...(late ? { cap_delayed: late } : {}) };
   const status = await sendMail(env, mails, { bulk: true });
   await logSent(env, mails.length, now);
   // Coalesced emails are timed as they went: a row per item at this send, tagged coalesced.
@@ -557,7 +678,7 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
   let testCapped = 0;
   let chatOnly = 0;
   let capSkips = 0;
-  const capLate: Mail[] = [];
+  let capLate = 0;
   let pressure: { room: number; projected: number } | undefined;
   let heldIndex: Record<string, number> | undefined;
   // Paused members' followed funds that filed a 13F: one "resume now" note per member per ET day.
@@ -652,14 +773,10 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
       // email is skipped (the alert went to feed, chat and webhooks above), with a feed note and a count for /status/.
       if (!only && !test) {
         pressure ??= await emailPressure(env, now);
-        if (pressure.room - mails.length - (send.filings.length ? 0 : FILING_HOLD) <= 0) {
-          if (queuesOverCap(m, send.filings.length)) {
-            const u = await unmailed(env, m.customer, send.filings, send.events, now);
-            if (u.filings.length || u.events.length) capLate.push(markDelayed({ ...alertMail(env, m.email, u.filings, u.events, f, m), test, filing: true, ids: [...u.filings.map((a) => a.accession), ...u.events.map((e) => e.id)] }));
-            continue;
-          }
-          await capSkipped(env, m, ch, now);
-          capSkips++;
+        if (pressure.room - mails.length - (hasPriority(send) ? 0 : FILING_HOLD) <= 0) {
+          const r = await overRoom(env, m, ch, send.filings, send.events, now);
+          capLate += Number(r.queued);
+          capSkips += Number(r.skipped);
           continue;
         }
       }
@@ -680,14 +797,13 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
     }
   }
   if (heldIndex) await env.DB.put(HELD, JSON.stringify(heldIndex));
-  if (capLate.length) await (await import('./email')).delay(env, capLate);
   // An operator's replay or preview (`only`) counts against the day's preview cap.
   const mail = await sendMail(env, mails, { bulk: true, preview: !!only });
   await logSent(env, mails.length, now);
   await flushChannelLatency(env, !only);
   if (mail.split(',').every((s) => s === '200')) for (const m of notes) await noted(env, m);
   for (const p of pausedNotes) await env.DB.put(p.key, '1', { expirationTtl: 2 * 86400 });
-  return { emails: mails.length, digest, mail, ...(held ? { held } : {}), ...(testCapped ? { test_capped: testCapped } : {}), ...(chatOnly ? { chat_only: chatOnly } : {}), ...(capLate.length ? { cap_delayed: capLate.length } : {}), ...(capSkips ? { cap_skipped: capSkips } : {}), ...(pausedNotes.length ? { paused_notes: pausedNotes.length } : {}), ...(chats.length ? { chats: chats.join(', ') } : {}), ...(late.length ? { late: late.length } : {}) };
+  return { emails: mails.length, digest, mail, ...(held ? { held } : {}), ...(testCapped ? { test_capped: testCapped } : {}), ...(chatOnly ? { chat_only: chatOnly } : {}), ...(capLate ? { cap_delayed: capLate } : {}), ...(capSkips ? { cap_skipped: capSkips } : {}), ...(pausedNotes.length ? { paused_notes: pausedNotes.length } : {}), ...(chats.length ? { chats: chats.join(', ') } : {}), ...(late.length ? { late: late.length } : {}) };
 }
 
 type Delivered = { day: string; ids: string[] }[];

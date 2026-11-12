@@ -566,27 +566,61 @@ describe('copybook api', () => {
     await deliver(env, [f13('warren-buffett', 'Berkshire', '0000950123-26-000778', t1 + 3 * 3600_000) as never], [], t1 + 3 * 3600_000);
     const notes = await Promise.all(['cap1', 'cap2', 'cap3', 'cap4'].map(async (c) => JSON.parse((await env.DB.get(`feed:${c}`)) ?? '[]').some((i: { title: string }) => i.title === CAP_NOTE)));
     const day = new Date(t1).toISOString().slice(0, 10);
-    const queued = JSON.parse((await env.DB.get('host:mail-delayed')) ?? '[]') as { subject: string; text: string; filing?: boolean }[];
-    expect([sent.length, notes.filter(Boolean).length, await env.DB.get(`mail:capskip:${day}`), queued.length, queued.every((q) => q.subject.startsWith('Delayed by our daily email limit: ') && q.text.startsWith('Delayed by our daily email limit: this email waited') && q.filing)]).toEqual([2, 0, null, 2, true]);
-    // 15 left: a Form 4 alone takes none of it (20 kept for 13F alerts): skipped for every member.
+    const capq = async () => JSON.parse((await env.DB.get('host:mail-capq')) ?? '{}');
+    const q1 = await capq();
+    expect([sent.length, notes.filter(Boolean).length, await env.DB.get(`mail:capskip:${day}`), Object.keys(q1).length, Object.values(q1).every((x: any) => x.filings.length === 1), await env.DB.get('host:mail-delayed')]).toEqual([2, 0, null, 2, true, null]);
+    // 15 left, under the 20 kept for 13Fs: a Form 4 sale (routine) is skipped for every member, with the feed note.
     resendUsed = 70;
     mailQuota.used = 70;
     sent = [];
     const t2 = t1 + 4 * 3600_000;
-    await deliver(env, [], [{ id: '0001193125-26-123456', slug: 'warren-buffett', manager: 'Warren Buffett', form: '4', kind: 'form4', action: 'buy', filing_date: '2026-11-16', url: 'https://www.sec.gov/y', issuer: 'OCCIDENTAL', display_name: null, ticker: 'OXY', shares: 1000, value_usd: 50_000, avg_price: 50, shares_after: 1000, percent_of_class: null, accepted: new Date(t2).toISOString() } as never], t2);
+    const ev = (id: string, kind: string, action: string, t: number, ticker = 'OXY') => ({ id, slug: 'warren-buffett', manager: 'Warren Buffett', form: kind === 'form4' ? '4' : 'SCHEDULE 13D', kind, action, filing_date: '2026-11-16', url: 'https://www.sec.gov/y', issuer: 'OCCIDENTAL', display_name: null, ticker, shares: 1000, value_usd: 500_000, avg_price: 50, shares_after: 1000, percent_of_class: null, accepted: new Date(t).toISOString() });
+    await deliver(env, [], [ev('0001193125-26-123456', 'form4', 'sell', t2) as never], t2);
     expect([sent.length, JSON.parse((await env.DB.get(`mail:capskip:${day}`))!).count, notes.length]).toEqual([0, 4, 4]);
-    expect((await Promise.all(['cap1', 'cap2', 'cap3', 'cap4'].map(async (c) => JSON.parse((await env.DB.get(`feed:${c}`)) ?? '[]').some((i: { title: string }) => i.title === CAP_NOTE)))).every(Boolean)).toBe(true);
+    expect((await Promise.all(['cap1', 'cap2', 'cap3', 'cap4'].map(async (c) => JSON.parse((await env.DB.get(`feed:${c}`)) ?? '[]').find((i: { title: string }) => i.title === CAP_NOTE)))).every((n) => n && /email resumes at 7pm ET\.$/.test(n.text) && !/chat|webhook|UTC/.test(n.text))).toBe(true);
     const { alertHealth } = await import('../src/status');
     const ah = await alertHealth(env, t2);
     expect([ah.email_limit?.skipped_emails, ah.reasons.some((r: string) => /daily email limit was reached at \d\d:\d\d UTC: 4 alert emails to 4 members were skipped/.test(r))]).toEqual([4, true]);
-    // After the reset: the waiting 13F emails go first, ahead of other mail that waited.
+    // A new 13D stake in their names goes with 13Fs (the lead, Nov 12): not cut at the 20 kept, so with 15 left it goes.
+    await deliver(env, [], [ev('0000921669-26-000999', '13d', 'new_stake', t2 + 60_000) as never], t2 + 60_000);
+    await flushHeld(env, t2 + 62 * 60_000);
+    expect(sent.filter((m) => /OCCIDENTAL|OXY/i.test(m.subject + m.text)).length).toBe(4);
+    // Room gone: a Form 4 open-market buy joins each paying member's waiting alerts (one entry per member); a 13D/A
+    // stake update and a sale with it are skipped with the note.
+    resendUsed = 85;
+    mailQuota.used = 85;
+    sent = [];
+    const t3 = t2 + 65 * 60_000;
+    await deliver(env, [], [ev('0001193125-26-123999', 'form4', 'buy', t3) as never, ev('0000921669-26-001000', '13d', 'stake_update', t3) as never], t3);
+    const q2 = await capq();
+    expect([sent.length, Object.keys(q2).sort(), Object.values(q2).map((x: any) => [x.filings.length, x.events.map((e: { action: string }) => e.action)]).sort()]).toEqual([0, ['cap1', 'cap2', 'cap3', 'cap4'], [[0, ['buy']], [0, ['buy']], [1, ['buy']], [1, ['buy']]]]);
+    // After the reset (7pm ET): one digest per member, first in the day's room, then other mail that waited.
     const { retryMail } = await import('../src/email');
-    await env.DB.put('host:mail-delayed', JSON.stringify([{ to: 'other@example.com', subject: 'Delayed by our daily email limit: other', text: 'x', day: '2026-01-01' }, ...queued.map((q) => ({ ...q, day: '2026-01-01' }))]));
+    await env.DB.put('host:mail-capq', JSON.stringify(Object.fromEntries(Object.entries(q2).map(([c, x]: [string, any]) => [c, { ...x, day: '2026-01-01' }]))));
+    await env.DB.put('host:mail-delayed', JSON.stringify([{ to: 'other@example.com', subject: 'Delayed by our daily email limit: other', text: 'x', day: '2026-01-01' }]));
     resendUsed = 0;
     mailQuota.used = 0;
     sent = [];
     await retryMail(env);
-    expect(sent.map((m) => m.subject.startsWith('Delayed by our daily email limit: ') && m.to[0] !== 'other@example.com')).toEqual([true, true, false]);
+    expect(sent.map((m) => m.to[0]).filter((t) => t !== 'other@example.com').sort()).toEqual(['cap1@example.com', 'cap2@example.com', 'cap3@example.com', 'cap4@example.com']);
+    expect(sent[sent.length - 1].to[0]).toBe('other@example.com');
+    const subjects = sent.slice(0, 4).map((m) => m.subject).sort();
+    expect(subjects).toEqual([
+      "Monday's 13Fs from your funds, delayed by our daily email limit",
+      "Monday's 13Fs from your funds, delayed by our daily email limit",
+      "Monday's alerts in your names, delayed by our daily email limit",
+      "Monday's alerts in your names, delayed by our daily email limit",
+    ]);
+    // Feed only, no chat: the line says so and links the account page; never claims chat, webhooks or UTC.
+    const two = sent.find((m) => m.subject.startsWith("Monday's 13Fs"))!;
+    expect(two.text.split('\n')[0]).toBe(`Delayed by our daily email limit: this email waited until 7pm ET. These alerts reached your feed when they were filed. You have no instant channel yet. Connect one so this never waits: ${SITE}account/`);
+    expect(two.text).toMatch(/Berkshire/);
+    expect(await env.DB.get('host:mail-capq')).toBe('{}');
+    // With a working chat channel the line names it (and only it).
+    const { delayLine } = await import('../src/alerts');
+    const cap4 = JSON.parse((await env.DB.get('cus:cap4'))!);
+    expect(await delayLine(env, cap4, { feed_token: 'x', telegram: { bot_token: 't', chat_id: '1' }, verified: { telegram: '2026-11-12T00:00:00Z' } } as never, 1, Date.UTC(2026, 10, 17, 0, 5))).toBe('Delayed by our daily email limit: this email waited until 7pm ET. This alert reached your feed and Telegram when it was filed.');
+    expect(await delayLine(env, cap4, {} as never, 1, Date.UTC(2026, 10, 17, 0, 5))).toBe(`Delayed by our daily email limit: this email waited until 7pm ET. You have no instant channel yet. Connect one so this never waits: ${SITE}account/`);
     resendUsed = 0;
     mailQuota.used = 0;
   });
@@ -1149,9 +1183,10 @@ describe('copybook api', () => {
     // A revocation on gene (a member ends every session) is published at once, not at gene's next minute: the backup
     // refuses the old session within seconds if members are on it (the drill: a seat removed on gene took 31 s).
     const { signToken: st } = await import('../src/tokens');
-    const oldSess = await st(env.SESSION_SECRET, 'session', 'n', 3600);
+    // Signed on the test's clock (14:23 UTC today), not the real one: run before 13:23 UTC, a real-time token had expired.
     const idx0 = JSON.parse(text('sync/gene.json') ?? '{"keys":{}}').keys['cus:n'] ?? 0;
     vi.useFakeTimers({ toFake: ['Date'], now: min(3) + 20_000 });
+    const oldSess = await st(env.SESSION_SECRET, 'session', 'n', 3600);
     expect((await worker.fetch(new Request('https://api.test/me/sessions/revoke', { method: 'POST', headers: { authorization: `Bearer ${oldSess}` } }), gene as Env)).status).toBe(200);
     vi.useRealTimers();
     expect(JSON.parse(text('sync/gene.json')!).keys['cus:n']).toBeGreaterThan(idx0);

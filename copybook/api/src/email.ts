@@ -164,21 +164,31 @@ export async function delay(env: Env, mails: Mail[]): Promise<void> {
   if (!mails.length) return;
   const today = new Date().toISOString().slice(0, 10);
   const q = JSON.parse((await env.DB.get(DELAYED)) ?? '[]') as (Mail & { day: string })[];
-  const add = mails.map((m) => ({ ...m, subject: m.subject.startsWith(DELAY_MARK) ? m.subject : DELAY_MARK + m.subject, day: today }));
+  const marked = (m: Mail) => m.subject.startsWith(DELAY_MARK) || /delayed by our daily email limit/i.test(m.subject);
+  const add = mails.map((m) => ({ ...m, subject: marked(m) ? m.subject : DELAY_MARK + m.subject, day: today }));
   await env.DB.put(DELAYED, JSON.stringify([...q, ...add].slice(-2000)));
-  const ids = new Set(JSON.parse((await env.DB.get(DELAYED_IDS)) ?? '[]') as string[]);
-  for (const m of mails) for (const id of m.ids ?? []) ids.add(id);
-  await env.DB.put(DELAYED_IDS, JSON.stringify([...ids].slice(-500)));
-  mailQuota.delayed += mails.length;
-  counted('queued', mails.filter((m) => !m.subject.startsWith(DELAY_MARK)).length);
+  await noteDelayed(env, mails.flatMap((m) => m.ids ?? []), mails.filter((m) => !marked(m)).length);
   console.log(`email limit: ${mails.length} delayed to after the reset`);
 }
+
+/** Counts alert emails that wait for the reset (n new ones), and their alerts' ids, which latency marks email_delayed. */
+export async function noteDelayed(env: Env, alertIds: string[], n: number): Promise<void> {
+  await loadMeter(env);
+  const ids = new Set(JSON.parse((await env.DB.get(DELAYED_IDS)) ?? '[]') as string[]);
+  for (const id of alertIds) ids.add(id);
+  await env.DB.put(DELAYED_IDS, JSON.stringify([...ids].slice(-500)));
+  mailQuota.delayed += n;
+  counted('queued', n);
+  await env.DB.put(METER, JSON.stringify(mailQuota));
+}
+
+/** The daily email reset (00:00 UTC) in Eastern time, as members read it: "7pm" in winter, "8pm" in summer. */
+export const resetEt = (now = Date.now()) => new Date(Math.floor(now / 86_400_000) * 86_400_000).toLocaleTimeString('en-US', { hour: 'numeric', timeZone: 'America/New_York' }).replace(/\s?([AP])M$/, (_, x: string) => `${x.toLowerCase()}m`) + ' ET';
 
 /** Launch week (Nov 11-16): test and preview mail never uses Resend or Mailgun quota; it goes to the test inbox sink. */
 export const SINK_UNTIL = Date.parse('2026-11-17T00:00:00Z');
 /** The cap rules in plain words, for /health, status.json and /status/. */
-export const MAIL_POLICY =
-  'Account emails (sign-in, welcome) are sent even past the alert cap, until Resend itself refuses them; then they go out after the 00:00 UTC reset. Paid and trialing members\' 13F alert emails over the cap wait for the 00:00 UTC reset, marked "Delayed by our daily email limit", and go first then. Other alert emails over the cap (Form 4 and 13D/G alerts, free members\' alerts) are skipped, with a note in the member\'s feed. Chat, feed and webhook alerts go at once either way. Test and preview mail goes to a test inbox, not by email, through Nov 16.';
+export const MAIL_POLICY = `Account emails (sign-in, welcome, billing) are sent even past the alert cap, until Resend itself refuses them; then they go out after the daily reset at ${resetEt()}. Past the cap, paid and trialing members' 13F alerts, new 13D stakes and insider open-market buys in their names wait for ${resetEt()} and arrive then as one email per member, "delayed by our daily email limit", first in the new day's room. Other alert emails over the cap (13G and amendments, Form 4 sells and other routine filings, free members' alerts) are skipped, with a note in the member's feed. Feed, chat and webhook alerts go at once either way. Test and preview mail goes to a test inbox, not by email, through Nov 16.`;
 const isTestMail = (m: Mail) => !!m.preview || !!m.test || testAddress(m.to);
 /** The sink's object for one address: unguessable (HMAC of the address), readable at PUBLIC_URL + this key. */
 /** Each critic's aliases (copybook-test-<critic>-<anything>) share the critic's own test inbox. */
@@ -370,7 +380,7 @@ async function notice80(env: Env): Promise<void> {
     if (await env.DB.get(k)) continue;
     await env.DB.put(k, '1', { expirationTtl: 40 * 86400 });
     const [used, cap] = what.startsWith('day') ? [mailQuota.used, MAIL_DAILY_CAP] : [mailQuota.monthly, MAIL_MONTHLY_CAP];
-    await sendMail(env, [{ to: env.CONTACT_EMAIL ?? 'hello@factordynamics.com', subject: `Copybook: ${Math.round((used / cap) * 100)}% of this ${what.split(' ')[0]}'s email sends used (${used} of ${cap})`, text: `Resend's free plan: ${used} of ${cap} emails sent this ${what}. Past ${cap - MAIL_RESERVE}, members' 13F alert emails wait for the reset, marked "Delayed by our daily email limit", and other alert emails are skipped with a feed note; chat, feed and webhook alerts still go out at once. Sign-in, receipts, pause and resume always go out.` }]);
+    await sendMail(env, [{ to: env.CONTACT_EMAIL ?? 'hello@factordynamics.com', subject: `Copybook: ${Math.round((used / cap) * 100)}% of this ${what.split(' ')[0]}'s email sends used (${used} of ${cap})`, text: `Resend's free plan: ${used} of ${cap} emails sent this ${what}. Past ${cap - MAIL_RESERVE}, paying and trialing members' 13Fs, new 13D stakes and insider buys wait for the reset (${resetEt()}) and go then as one digest per member; other alert emails are skipped with a feed note; chat, feed and webhook alerts still go out at once. Sign-in, receipts, pause and resume always go out.` }]);
   }
 }
 
@@ -380,6 +390,8 @@ export async function retryMail(env: Env): Promise<Record<string, unknown>> {
   const today = new Date().toISOString().slice(0, 10);
   const waiting = JSON.parse((await env.DB.get(DELAYED)) ?? '[]') as (Mail & { day: string })[];
   // 13F alert emails first in the new day's room (the lead, Nov 11), then the rest in the order they waited.
+  // Members' delayed alerts first, one digest each (alerts.ts), then the rest that waited, 13F mail first.
+  Object.assign(out, await (await import('./alerts')).sendDelayedDigests(env).catch((e) => ({ mail_digests: `error: ${e}` })));
   const due = waiting.filter((m) => m.day < today).sort((a, b) => Number(!!b.filing) - Number(!!a.filing));
   if (due.length) {
     await env.DB.put(DELAYED, JSON.stringify(waiting.filter((m) => m.day >= today)));
@@ -469,6 +481,18 @@ export function backMail(env: Env, to: string, token: string, m: Member): Mail {
   return { to, subject: `You're signed back in to ${name}`, text };
 }
 
+/**
+ * The day-1 (welcome) email's chat line (marketing, Nov 12): before Monday's 13F deadline (to 5:30pm ET Nov 16) it names
+ * the day; after, the standing line. Chat alerts never wait on the daily email limit.
+ */
+export function chatLine(env: Env, now = Date.now()): { text: string; url: string } {
+  const early = now < Date.parse('2026-11-16T22:30:00Z');
+  return {
+    text: early ? 'Monday, Nov 16, is 13F deadline day. Connect a chat channel on your account page so no alert waits on our daily email limit:' : 'Connect a chat channel so an alert never waits on email:',
+    url: `${env.SITE_URL}account/?utm_source=email${early ? '&utm_campaign=13f-q3-2026' : ''}&utm_content=day1-chat`,
+  };
+}
+
 export function loginMail(env: Env, to: string, token: string, welcome: boolean, m?: Member, waiting = false): Mail {
   const link = `${env.SITE_URL}account/?login=${encodeURIComponent(token)}`;
   // An unconfirmed member with follows waiting (the trader, Nov 11): the link is the confirmation, so say so first.
@@ -500,8 +524,9 @@ export function loginMail(env: Env, to: string, token: string, welcome: boolean,
   const signIn = inv
     ? 'Open this link to sign in and confirm your address: it turns on seats, alert channels and API keys (it works once, for 7 days):'
     : "You're signed in on the device you subscribed from. Open this link to confirm your address: it turns on alert channels, API keys and billing, and signs you in on any other device (it works once, for 7 days):";
-  const text = `Welcome to ${name}.${terms}\n\n${signIn}\n${link}\n\nThen three steps, two minutes:\n${steps.map(([t, d, u], i) => `${i + 1}. ${t}: ${u}\n   ${d}`).join('\n')}\n\nYour plan also includes 8 quarters of 13F history and CSV export on every investor page.${FOOTER}`;
-  const html = `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:560px"><p>Welcome to ${name}.${esc(terms)}</p><p>${esc(signIn.replace(/:$/, '.'))}</p><p><a href="${link}" style="display:inline-block;background:#111;color:#fff;padding:10px 18px;border-radius:999px;text-decoration:none;font-weight:600">Sign in to Copybook</a></p><p>Then three steps, two minutes:</p><ol style="padding-left:20px">${steps.map(([t, d, u]) => `<li style="margin:0 0 10px"><a href="${u}" style="color:#1d4ed8;font-weight:600">${t}</a><br><span style="color:#374151">${esc(d)}</span></li>`).join('')}</ol><p style="color:#374151">Your plan also includes 8 quarters of 13F history and CSV export on every investor page.</p><p style="color:#6b7280;font-size:12px;margin-top:24px">Source: SEC EDGAR filings, as filed. Not investment advice. Copybook by Factor Dynamics.</p></div>`;
+  const chat = chatLine(env);
+  const text = `Welcome to ${name}.${terms}\n\n${signIn}\n${link}\n\nThen three steps, two minutes:\n${steps.map(([t, d, u], i) => `${i + 1}. ${t}: ${u}\n   ${d}`).join('\n')}\n\n${chat.text}\n${chat.url}\n\nYour plan also includes 8 quarters of 13F history and CSV export on every investor page.${FOOTER}`;
+  const html = `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:560px"><p>Welcome to ${name}.${esc(terms)}</p><p>${esc(signIn.replace(/:$/, '.'))}</p><p><a href="${link}" style="display:inline-block;background:#111;color:#fff;padding:10px 18px;border-radius:999px;text-decoration:none;font-weight:600">Sign in to Copybook</a></p><p>Then three steps, two minutes:</p><ol style="padding-left:20px">${steps.map(([t, d, u]) => `<li style="margin:0 0 10px"><a href="${u}" style="color:#1d4ed8;font-weight:600">${t}</a><br><span style="color:#374151">${esc(d)}</span></li>`).join('')}</ol><p>${esc(chat.text.replace(/[:.]$/, ''))}: <a href="${chat.url}" style="color:#1d4ed8;font-weight:600">connect a channel</a>.</p><p style="color:#374151">Your plan also includes 8 quarters of 13F history and CSV export on every investor page.</p><p style="color:#6b7280;font-size:12px;margin-top:24px">Source: SEC EDGAR filings, as filed. Not investment advice. Copybook by Factor Dynamics.</p></div>`;
   return { to, subject: `Welcome to ${name}: three steps to your first alert`, text, html };
 }
 

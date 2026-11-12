@@ -80,7 +80,8 @@ export function hotHist(r2: R2): R2 {
  * per-host check caches. Alert-sent records, dedupe, the mail meter, the job queue, members, follows and billing stay in DB.
  */
 const OPS = ['track', 'rl:', 'sync:', 'host:', 'issuers:checked', 'alerts:recheck-at', 'status:fresh', 'idx:etag', 'index:contract', 'types:guard', 'bulk:check'];
-const isOps = (k: string) => OPS.some((p) => k.startsWith(p));
+// host:mail-* (the mail meter, the delayed queue, the 7pm ET digests) and host:mail80 gate sends: they stay in DB.
+const isOps = (k: string) => OPS.some((p) => k.startsWith(p)) && !k.startsWith('host:mail');
 
 /**
  * DB with the operational keys on `ops`. A read falls back to DB's copy, written before OPS_KV was bound (today's counts,

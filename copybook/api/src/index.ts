@@ -862,6 +862,8 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const hourOf = new Map(filing.map((x) => [x.slug, Math.floor((x.time_et ?? 960) / 60)]));
     let members = 0, emails = 0, chatOnly = 0, digest = 0;
     const byHour: Record<string, number> = {};
+    // Each member's emails by hour, for the cap: whether a paid or trialing member's later ones become the 7pm ET digest.
+    const sends: { hour: number; c: string; queues: boolean }[] = [];
     for (const m of await listMembers(env)) {
       if (!isActive(m) || !m.email || m.email_pending || m.alerts === 'off' || m.plan === 'holdterm' || m.test || testAddress(m.email)) continue;
       const f = await getFollows(env, m);
@@ -875,9 +877,31 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       members++;
       emails += hours.length;
       for (const hr of hours) byHour[`${String(hr).padStart(2, '0')}:00 ET`] = (byHour[`${String(hr).padStart(2, '0')}:00 ET`] ?? 0) + 1;
+      for (const hr of hours) sends.push({ hour: hr, c: m.customer, queues: m.plan !== 'free' && (m.status === 'active' || m.status === 'trialing') });
     }
     const room = MAIL_DAILY_CAP - MAIL_RESERVE + (env.MAILGUN_API_KEY ? MAILGUN_DAILY_CAP : 0);
-    return json({ ok: true, day, quarter: ex?.quarter ?? null, expected_filers: filing.length, members_emailed: members, projected_alert_emails: emails, by_hour: Object.fromEntries(Object.entries(byHour).sort()), room_for_alerts: room, account_reserve: MAIL_RESERVE, mailgun: !!env.MAILGUN_API_KEY, over_by: Math.max(0, emails - room), chat_only_members: chatOnly, digest_members: digest, note: 'Follow-ups (moves arriving after the first email), Form 4 and 13D/G alerts and new trials add to this; over the room, 13F alerts go first and the rest go to feeds, chat and webhooks only.' }, 200, h);
+    // The digest rule (the lead, Nov 12): in hour order, emails go while the room lasts; past it a paid or trialing
+    // member's alerts wait for 7pm ET and go as one digest each, and a free member's are skipped (feed note).
+    let used = Number(url.searchParams.get('used') ?? 0) || 0;
+    const capHours: Record<string, { projected: number; sent: number; over: number }> = {};
+    const late = new Set<string>();
+    let skippedFree = 0;
+    for (const x of sends.sort((a, b) => a.hour - b.hour)) {
+      const h0 = (capHours[`${String(x.hour).padStart(2, '0')}:00 ET`] ??= { projected: 0, sent: 0, over: 0 });
+      h0.projected++;
+      if (used < room) (used++, h0.sent++);
+      else (h0.over++, x.queues ? late.add(x.c) : skippedFree++);
+    }
+    const cap = { room_left_at_start: Math.max(0, room - (Number(url.searchParams.get('used') ?? 0) || 0)), sent_on_day: Object.values(capHours).reduce((a, x) => a + x.sent, 0), over_cap_emails: Object.values(capHours).reduce((a, x) => a + x.over, 0), delayed_digests_at_reset: late.size, skipped_free: skippedFree, reset: (await import('./email')).resetEt(), by_hour: Object.fromEntries(Object.entries(capHours).sort()) };
+    return json({ ok: true, day, quarter: ex?.quarter ?? null, expected_filers: filing.length, members_emailed: members, projected_alert_emails: emails, by_hour: Object.fromEntries(Object.entries(byHour).sort()), room_for_alerts: room, account_reserve: MAIL_RESERVE, mailgun: !!env.MAILGUN_API_KEY, cap, over_by: Math.max(0, emails - room), chat_only_members: chatOnly, digest_members: digest, note: 'Follow-ups (moves arriving after the first email), Form 4 and 13D/G alerts and new trials add to this; over the room, 13F alerts go first and the rest go to feeds, chat and webhooks only.' }, 200, h);
+  }
+
+  // The Sat Nov 14 chat-channel nudge: {dry: true} counts; {only: address} sends one (a test inbox); {} sends once per member.
+  if (req.method === 'POST' && path === '/ops/chat-nudge') {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    const b = await body(req);
+    const { chatNudge } = await import('./alerts');
+    return json({ ok: true, ...(await chatNudge(env, Date.now(), { dry: b.dry === true, only: typeof b.only === 'string' ? b.only : undefined })) }, 200, h);
   }
 
   if (req.method === 'GET' && path === '/ops/member-counts') {
