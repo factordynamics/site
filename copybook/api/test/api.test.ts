@@ -3761,6 +3761,9 @@ describe('copybook api', () => {
     expect(Math.round((Date.parse(sameDay.expires_at) - Date.now()) / 3600_000)).toBe(12);
     const [free, enforced] = [await (await gt()).json(), await (await gt(gtok)).json()];
     expect([free.trial_days, free.gate, enforced.trial_days, enforced.gate]).toEqual([14, undefined, 0, { enforce_trial: true, had_subscription: true }]);
+    // The returning visitor's Checkout says why there's no trial, by the button (the lead, Nov 12).
+    const back = calls.filter((c) => c.path === 'checkout/sessions').map((c) => decodeURIComponent(c.body.replace(/\+/g, ' ')));
+    expect([back.at(-2)!.includes('Welcome back'), back.at(-1)!.includes('custom_text[submit][message]=Welcome back. Your trial was used, so billing starts today at the founding price.'), back.at(-1)!.includes('trial_period_days')]).toEqual([false, true, false]);
     expect([(await gt('enforce-trial')).status, (await gt(await signToken(env.SESSION_SECRET, 'keep', 'enforce-trial', 60))).status]).toEqual([400, 400]);
     expect((await call('/checkout', { body: { plan: 'gold', interval: 'monthly' } })).status).toBe(400);
     // The visitor's first touch and landing page ride on the session; our own checks are tagged test (the lead).

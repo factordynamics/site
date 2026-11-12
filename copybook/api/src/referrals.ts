@@ -8,7 +8,7 @@
 import { FOOTER, sendMail } from './email';
 import { checkoutNote, FOUNDING_UNTIL } from './revenue';
 import { isActive, testAddress, type Env, type Member } from './env';
-import { claim, getMember, memberByEmail } from './members';
+import { claim, FOUNDING_PRICE_UNTIL, getMember, memberByEmail } from './members';
 import { stripe } from './stripe';
 
 /** Pro and Fund checkout: billing address and tax ID, the company (required for Fund) and an optional PO number. */
@@ -33,6 +33,9 @@ const TRIAL_DAYS = 14;
 /** Copy's Checkout line by the button: \"$0 due today. No card needed: if you don't add one, the trial just ends on November 25.\" */
 export const copySubmit = (now: number) =>
   `$0 due today. No card needed: if you don't add one, the trial just ends on ${new Date(now + TRIAL_DAYS * 86_400_000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/New_York' })}. Copybook is made by Factor Dynamics.`;
+
+export const COPY_BACK = 'Welcome back. Your trial was used, so billing starts today at the founding price.';
+const COPY_BACK_LATER = 'Welcome back. Your trial was used, so billing starts today.';
 
 export const canRefer = (m: Member) => isActive(m) && !!MONTH[m.plan] && !m.seat_of;
 
@@ -189,7 +192,8 @@ export async function createCheckout(env: Env, b: Record<string, unknown>, clien
     'metadata[copybook]': ref ? 'referral' : 'checkout',
     // The seller on the card statement is the account's name: say whose product it is.
     // Copy: what the cardless trial means, on the main panel by the button (the trader and retail, Nov 11).
-    'custom_text[submit][message]': plan === 'fund' ? FUND_SUBMIT : plan === 'copy' && !gate && trial ? copySubmit(Date.now()) : 'Copybook is made by Factor Dynamics.',
+    // A returning Copy member (one trial per person, the lead, Nov 12): no trial, said plainly by the button.
+    'custom_text[submit][message]': plan === 'fund' ? FUND_SUBMIT : plan === 'copy' && !gate && trial ? copySubmit(Date.now()) : plan === 'copy' && !gate ? (Date.now() < FOUNDING_PRICE_UNTIL ? COPY_BACK : COPY_BACK_LATER) : 'Copybook is made by Factor Dynamics.',
     // Pro and Fund: the founding price (amount and deadline) and the tax line. Copy: neither.
     ...(checkoutNote(plan, price.unit_amount, price.recurring?.interval) ? { 'custom_text[after_submit][message]': checkoutNote(plan, price.unit_amount, price.recurring?.interval)! } : {}),
     ...(plan !== 'copy' && Date.now() < FOUNDING_UNTIL ? { 'subscription_data[metadata][founding]': 'true' } : {}),
