@@ -784,6 +784,18 @@ main:focus {
 .grid-wrap {
   overflow-x: auto;
 }
+.grid-wrap.fits {
+  overflow-x: clip;
+}
+/* A table that fits keeps its header under the top bar (--top-h, set by App) while its rows scroll. One that
+ * scrolls sideways keeps top: 0, which inside its own scroller leaves the header where it is. */
+.grid-wrap.fits .grid th {
+  top: var(--top-h, 0px);
+}
+/* Keyboard focus and #anchors land below the sticky top bar and a pinned table header, not behind them. */
+html {
+  scroll-padding-top: calc(var(--top-h, 60px) + var(--th) + 8px);
+}
 table.grid {
   width: 100%;
   border-collapse: collapse;
@@ -799,7 +811,10 @@ table.grid {
   border-bottom: 1px solid var(--line);
   position: sticky;
   top: 0;
+  z-index: 1;
   background: var(--panel);
+  /* A collapsed table's border stays put when the cell sticks; the shadow draws the header's edge and moves with it. */
+  box-shadow: inset 0 -1px 0 var(--line);
   user-select: none;
 }
 .grid th .sorter {

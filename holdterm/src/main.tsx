@@ -459,6 +459,15 @@ function App() {
     window.addEventListener('holdterm:search', open)
     return () => (window.removeEventListener('keydown', onKey), window.removeEventListener('holdterm:search', open))
   }, [])
+  // Table headers stick just under the top bar (styles.css, .grid th), whose height changes with the width.
+  const top = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const el = top.current
+    if (!el) return
+    const ro = new ResizeObserver(() => document.documentElement.style.setProperty('--top-h', `${Math.round(el.getBoundingClientRect().height)}px`))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
   const section = '/' + (path.split('/')[1] ?? '')
   const isOn = (to: string) => (to === '/' ? path === '/' : section === to || (to === '/funds' && section === '/m') || (to === '/consensus' && section === '/s'))
   return (
@@ -473,7 +482,7 @@ function App() {
       >
         Skip to content
       </a>
-      <header className="top">
+      <header className="top" ref={top}>
         <div className="top-in">
           <A to="/" className="brand" title="Holdterm home">
             <Mark />

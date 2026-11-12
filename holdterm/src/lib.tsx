@@ -556,10 +556,13 @@ export function Grid<R>({
   const body = useRef<HTMLTableSectionElement>(null)
   const wrap = useRef<HTMLDivElement>(null)
   const [cue, setCue] = useState(false)
+  // A table that fits its panel doesn't need a sideways scroller, and without one its header can stick under the top
+  // bar while the rows scroll (a scroll container would pin the header to itself, which never scrolls vertically).
+  const [fits, setFits] = useState(false)
   useEffect(() => {
     const el = wrap.current
     if (!el) return
-    const check = () => setCue(el.scrollWidth - el.clientWidth - el.scrollLeft > 4)
+    const check = () => (setCue(el.scrollWidth - el.clientWidth - el.scrollLeft > 4), setFits(el.scrollWidth <= el.clientWidth + 1))
     check()
     const ro = new ResizeObserver(check)
     ro.observe(el)
@@ -592,7 +595,7 @@ export function Grid<R>({
   if (!rows.length) return typeof empty === 'string' ? <Empty title={empty} /> : <>{empty}</>
   return (
     <div className={`grid-outer ${cue ? 'cue' : ''}`}>
-    <div className="grid-wrap" ref={wrap}>
+    <div className={`grid-wrap${fits ? ' fits' : ''}`} ref={wrap}>
       <table className={`grid${groupSm && sm && sort === initial ? ' grouped' : ''}`} aria-labelledby={heading}>
         <thead>
           <tr>
