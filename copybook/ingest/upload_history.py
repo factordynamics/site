@@ -340,6 +340,9 @@ def publish_builds(sources: dict, digests: dict, manifest: dict, token) -> None:
     try:
         with urlopen(req, timeout=60):
             print(f"upload: meta/builds.json {body.decode()}", flush=True)
+        # The same body on Pages (public /data-quality/; /v1/meta/builds needs a key), only once R2 has it.
+        (HIST.parent / "meta").mkdir(exist_ok=True)
+        (HIST.parent / "meta" / "builds.json").write_bytes(body + b"\n")
     except (HTTPError, URLError) as e:  # optional until every store is complete: the API then checks within a response
         print(f"::warning::upload: meta/builds.json not sent: {e}", flush=True)
 

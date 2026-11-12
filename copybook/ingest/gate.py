@@ -19,16 +19,30 @@ import json
 import os
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ingest.parse import not_common  # noqa: E402  (the same rule hl/ uses)
+CLASS_SUM_MAX = 10  # moves.CLASS_SUM_MAX (moves isn't imported here: gate.py stays light)
 
 MAX_DROP = 0.005
 TOP_N = 1000
 # Filer types: no type's count may move more than 10% (and more than 10 filers, so the 19 sovereigns don't trip it on
 # two new filers) from the published set, except in a run dispatched with the accepted-reclass flag.
 TYPES_MAX_MOVE, TYPES_MIN_FILERS = 0.10, 10
+BOOK_COVER_MAX, BOOK_JUMP_MAX, BOOK_MEDIAN_MAX = 1.5, 1.5, 1.6  # book_totals: merged books vs cover, prior, positions
+WEIGHT_TOL = 0.001  # pct_of_book over equity rows sums to 1 within this
+NO_PUBLISH = "Nothing is published: the live data stays."
+GATES: list[dict] = []  # data/gates.json (public /data-quality/): every gate this run, its rule and its result
+
+
+def gate(gid: str, name: str, fails_when: str, stays_live: str, failed, detail=None) -> bool:
+    """Records one gate for gates.json; returns whether it failed."""
+    failed = bool(failed)
+    GATES.append({"id": gid, "name": name, "fails_when": fails_when, "stays_live": stays_live,
+                  "result": "fail" if failed else "pass", **({"detail": str(detail)[:500]} if failed and detail else {})})
+    return failed
 TYPES_ACCEPTED = os.environ.get("COPYBOOK_TYPES_ACCEPTED") == "1"
 
 
@@ -390,15 +404,15 @@ def book_totals(hist: Path) -> list[str]:
             if not merged and not q.get("combined_with"):
                 continue
             total, cover = q.get("total_value") or 0, q.get("cover_total") or 0
-            if cover and total > 1.5 * cover:
+            if cover and total > BOOK_COVER_MAX * cover:
                 bad.append(f"{folder.name} {name} ${total / 1e9:.1f}B vs filed ${cover / 1e9:.1f}B")
                 continue
             prev = qs.get(q.get("prev_quarter") or "")
-            if not (prev and prev.get("total_value") and total > 1.5 * prev["total_value"]):
+            if not (prev and prev.get("total_value") and total > BOOK_JUMP_MAX * prev["total_value"]):
                 continue
             ratios = sorted(h["shares"] / h["prev_shares"] for h in q.get("holdings") or []
                             if not h.get("put_call") and h.get("shares") and h.get("prev_shares"))
-            if ratios and ratios[len(ratios) // 2] > 1.6:
+            if ratios and ratios[len(ratios) // 2] > BOOK_MEDIAN_MAX:
                 bad.append(f"{folder.name} {name} ${total / 1e9:.1f}B after an amendment vs ${prev['total_value'] / 1e9:.1f}B, "
                            f"median position x{ratios[len(ratios) // 2]:.2f}")
     return bad
@@ -436,24 +450,28 @@ def main() -> int:
         eq = [h for h in b.get("holdings") or [] if not h.get("put_call") and h.get("shares_type", "SH") != "PRN"]
         if eq and "pct_of_book" in eq[0] and "delta_pct_of_book" in eq[0]:  # the equity-weight definition
             total = sum(h.get("pct_of_book") or 0 for h in eq)
-            if abs(total - 1) > 0.001:
+            if abs(total - 1) > WEIGHT_TOL:
                 off.append(f"{slug} {total:.4f}")
+    gate("weights", "Book weights", f"A tracked fund's equity weights add up to more than {WEIGHT_TOL:.1%} away from 100%.", NO_PUBLISH, off, off[:10])
     if off:
         print(f"::error::pct_of_book does not sum to 1 over equity rows: {', '.join(off[:20])}; not publishing.")
         failed = True
     index = new("index.json") or {}
     broken = index_contract(index)
+    gate("index_contract", "Alert routing index", "The fund index lacks a field the API routes alerts by, or has no hedge-fund or long-only manager.", NO_PUBLISH, broken, broken[:10])
     if broken:
         print(f"::error::index.json breaks the API contract (alert routing): {'; '.join(broken[:20])}; not publishing.")
         failed = True
     lagging = [f"{m['slug']} {m.get('quarter')} < {q['quarter']} ({q['reason']} {q.get('accession') or ''})"
                for m in index.get("managers") or [] for q in m.get("skipped_quarters") or []
                if q["report_date"] > (m.get("report_date") or "") and q["reason"] not in ("empty", "notice")]
+    gate("curated_lag", "Tracked funds current", "A tracked fund has a newer 13F-HR on EDGAR that this build did not load.", NO_PUBLISH, lagging, lagging[:10])
     if lagging:
         print(f"::error::Curated funds behind a newer 13F-HR on EDGAR that was not loaded: {'; '.join(lagging[:20])}; "
               f"not publishing.")
         failed = True
     short = holder_counts(data, after)
+    gate("holder_counts", "Holder counts", "A stock's all-filer holder count is below the number of tracked funds holding its common shares.", NO_PUBLISH, short, short[:10])
     if short:
         print(f"::error::All-filer holder counts below the tracked funds holding the stock: {'; '.join(short[:20])}; "
               f"not publishing.")
@@ -461,22 +479,28 @@ def main() -> int:
     live_types, new_types = (live("filer_types.json") or {}).get("filers"), (new("filer_types.json") or {}).get("filers")
     if live_types and new_types:
         drift = type_drift(type_counts(live_types), type_counts(new_types))
+        gate("type_drift", "Filer type drift", f"A filer type's count moves more than {TYPES_MAX_MOVE:.0%} (and by more than "
+             f"{TYPES_MIN_FILERS} filers) against the live set without a reviewed reclass.", NO_PUBLISH,
+             drift and not TYPES_ACCEPTED, drift)
         if drift and not TYPES_ACCEPTED:  # filer_types.py holds such a set back; this catches any other path
             print(f"::error::Filer type counts moved more than {TYPES_MAX_MOVE:.0%} from the published set without the "
                   f"accepted-reclass flag: " + "; ".join(f"{d['type']} {d['published']} -> {d['candidate']}" for d in drift)
                   + "; not publishing.")
             failed = True
     wrong = reviewed_types(data)
+    gate("reviewed_types", "Reviewed filer types", "A hand-reviewed filer comes out of the build with a different type.", NO_PUBLISH, wrong, wrong[:10])
     if wrong:
         print(f"::error::Filer types differ from the reviewed cases: {'; '.join(wrong[:20])}; not publishing.")
         failed = True
     unsplit = split_rows(data, after)
+    gate("splits", "Splits applied", "A position in a stock with a split on file reads as a trade the split explains.", NO_PUBLISH, unsplit, unsplit[:10])
     if unsplit:
         print(f"::error::Split not applied: {'; '.join(unsplit[:20])}; not publishing.")
         failed = True
     blank, total, curated_blank = blank_accepted(data)
     if total:
         print(f"gate: accepted_at blank on {blank} of {total} holder rows with an accession")
+    gate("accepted_at", "Acceptance times", "A tracked fund's holder row has no EDGAR acceptance time.", NO_PUBLISH, curated_blank, curated_blank[:10])
     if curated_blank:  # curated books always know their filing's acceptance time
         print(f"::error::accepted_at missing on curated holder rows: {'; '.join(curated_blank[:20])}; not publishing.")
         failed = True
@@ -489,6 +513,7 @@ def main() -> int:
     worst = sorted(pv["null_books"].items(), key=lambda x: -x[1])[:8]
     if worst:
         print("gate: share rows with suspect_units null, most per book: " + ", ".join(f"{b} {n}" for b, n in worst))
+    gate("provenance", "Row provenance", "A full book has no source accession or first-disclosed time on any row.", NO_PUBLISH, pv["bare_books"], pv["bare_books"][:10])
     if pv["bare_books"]:  # served with no provenance at all (Root Financial 2026Q3, Nov 11 05:41)
         print(f"::error::{len(pv['bare_books'])} full books with no source_accession or first_disclosed_at on any row: "
               f"{', '.join(pv['bare_books'][:20])}; not publishing.")
@@ -496,6 +521,7 @@ def main() -> int:
     if pv["no_source"] or pv["no_disclosed"]:  # accepted.py fills them under its budget; the next run continues
         print(f"::warning::per-row provenance missing in {', '.join(pv['examples'])}")
     merged = foreign_merges(data / "h")
+    gate("foreign_merges", "One filer per book", "Another filer's 13F is merged into a book outside a 13F-NT succession.", NO_PUBLISH, merged, merged[:10])
     if merged:
         print(f"::error::Another filer's 13F merged into a book: {'; '.join(merged[:20])}; not publishing.")
         failed = True
@@ -519,22 +545,41 @@ def main() -> int:
                 f.write(f"### Books more than 0.1% off their filed cover totals ({len(drift)})\n\n"
                         + "".join(f"- {d}\n" for d in drift[:200]) + "\n")
     doubled = book_totals(data / "h")
+    gate("book_totals", "Book totals", f"A book merged from several filings totals more than {BOOK_COVER_MAX}x its filed cover, or more than {BOOK_JUMP_MAX}x the prior quarter with the median position up more than {BOOK_MEDIAN_MAX}x.", NO_PUBLISH, doubled, doubled[:10])
     if doubled:
         print(f"::error::Books larger than their filings: {'; '.join(doubled[:20])}; not publishing.")
         failed = True
+    gate("coverage", "Ticker coverage", f"Holdings value with a ticker falls more than {100 * MAX_DROP:.1f} points against the live data.", NO_PUBLISH, cov_a < cov_b - MAX_DROP, f"{cov_b:.2%} live, {cov_a:.2%} new")
     if cov_a < cov_b - MAX_DROP:
         print(f"::error::Ticker coverage fell {100 * (cov_b - cov_a):.2f} points (limit {100 * MAX_DROP:.1f}); not publishing.")
         failed = True
+    gate("tickers_kept", "Tickers kept", f"Any of the {TOP_N:,} largest CUSIPs loses the ticker it had in the live data.", NO_PUBLISH, lost, lost[:10])
     if lost:
         print(f"::error::Previously mapped CUSIPs lost their ticker: "
               + ", ".join(f"{c} ({tick_b[c]})" for c in lost[:40]) + "; not publishing.")
         failed = True
     refused = data / "holders_refused.json"
+    why = str((read_json(refused) or {}).get("reason") or "") if refused.exists() else ""
+    gate("class_sum", "Share-class sums", f"More than {CLASS_SUM_MAX} multi-class holder rows differ from the sum of "
+         "their classes, or any does in a top-100 stock by value.", NO_PUBLISH, "class_sum" in why, why)
+    gate("holder_rows", "Holder net and counts", "A stock's net or change counts differ from the sum of its own holder "
+         "rows.", NO_PUBLISH, "net or counts" in why, why)
+    par, moves_failed = (new("quality.json") or {}).get("parity") or {}, os.environ.get("MOVES_FAILED") == "1"
+    gate("parity", "Holders net = changes", "Any stock's holder-index net differs from the sum of its counted changes "
+         "rows for the same quarter.", "The previous holder index and changes stay; everything else publishes and the "
+         "run is marked failed.", moves_failed or (par and par.get("matched") != par.get("issuers")),
+         "moves.py failed this run" if moves_failed else f"{par.get('matched')} of {par.get('issuers')} issuers")
     if refused.exists():  # moves.py: the class sums are broken (over the ceiling, or a top-100 stock); hl/ unchanged
         r = json.loads(refused.read_text())
         print(f"::error::gate: holder index refused ({len(r.get('rows') or [])} class_sum_mismatch rows, "
               f"{len(r.get('top100') or [])} in top-100 stocks): {r.get('rows', [])[:5]}", flush=True)
         failed = True
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    (data / "gates.json").write_text(json.dumps({
+        "generated": now, "build": (new("build.json") or {}).get("build_id"),
+        "note": "Every check a data run must pass before it publishes. Only a run that passes them all is published, "
+                "so the live data's run reads pass; a failing run's data never reaches the site.",
+        "gates": [g | {"checked_at": now} for g in GATES]}, separators=(",", ":")) + "\n")
     return 1 if failed else 0
 
 

@@ -154,6 +154,9 @@ def class_holds(cls: dict, known: bool) -> str | None:
     return None
 
 
+PARITY: dict = {}  # quality.json parity: hl/ net = the sum of counted changes/ rows (the hard gate's result)
+HL_REASONS = ("class_swap", "zero_shares", "option_cusip_no_putcall", "cusip_check_digit", "possible_cusip_change",
+              "class_sum_mismatch")
 DEFER: list[tuple] = []  # (base, prev_quarter, rows): latest-book fq/ files, written after hl/'s holds
 FIXED = [0]  # quarter -> suspect_units rows that reached write_full with no unreliable class
 
@@ -1137,10 +1140,11 @@ def write_quality(shards: list[dict], curated: dict, filers: dict) -> dict:
             if not r.get("unreliable") or r.get("prev_shares") is None:
                 continue  # flagged with no prior on file: no trade was held
             why = reason_of(r)
-            b = by.setdefault(why, {"rows": 0, "filers": set(), "options": 0})
+            b = by.setdefault(why, {"rows": 0, "filers": set(), "options": 0, "usd": 0})
             b["rows"] += 1
             b["filers"].add(cik)
             b["options"] += bool(r.get("put_call"))
+            b["usd"] += r.get("value") or r.get("prev_value") or 0
             sh, ps, v, pv = (r.get(k) or 0 for k in ("shares", "prev_shares", "value", "prev_value"))
             px = v / sh if sh else pv / ps if ps else 0
             m = curated.get(cik) or filers.get(cik) or {}
@@ -1153,6 +1157,20 @@ def write_quality(shards: list[dict], curated: dict, filers: dict) -> dict:
                 "value": round(v), "prev_value": round(pv), "change": r.get("change") or "unknown",
                 "delta_as_filed": round((sh - ps) * px), "value_change": round(v - pv)})
     lines.sort(key=lambda x: -abs(x["delta_as_filed"]))
+    # The holder index's own holds (class-level and per-line, not the units guard) and the note-vs-common pairs
+    # never compared, each with the filed value kept out of totals (usd: value, or prior value for an exit).
+    for cik, rows in LATEST.items():
+        for r in rows:
+            usd = r.get("value") or r.get("prev_value") or 0
+            got = COUNTED.get((cik, linked(r.get("cusip") or "")))
+            why = got[2] if got and got[0] is None and not r.get("unreliable") and not r.get("put_call") \
+                and got[2] in HL_REASONS else None
+            for k in [why, "different_security" if r.get("cusip_pair") == "different_security" else None]:
+                if k:
+                    b = by.setdefault(k, {"rows": 0, "filers": set(), "options": 0, "usd": 0})
+                    b["rows"] += 1
+                    b["filers"].add(cik)
+                    b["usd"] += usd
     body = {
         "generated": datetime_now(), "build": (read(DATA / "build.json") or {}).get("build_id"),
         "note": "Lines in every 13F filer's latest book that the units guard held (suspect_units, price_outlier, "
@@ -1160,7 +1178,9 @@ def write_quality(shards: list[dict], curated: dict, filers: dict) -> dict:
                 "value (the share change stands), shares (value_change from filed values shows instead), both (unknown). "
                 "delta_as_filed is what the line would have read as filed (share change x filed price).",
         "held": {"rows": len(lines), "filers": len({x["cik"] for x in lines})},
-        "by_reason": {k: {"rows": v["rows"], "filers": len(v["filers"]), "options": v["options"]} for k, v in sorted(by.items())},
+        "by_reason": {k: {"rows": v["rows"], "filers": len(v["filers"]), "options": v["options"], "usd": round(v["usd"])}
+                      for k, v in sorted(by.items())},
+        "parity": dict(PARITY) or None,
         "largest": lines[:25],
         "options": options_quality(),
         "suspect_unclassified": dict(sorted(UNCLASSED.items())),  # held as "both" in write_full; 0 expected
@@ -1386,6 +1406,8 @@ def main() -> int:
               f"{sl} {c} {ch} {v:,.0f}" for v, sl, c, ch in sorted(g[2], key=lambda x: -x[0])[:5]) + ")"
               for k, g in sorted(gap.items(), key=lambda kv: -kv[1][1])), flush=True)
     off = parity_gate(per_quarter)
+    PARITY.update({"quarter": max(HLQ.values(), default=None), "issuers": len(NETQ), "matched": len(NETQ) - len(off),
+                   "checked_at": datetime_now()})
     print(f"moves: parity gate: {len(NETQ) - len(off)}/{len(NETQ)} issuers' hl/ net = the sum of their counted "
           f"changes/ rows; off: {off[:5]}", flush=True)
     if off and not (DATA / "holders_refused.json").exists():
