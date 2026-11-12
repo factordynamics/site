@@ -304,7 +304,7 @@ async function overRoom(env: Env, m: Member, ch: Channels, filings: Alert13F[], 
     const cur = all[m.customer];
     all[m.customer] = { day: cur?.day ?? new Date(now).toISOString().slice(0, 10), at: cur?.at ?? now, filings: [...(cur?.filings ?? []), ...first.filings], events: [...(cur?.events ?? []), ...first.events] };
     await env.DB.put(CAPQ, JSON.stringify(all));
-    await (await import('./email')).noteDelayed(env, [...first.filings.map((a) => a.accession), ...first.events.map((e) => e.id)], cur ? 0 : 1);
+    await (await import('./email')).noteDelayed(env, [...first.filings.map((a) => a.accession), ...first.events.map((e) => e.id)], cur ? 0 : 1, now);
   }
   const skipped = q ? events.some((e) => !priorityEvent(e)) : filings.length + events.length > 0;
   if (skipped) await capSkipped(env, m, ch, now);
@@ -426,6 +426,7 @@ async function capSkipped(env: Env, m: Member, ch: Pick<Channels, 'feed_token'>,
   const firstForMember = !(await env.DB.get(mine));
   await env.DB.put(k, JSON.stringify({ count: (c?.count ?? 0) + 1, first_at: c?.first_at ?? new Date(now).toISOString().replace(/\.\d{3}Z$/, 'Z'), members: (c?.members ?? 0) + (firstForMember ? 1 : 0) }), { expirationTtl: 3 * 86400 });
   await env.DB.put(mine, String(Number((await env.DB.get(mine)) ?? 0) + 1), { expirationTtl: 2 * 86400 });
+  await (await import('./email')).countLimitDay(env, 'skipped_emails', 1, now);
   if (firstForMember && ch.feed_token) {
     const key = `feed:${m.customer}`;
     const items = JSON.parse((await env.DB.get(key)) ?? '[]') as FeedItem[];
@@ -529,6 +530,7 @@ export async function flushHeld(env: Env, now: number): Promise<Record<string, u
   if (!mails.length) return { held_flushed: 0, ...(skipped ? { cap_skipped: skipped } : {}), ...(late ? { cap_delayed: late } : {}) };
   const status = await sendMail(env, mails, { bulk: true });
   await logSent(env, mails.length, now);
+  await (await import('./email')).countLimitDay(env, 'coalesced_emails', mails.length, now);
   // Coalesced emails are timed as they went: a row per item at this send, tagged coalesced.
   const sentAt = Date.now();
   await logLatency(env, sentWith.flatMap((w) => w.filings.filter((a) => !a.moves_pending).map((a) => ({ ...a, kind: '13f', coalesced: true }))), sentAt);

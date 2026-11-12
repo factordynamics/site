@@ -290,6 +290,8 @@ export interface LatencyExtra {
   missed?: { accession: string; form: string; cik: string; accepted: string; detected_at: string; minutes_late: number }[];
   /** Rows the gate held, with how each ended (reconciliation.held). */
   held?: { accession: string; released_at: string | null; outcome: string | null }[];
+  /** KV mail:limit-days: per UTC day, emails delayed to the reset, sent coalesced, skipped at the limit. */
+  limitDays?: Record<string, Record<string, number>>;
 }
 /**
  * 13Fs whose stock-match alerts never reached members watching their tickers: ingest renamed active to long_only on
@@ -418,13 +420,15 @@ export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDeliver
           replay: !!l.replay,
           test: !!l.test,
           email_delayed: !!l.email_delayed,
+          // Timed at a coalesced send: the member's later alerts in a window, sent together at its end.
+          coalesced: !!l.coalesced,
           // Some member's email for it waited past the daily email limit (chat, feed and webhooks went at once).
           delayed_email_limit: delayedAcc.has(l.accession),
         };
       });
       const missRow = (accession: string, slug: string, form: string, accepted: string, detected: string | null, audience: string) => ({
         host: null, slug, manager: null as string | null, quarter: null as string | null, form, coverage: 'curated', accession, accepted_at: iso(accepted), detected_at: iso(detected), email_accepted_at: null, sent_at: null, gap_seconds: null,
-        team_delivered_at: null, first_alert_at: null, moves_sent_at: null, held: 0, released_at: null, missed: true, delay_seconds: null, never: true, audience, in_stats: false, replay: false, test: false, email_delayed: false, delayed_email_limit: false,
+        team_delivered_at: null, first_alert_at: null, moves_sent_at: null, held: 0, released_at: null, missed: true, delay_seconds: null, never: true, audience, in_stats: false, replay: false, test: false, email_delayed: false, coalesced: false, delayed_email_limit: false,
       });
       // Found by the missed-filing detector and never sent (6 hours on, it isn't coming).
       const never = (extra.missed ?? []).filter((m) => !one.has(m.accession) && Date.parse(m.accepted) >= from && now - Date.parse(m.detected_at) > 6 * 3600_000).map((m) => missRow(m.accession, m.cik, m.form, m.accepted, m.detected_at, 'everyone'));
@@ -443,14 +447,16 @@ export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDeliver
   // Alerts whose email to some member was queued past the daily email limit: counted on /speed/, not hidden.
   const delayed_email_limit = delayedAcc.size;
   const missedBy = (aud: string) => report.alerts.filter((a) => a.missed && a.never && 'audience' in a && a.audience === aud).length;
-  return { ...report, delayed_email_limit, missed_never: missedBy('everyone'), missed_stock_watchers: missedBy('stock_watchers') };
+  // Per UTC day this season, in emails (not alerts): delayed to the reset (one digest per member), coalesced, skipped.
+  const email_limit_days = Object.entries(extra.limitDays ?? {}).filter(([d]) => Date.parse(`${d}T23:59:59Z`) >= from).sort(([a], [b]) => a.localeCompare(b)).map(([day, c]) => ({ day, delayed_emails: c.delayed_emails ?? 0, coalesced_emails: c.coalesced_emails ?? 0, skipped_emails: c.skipped_emails ?? 0 }));
+  return { ...report, delayed_email_limit, email_limit_days, missed_never: missedBy('everyone'), missed_stock_watchers: missedBy('stock_watchers') };
 }
 export async function buildLatency(env: Env, now: number) {
   const log = JSON.parse((await env.DB.get('alerts:latency')) ?? '[]') as LatencyRow[];
   const ch = JSON.parse((await env.DB.get('alerts:latency:ch')) ?? '[]') as ChannelDelivery[];
   const rec = await (await import('./alerts')).reconciliation(env);
   const missed = JSON.parse((await env.DB.get('missed:log')) ?? '[]') as LatencyExtra['missed'];
-  const r: ReturnType<typeof latencyReport> & { reconciliation?: Record<string, unknown> } = latencyReport(log, now, ch, { missed, held: rec.held as LatencyExtra['held'] });
+  const r: ReturnType<typeof latencyReport> & { reconciliation?: Record<string, unknown> } = latencyReport(log, now, ch, { missed, held: rec.held as LatencyExtra['held'], limitDays: JSON.parse((await env.DB.get('mail:limit-days')) ?? '{}') });
   r.reconciliation = rec;
   // The 13F rows are complete once the pre-tag rows were re-timed (/speed/ shows the 13F card from then).
   if (r.by_form['13F'] && (await env.DB.get('latency:retimed:v1'))) Object.assign(r.by_form['13F'], { complete: true });

@@ -616,6 +616,11 @@ describe('copybook api', () => {
     expect(two.text.split('\n')[0]).toBe(`Delayed by our daily email limit: this email waited until 7pm ET. These alerts reached your feed when they were filed. You have no instant channel yet. Connect one so this never waits: ${SITE}account/`);
     expect(two.text).toMatch(/Berkshire/);
     expect(await env.DB.get('host:mail-capq')).toBe('{}');
+    // /speed/'s per-day counts, in emails: Monday's 4 digests (one per member), 3 coalesced sends, 4 + 4 skipped.
+    const ld = JSON.parse((await env.DB.get('mail:limit-days'))!)[day];
+    expect(ld).toEqual({ delayed_emails: 4, coalesced_emails: 3 + 4, skipped_emails: 8 });
+    const { latencyReport } = await import('../src/index');
+    expect(latencyReport([], Date.UTC(2026, 10, 17), [], { limitDays: { [day]: ld, '2025-01-01': { delayed_emails: 9 } } }).email_limit_days).toEqual([{ day, ...ld }]);
     // With a working chat channel the line names it (and only it).
     const { delayLine } = await import('../src/alerts');
     const cap4 = JSON.parse((await env.DB.get('cus:cap4'))!);

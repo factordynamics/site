@@ -171,8 +171,23 @@ export async function delay(env: Env, mails: Mail[]): Promise<void> {
   console.log(`email limit: ${mails.length} delayed to after the reset`);
 }
 
+/**
+ * Per UTC day, this season: alert emails delayed to the reset (one per member's digest), sent coalesced (several alerts in
+ * one email) and skipped at the limit. latency.json's email_limit_days, for /speed/ (the front end, Nov 12). Synced, like
+ * the latency log: the polling host writes it.
+ */
+export async function countLimitDay(env: Env, what: 'delayed_emails' | 'coalesced_emails' | 'skipped_emails', n: number, now = Date.now()): Promise<void> {
+  if (!n) return;
+  const k = 'mail:limit-days';
+  const d = JSON.parse((await env.DB.get(k)) ?? '{}') as Record<string, Record<string, number>>;
+  const day = new Date(now).toISOString().slice(0, 10);
+  (d[day] ??= {})[what] = (d[day][what] ?? 0) + n;
+  const keep = Object.keys(d).sort().slice(-120);
+  await env.DB.put(k, JSON.stringify(Object.fromEntries(keep.map((x) => [x, d[x]]))));
+}
+
 /** Counts alert emails that wait for the reset (n new ones), and their alerts' ids, which latency marks email_delayed. */
-export async function noteDelayed(env: Env, alertIds: string[], n: number): Promise<void> {
+export async function noteDelayed(env: Env, alertIds: string[], n: number, now = Date.now()): Promise<void> {
   await loadMeter(env);
   const ids = new Set(JSON.parse((await env.DB.get(DELAYED_IDS)) ?? '[]') as string[]);
   for (const id of alertIds) ids.add(id);
@@ -180,6 +195,7 @@ export async function noteDelayed(env: Env, alertIds: string[], n: number): Prom
   mailQuota.delayed += n;
   counted('queued', n);
   await env.DB.put(METER, JSON.stringify(mailQuota));
+  await countLimitDay(env, 'delayed_emails', n, now);
 }
 
 /** The daily email reset (00:00 UTC) in Eastern time, as members read it: "7pm" in winter, "8pm" in summer. */
