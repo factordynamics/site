@@ -187,6 +187,9 @@ async function handleWebhook(req: Request, env: Env): Promise<Response> {
       if (!isOurSubscription(obj)) return ignore('subscription');
       // A repeat trial (blockRepeatTrial) never becomes a member, whichever event comes first.
       if (event.type !== 'customer.subscription.deleted' ? await (await import('./referrals')).blockRepeatTrial(env, obj) : !!obj.metadata?.trial_repeat_blocked) break;
+      // An ended subscription with no member (an erased one: deleting its Stripe customer ends it, and this event lands
+      // after the erase) never writes a record back: those email-less stubs counted as real cancelled members (Nov 12).
+      if (event.type === 'customer.subscription.deleted' && !(await getMember(env, typeof obj.customer === 'string' ? obj.customer : obj.customer?.id))) break;
       await syncSubscription(env, obj);
       if (event.type === 'customer.subscription.created') await invoiceTerms(obj);
       break;
@@ -908,6 +911,22 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const b = await body(req);
     const { chatNudge } = await import('./alerts');
     return json({ ok: true, ...(await chatNudge(env, Date.now(), { dry: b.dry === true, only: typeof b.only === 'string' ? b.only : undefined })) }, 200, h);
+  }
+
+  // Operator: removes the email-less cancelled stubs that erased members' late subscription.deleted events wrote back
+  // (their Stripe customer is deleted). {dry: true} lists them. Never touches a record with an email.
+  if (req.method === 'POST' && path === '/ops/drop-ghosts') {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    const dry = (await body(req)).dry === true;
+    const ghosts: string[] = [];
+    for (const m of await listMembers(env)) {
+      if (m.email || m.status !== 'canceled') continue;
+      const c = await stripe(env, 'GET', `customers/${m.customer}`).catch(() => null);
+      if (!c?.deleted) continue;
+      ghosts.push(m.customer);
+      if (!dry) for (const k of ['cus:', 'follows:', 'channels:', 'feed:', 'mailed:', 'delivered:']) await env.DB.delete(`${k}${m.customer}`);
+    }
+    return json({ ok: true, dry, dropped: ghosts.length, customers: ghosts }, 200, h);
   }
 
   if (req.method === 'GET' && path === '/ops/member-counts') {

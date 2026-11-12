@@ -650,6 +650,24 @@ describe('copybook api', () => {
     mailQuota.used = 0;
   });
 
+  it("an erased member's late subscription.deleted writes nothing back; /ops/drop-ghosts removes old stubs", async () => {
+    // Erase deletes the Stripe customer first, which ends the subscription; the event lands after the record is gone.
+    await webhook({ type: 'customer.subscription.deleted', data: { object: sub('sub_gh1', 'cus_gh1', 'canceled') } });
+    expect(await env.DB.get('cus:cus_gh1')).toBeNull();
+    // Stubs written before the fix: email-less, cancelled, Stripe customer deleted. A real cancelled member is kept.
+    await env.DB.put('cus:cus_gh2', JSON.stringify({ customer: 'cus_gh2', email: '', status: 'canceled', plan: 'copy' }));
+    await env.DB.put('cus:cus_gh3', JSON.stringify({ customer: 'cus_gh3', email: '', status: 'canceled', plan: 'copy' }));
+    await putMember('cus_gh4', 'kept@example.org', 'canceled', []);
+    stripeObjects['customers/cus_gh2'] = { id: 'cus_gh2', deleted: true };
+    stripeObjects['customers/cus_gh3'] = { id: 'cus_gh3', email: null };
+    stripeObjects['customers/cus_gh4'] = { id: 'cus_gh4', deleted: true };
+    const op = (b: unknown) => handleRequest(new Request('https://api.test/ops/drop-ghosts', { method: 'POST', body: JSON.stringify(b), headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), env).then((r) => r.json());
+    expect(await op({ dry: true })).toMatchObject({ dry: true, dropped: 1, customers: ['cus_gh2'] });
+    expect(await env.DB.get('cus:cus_gh2')).not.toBeNull();
+    expect(await op({})).toMatchObject({ dry: false, dropped: 1 });
+    expect([await env.DB.get('cus:cus_gh2'), !!(await env.DB.get('cus:cus_gh3')), !!(await env.DB.get('cus:cus_gh4'))]).toEqual([null, true, true]);
+  });
+
   it('login emails only active members but always answers ok', async () => {
     // subscription.created can arrive before checkout.session.completed: the email comes from the customer.
     stripeObjects['customers/cus_1'] = { id: 'cus_1', email: 'a@example.com' };
