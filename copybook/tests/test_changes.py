@@ -911,3 +911,62 @@ class DebtPairTest(unittest.TestCase):
                                    "92939UAP1": ("exited", "different_security", None)})
         finally:
             build.CONSENSUS.clear()
+
+
+class CusipRepairTest(unittest.TestCase):
+    """One-character CUSIP repair (build.repair_cusips): a share line whose CUSIP fails its check digit is read as the one
+    known, held CUSIP exactly one character away whose issuer the filed name matches; otherwise it stays as filed."""
+
+    SECS = {"37045V100": {"ticker": "GM", "name": "General Motors"},
+            "370334104": {"ticker": "GIS", "name": "General Mills"},
+            "46090E103": {"ticker": "QQQ", "name": "Invesco QQQ Trust"},
+            "72345A100": {"ticker": "AWA", "name": "Acme Widgets"},
+            "G2345A100": {"ticker": "AWB", "name": "Acme Widgets"}}
+
+    def setUp(self):
+        build._SECURITIES, build._HELD = dict(self.SECS), None
+        build.CONSENSUS.clear()
+        build.CONSENSUS.update({("2026Q3", c): 10.0 for c in self.SECS})
+
+    def tearDown(self):
+        build._SECURITIES, build._HELD = None, None
+        build.CONSENSUS.clear()
+
+    def line(self, cusip, issuer):
+        return {"issuer": issuer, "title": "COM", "cusip": cusip, "ticker": None, "value": 1000, "shares": 10,
+                "put_call": None, "shares_type": "SH", "weight": 0}
+
+    def repaired(self, cusip, issuer):
+        return build.repair_cusips({"holdings": [self.line(cusip, issuer)]})["holdings"][0]
+
+    def test_greenhaven_gm_typo_is_repaired(self):
+        # Greenhaven Associates 2026Q3: "General Motors Co (GM)" filed as 35045V100 (fails its check digit).
+        h = self.repaired("35045V100", "GENERAL MTRS CO")
+        self.assertEqual((h["cusip"], h.get("cusip_repaired"), h.get("filed_cusip"), h["ticker"]),
+                         ("37045V100", True, "35045V100", "GM"))
+
+    def test_name_must_match_the_candidate(self):
+        # Same one-character neighbour, but the filed name is another issuer's: held as filed.
+        h = self.repaired("35045V100", "GENERAL MLS INC")
+        self.assertEqual((h["cusip"], h.get("cusip_repaired")), ("35045V100", None))
+
+    def test_qqq_more_than_one_character_away_stays_held(self):
+        h = self.repaired("04609E107", "INVESCO QQQ TR")
+        self.assertEqual((h["cusip"], h.get("cusip_repaired")), ("04609E107", None))
+
+    def test_two_candidates_stay_held(self):
+        # 12345A100 fails its check digit; 72345A100 and G2345A100 are both one character away, known, held, same name.
+        self.assertEqual(build.repair_candidates(self.line("12345A100", "ACME WIDGETS INC")), ["72345A100", "G2345A100"])
+        h = self.repaired("12345A100", "ACME WIDGETS INC")
+        self.assertEqual((h["cusip"], h.get("cusip_repaired")), ("12345A100", None))
+
+    def test_valid_cusip_options_and_isin_fragments_are_never_repaired(self):
+        self.assertEqual(self.repaired("37045V100", "GENERAL MTRS CO")["cusip"], "37045V100")
+        opt = build.repair_cusips({"holdings": [self.line("35045V100", "GENERAL MTRS CO") | {"put_call": "CALL"}]})
+        self.assertEqual(opt["holdings"][0]["cusip"], "35045V100")
+        self.assertEqual(build.repair_candidates(self.line("US5128073", "LAM RESEARCH")), [])
+
+    def test_candidate_no_other_filer_holds_is_not_used(self):
+        build.CONSENSUS.pop(("2026Q3", "37045V100"))
+        build._HELD = None
+        self.assertEqual(self.repaired("35045V100", "GENERAL MTRS CO")["cusip"], "35045V100")
