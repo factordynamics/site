@@ -120,7 +120,7 @@ export function CopySetup({ welcome }: { welcome?: boolean }) {
       // Chat first (the trader, Nov 12): chat alerts never wait on the daily email limit.
       title: connected || keepEmail ? 'Connect a chat channel' : 'Connect a chat channel (or keep email)',
       // A working chat or webhook replaces alert email unless keep_email is on (payments, Nov 11).
-      body: chat ? (ch?.keep_email ? 'Alerts reach your chat and your inbox.' : 'Alerts go to your chat instead of email. Tick “Also email me alerts” below for both.') : connected ? 'Alerts reach your feed and your inbox.' : keepEmail ? 'Email only. Add Telegram, Slack or Discord any time below, so alerts reach you at once even on a day our email limit is reached.' : 'Telegram, Slack or Discord: alerts reach your chat the moment we see the filing, even on a day our daily email limit is reached.',
+      body: chat ? (ch?.keep_email ? 'Alerts reach your chat and your inbox.' : 'Alerts go to your chat instead of email. Tick “Also email me alerts” below for both.') : connected ? 'Alerts reach your feed and your inbox.' : keepEmail ? 'Email only. Add Discord, Slack or Telegram any time below, so an alert never waits on email.' : `${Date.now() < Date.parse('2026-11-16T22:30:00Z') ? 'Monday is deadline day. Connect a chat channel so no alert waits on our daily email limit.' : 'Connect a chat channel so an alert never waits on email.'} Discord is the quickest to connect.`,
       act: { label: connected ? 'Channels' : 'Connect chat', href: '#channels' },
       alt:
         connected || keepEmail

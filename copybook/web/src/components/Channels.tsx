@@ -47,7 +47,7 @@ const announce = (c: Channels) => window.dispatchEvent(new CustomEvent('copybook
 export function Channels() {
   const [c, setC] = useState<Channels | null>(null)
   const [loadErr, setLoadErr] = useState(false)
-  const [msg, setMsg] = useState<{ k: string; text: string; ok: boolean } | null>(null)
+  const [msg, setMsg] = useState<{ k: string; text: string; ok: boolean; swap?: boolean } | null>(null)
   const [test, setTest] = useState<Record<string, string> | null>(null)
 
   useEffect(() => {
@@ -64,7 +64,14 @@ export function Channels() {
       setC(r.channels)
       announce(r.channels)
       window.dispatchEvent(new Event('copybook:setup'))
-      setMsg({ k, text: 'Saved.', ok: true })
+      // Connecting a chat or webhook moves alerts off email unless keep_email is on (the lead): never silently.
+      const chat = ['slack', 'discord', 'telegram', 'webhook'].includes(k) && Boolean(r.channels[k as 'slack' | 'discord' | 'telegram' | 'webhook'])
+      const name = NAMES[k] ?? k
+      setMsg(
+        chat
+          ? { k, ok: true, swap: true, text: r.channels.keep_email ? `Alerts go to ${name} and your email.` : (r.channels.verified ?? []).includes(k) ? `Alerts now go to ${name} instead of email.` : `Saved. Once ${name} takes our “Connected ✓” message, alerts go there instead of email.` }
+          : { k, text: 'Saved.', ok: true },
+      )
       return true
     } catch (e) {
       setMsg({ k, text: why(e), ok: false })
@@ -98,11 +105,21 @@ export function Channels() {
   }
 
   const note = (k: string) =>
-    msg?.k === k && (
+    msg?.k === k &&
+    (msg.swap ? (
+      <div role="status" className="mt-2 rounded-xl bg-paper px-3.5 py-2.5 text-[13.5px] text-ink-2">
+        <p className="font-medium text-ink">{msg.text}</p>
+        <label className="mt-1.5 flex items-center gap-2.5 text-ink">
+          <input type="checkbox" checked={Boolean(c?.keep_email)} onChange={(e) => save(k, { keep_email: e.target.checked })} className="size-4 accent-[var(--color-accent)]" />
+          Also email me alerts
+        </label>
+        <p className="mt-1 text-[12.5px] text-ink-3">Sign-in, billing and account emails always continue.</p>
+      </div>
+    ) : (
       <p role={msg.ok ? 'status' : 'alert'} className={`mt-2 text-[13px] ${msg.ok ? 'text-up' : 'text-down'}`}>
         {msg.text}
       </p>
-    )
+    ))
   const configured = c && (c.discord || c.slack || c.telegram || c.webhook || c.feed)
 
   return (
@@ -115,7 +132,7 @@ export function Channels() {
               ? 'A chat, feed or webhook you add here is your team’s: every alert for the team’s follows posts there once, as it happens. Seats can add their own as well.'
               : c?.team
                 ? 'Add your own chat, feed or webhook for alerts on your settings, as they happen. The team’s channels come first; the plan owner manages them.'
-                : 'Add Telegram or Slack so alerts never wait on email limits. Saving one sends it a “Connected ✓” message; once it’s verified, alerts go there instead of email, and if it stops working, email takes over.'}
+                : 'Add Discord, Slack or Telegram so alerts never wait on email. Saving one sends it a “Connected ✓” message; once it’s verified, alerts go there instead of email, and if it stops working, email takes over. Sign-in, billing and account emails always continue.'}
           </p>
           {c && c.scope !== 'team' && (
             <label className="mt-3 flex items-center gap-2.5 text-[14px] text-ink">
@@ -161,6 +178,19 @@ export function Channels() {
         <div className="mt-2 divide-y divide-line">
           {c.team && <TeamChannels t={c.team} />}
           <UrlChannel
+            name={<>Discord{vbadge(c, 'discord')}</>}
+            label="Discord"
+            hint={
+              <>
+                The quickest to connect. In Discord: the channel’s settings → Integrations → Webhooks → New Webhook → Copy Webhook URL, then paste it here (<span className="font-mono text-[12px]">https://discord.com/api/webhooks/…</span>).
+              </>
+            }
+            value={c.discord}
+            placeholder="https://discord.com/api/webhooks/…"
+            onSave={(v) => save('discord', { discord: v })}
+            note={<>{fail(c.failing, 'discord')}{note('discord')}</>}
+          />
+          <UrlChannel
             name={<>Slack{vbadge(c, 'slack')}</>}
             label="Slack"
             hint={
@@ -172,19 +202,6 @@ export function Channels() {
             placeholder="https://hooks.slack.com/services/…"
             onSave={(v) => save('slack', { slack: v })}
             note={<>{fail(c.failing, 'slack')}{note('slack')}</>}
-          />
-          <UrlChannel
-            name={<>Discord{vbadge(c, 'discord')}</>}
-            label="Discord"
-            hint={
-              <>
-                A channel webhook URL (<span className="font-mono text-[12px]">https://discord.com/api/webhooks/…</span>), from the channel’s Integrations settings.
-              </>
-            }
-            value={c.discord}
-            placeholder="https://discord.com/api/webhooks/…"
-            onSave={(v) => save('discord', { discord: v })}
-            note={<>{fail(c.failing, 'discord')}{note('discord')}</>}
           />
           <Telegram value={c.telegram} badge={vbadge(c, 'telegram')} onSave={(v) => save('telegram', { telegram: v })} note={<>{fail(c.failing, 'telegram')}{note('telegram')}</>} />
           <Row name="Private feed" hint="An RSS and JSON Feed of your alerts for a reader or your own tools. The link is the password: anyone with it can read your alerts.">

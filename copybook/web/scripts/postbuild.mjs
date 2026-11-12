@@ -7,7 +7,7 @@ import { getJson } from './getjson.mjs'
 import { ogCard } from './ogcard.mjs'
 import { displayName, renamed } from '../src/lib/names.mjs'
 import { X_LINKS } from './xlinks.mjs'
-import { API, API_JSON_URL } from '../api.config.mjs'
+import { API } from '../api.config.mjs'
 import { dueLead, investorTitle, seasonTitle, stockTitle } from '../src/lib/titles.mjs'
 
 const dist = new URL('../dist/', import.meta.url).pathname
@@ -395,10 +395,10 @@ redirect('pricing.html', 'pricing/')
 mkdirSync(join(dist, 'latency'), { recursive: true })
 redirect('latency/index.html', 'speed/')
 redirect('about.html', 'about/')
-// Links the API hands out as copybook.factordynamics.com/api/… (not a static file here) go on to the API's
-// current base, read from api.json, keeping the path and query. GitHub Pages can't answer with an HTTP
-// redirect, so this only covers links opened in a browser: GET, JavaScript on.
-const apiBridge = `<script>(function(){var p=location.pathname;if(!/^\\/api\\/./.test(p))return;document.documentElement.style.visibility='hidden';var ok=/^https:\\/\\/([a-z0-9-]+\\.)+(trycloudflare\\.com|ts\\.net|factordynamics\\.com|workers\\.dev)(\\/[^\\s?#]*)?$/i,go=function(b){location.replace(b.replace(/\\/$/,'')+p.slice(4)+location.search+location.hash)};fetch(${JSON.stringify(API_JSON_URL)}+'?m='+Math.floor(Date.now()/6e4)).then(function(r){return r.json()}).then(function(j){var b=j&&(j.api_base||j.api);go(ok.test(b)?b:${JSON.stringify(API)})},function(){go(${JSON.stringify(API)})})})()</script>`
+// Links the API hands out as copybook.factordynamics.com/api/… (not a static file here) go on to the API
+// (the Worker), keeping the path and query. GitHub Pages can't answer with an HTTP redirect, so this only covers
+// links opened in a browser: GET, JavaScript on.
+const apiBridge = `<script>(function(){var p=location.pathname;if(!/^\\/api\\/./.test(p))return;document.documentElement.style.visibility='hidden';location.replace(${JSON.stringify(API.replace(/\/$/, ''))}+p.slice(4)+location.search+location.hash)})()</script>`
 writeFileSync(join(dist, '404.html'), shell.replace('<head>', () => `<head>\n    ${apiBridge}`))
 // The home page: its h1 and intro for crawlers and link previews, like every other page.
 writeFileSync(

@@ -7,53 +7,27 @@ export const checkout = {
   yearly: 'https://buy.stripe.com/7sYeVd1dkguecW6gDIgjC01',
   portal: 'https://billing.stripe.com/p/login/aFa7sL1dk2Do5tE2MSgjC00',
 }
-// The API base. The build value (api.config.mjs) is the fallback; at load the site reads the current base
-// from api.json on R2, which the API host rewrites when its tunnel URL changes, and remembers the last one
-// it read. Only https bases on hosts we run are accepted (quick tunnels change name on restart, so
-// trycloudflare.com stays a wildcard until the API has its own hostname; the others are pinned), since a member's session token is sent there.
-// A tester can pin one browser to another API with localStorage['copybook-api'] = 'https://…' (there is
-// deliberately no URL parameter for it, since a link could then send a session token elsewhere).
-const okBase = (v: unknown): string | null =>
-  typeof v === 'string' && /^https:\/\/(([a-z0-9-]+\.)+(trycloudflare\.com|factordynamics\.com)|[a-z0-9-]+\.tail[0-9a-f]+\.ts\.net|copybook-api\.factordynamics\.workers\.dev)(\/[^\s?#]*)?$/i.test(v) ? v.replace(/\/$/, '') : null
-const stored = (k: string) => {
+// The API base: the Worker (api.config.mjs), always. Public pages and assets never name a machine or tunnel host
+// (the lead, Nov 12), so the site no longer reads api.json's base; the Worker serves members itself and follows
+// gene or a failover behind it. A tester can pin one browser to another API with
+// localStorage['copybook-api'] = 'https://…' (deliberately no URL parameter, since a link could then send a
+// session token elsewhere).
+const apiOverride = (() => {
   try {
-    return localStorage.getItem(k)
+    localStorage.removeItem('copybook-api-base') // a tunnel base remembered by an earlier build
+    const v = localStorage.getItem('copybook-api')
+    return v && /^https:\/\/[^\s/]+(\/[^\s]*)?$/.test(v) ? v.replace(/\/$/, '') : null
   } catch {
     return null
   }
-}
-const apiOverride = (() => {
-  const v = stored('copybook-api')
-  return v && /^https:\/\/[^\s/]+(\/[^\s]*)?$/.test(v) ? v.replace(/\/$/, '') : null
 })()
-/** The API base in use now. A live binding: it changes once api.json answers, so read it at request time. */
-export let api: string = apiOverride ?? okBase(stored('copybook-api-base')) ?? import.meta.env.VITE_API
-const readBase = (init?: RequestInit) =>
-  fetch(`${import.meta.env.VITE_API_JSON_URL}?m=${Math.floor(Date.now() / 60_000)}`, { ...init, signal: AbortSignal.timeout(2500) })
-    .then((r) => (r.ok ? (r.json() as Promise<{ api?: string; api_base?: string }>) : null))
-    .then((j) => {
-      const v = okBase(j?.api_base ?? j?.api)
-      if (v) {
-        api = v
-        try {
-          localStorage.setItem('copybook-api-base', v)
-        } catch {
-          /* private mode */
-        }
-      }
-      return api
-    })
-    .catch(() => api)
-/** Resolves with the current API base: api.json's within 2.5 s, else the last known or build value. */
-export const apiReady: Promise<string> = apiOverride ? Promise.resolve(api) : readBase()
-let rereadAt = 0
-/** After a failed API call: read api.json again, bypassing caches, at most every 20 s (so a page left open
- *  across a failover follows the move). True when the base changed. */
+/** The API base in use. */
+export const api: string = apiOverride ?? import.meta.env.VITE_API
+/** Resolves with the API base (kept as a promise for its callers). */
+export const apiReady: Promise<string> = Promise.resolve(api)
+/** After a failed API call: the base never moves now, so there is nothing to re-read. */
 export async function rereadApi(): Promise<boolean> {
-  if (apiOverride || Date.now() - rereadAt < 20_000) return false
-  rereadAt = Date.now()
-  const before = api
-  return (await readBase({ cache: 'no-store' })) !== before
+  return false
 }
 // Free weekly email box (POST {api}/signup). On once the API route is live.
 export const signupLive = true

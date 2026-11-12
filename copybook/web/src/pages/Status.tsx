@@ -10,7 +10,7 @@ import { loadExpected, stockPath } from '../lib/stocks'
 import { isEdgarDay } from '../lib/calendar.mjs'
 
 // /status/: live state of each part of Copybook, read in the browser from the same public sources the site
-// uses (api.json and latency.json on R2, and the API's /health), rechecked every minute. Nothing is typed in
+// uses (latency.json and status.json on R2, and the API's /health), rechecked every minute. Nothing is typed in
 // by hand except the incident list, which /speed/ shares.
 
 type Health = {
@@ -22,7 +22,7 @@ type Health = {
   /** Routes the API reports as slow or failing, once /health lists them. */
   degraded?: (string | { route?: string; path?: string; note?: string; status?: string })[] | null
 }
-type Probe = { base: string; at: string | null; health: Health | null; ms: number | null }
+type Probe = { base: string; health: Health | null; ms: number | null }
 
 type Window = { uptime: number | null; checks: number; failed: number }
 /** Payments' status.json, written by Cloudflare's cron every minute: 13F alert health and the API probe. */
@@ -42,20 +42,15 @@ type StatusFile = {
 const KIND = { deploy: 'Deploy', unplanned: 'Unplanned restart', short_unconfirmed: 'Brief restart we couldn’t attribute', planned: 'Planned' } as const
 const STATUS_URL = String(import.meta.env.VITE_LATENCY_URL).replace(/latency\.json$/, 'status.json')
 
-const API_JSON = import.meta.env.VITE_API_JSON_URL as string
 const POLLER_LATE_S = 5 * 60
 
 async function probe(): Promise<Probe> {
   const base = await apiReady
-  const at = await fetch(`${API_JSON}?m=${Math.floor(Date.now() / 60_000)}`)
-    .then((r) => (r.ok ? (r.json() as Promise<{ at?: string }>) : null))
-    .then((j) => j?.at ?? null)
-    .catch(() => null)
   const t0 = performance.now()
   const health = await fetch(`${base}/health`, { cache: 'no-store', signal: AbortSignal.timeout(10_000) })
     .then((r) => (r.ok ? (r.json() as Promise<Health>) : null))
     .catch(() => null)
-  return { base, at, health, ms: health ? Math.round(performance.now() - t0) : null }
+  return { base, health, ms: health ? Math.round(performance.now() - t0) : null }
 }
 
 const ago = (s: number) => (s < 90 ? `${Math.max(1, Math.round(s))} s` : s < 90 * 60 ? `${Math.round(s / 60)} min` : `${Math.round(s / 3600)} h`)
@@ -531,13 +526,9 @@ export function Status() {
         </p>
         <p className="mt-2 text-[13px] text-ink-3">
           Sources:{' '}
-          <a href={API_JSON} className="font-mono text-accent hover:text-accent-2">
-            api.json
-          </a>
-          ,{' '}
           <a href={import.meta.env.VITE_LATENCY_URL} className="font-mono text-accent hover:text-accent-2">
             latency.json
-          </a>{' '}
+          </a>
           ,{' '}
           <a href={STATUS_URL} className="font-mono text-accent hover:text-accent-2">
             status.json
