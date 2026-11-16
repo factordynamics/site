@@ -145,6 +145,11 @@
    "ticker": "CRNX",
    "name": "Crinetics Pharmaceuticals",
    "sector": "Health Care"
+  },
+  "49177J102": {
+   "ticker": "KVUE",
+   "name": "Kenvue",
+   "sector": "Consumer Staples"
   }
  },
  "by_ticker": {
