@@ -72,8 +72,9 @@ export function StockPage() {
   }, [wide, view, fh.data])
   const filersLoading = wide && !fh.data && !fh.error
   // The wider lenses read ingest's hl/ build, which can trail EDGAR by days (Nov 16: the Nov 11 build): say when it
-  // was built, so a deadline-day visitor never reads it as today's.
-  const hlAt = useAsync(() => (wide ? getJSON<{ stores?: Record<string, { built_at?: string }> }>(live('meta/builds.json')).then((b) => b.stores?.hl?.built_at ?? null, () => null) : Promise.resolve(null)), [wide])
+  // was built, so a deadline-day visitor never reads it as today's. data_built_at is the build's own time; built_at is
+  // the store's upload watermark (the oldest object's stamp), the fallback until ingest publishes data_built_at.
+  const hlAt = useAsync(() => (wide ? getJSON<{ stores?: Record<string, { built_at?: string; data_built_at?: string }> }>(live('meta/builds.json')).then((b) => b.stores?.hl?.data_built_at ?? b.stores?.hl?.built_at ?? null, () => null) : Promise.resolve(null)), [wide])
   const hlNote = hlAt.data ? `Holder table as of ${asOfLabel(hlAt.data)}; 13Fs filed after that aren’t in it yet. ` : 'This holder table can trail EDGAR by a day or more, so the latest 13Fs may not be in it yet. '
   // Pro and Fund: every holder from the API (1,000 a page), with each filer's change since its previous
   // 13F. Used only once the list is whole: not the public top 25 (truncated), and for the smart-money

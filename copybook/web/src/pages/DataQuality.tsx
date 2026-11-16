@@ -17,7 +17,7 @@ type Quality = {
   parity?: { quarter?: string; issuers: number; matched: number; checked_at?: string }
 }
 // meta/builds.json is the R2 body the API reads: { quarters, stores: { hl | changes | filer_view: { build_id, built_at } } }.
-type Build = { build_id?: string; built_at?: string }
+type Build = { build_id?: string; built_at?: string; data_built_at?: string }
 type Gate = { id: string; name: string; fails_when: string; stays_live: string; result?: string; checked_at?: string; detail?: string }
 
 /** A published file, or null when it isn't published yet (404). A network failure throws. */
@@ -83,7 +83,7 @@ export function DataQuality() {
   const qs = builds.data?.quarters?.slice().sort()
   const span = qs?.length ? (qs.length > 1 ? `${qs[0]}–${qs[qs.length - 1]}` : qs[0]) : undefined
   const storeRows: { store: string; build?: string; at?: string; quarters?: string }[] = builds.data?.stores && Object.keys(builds.data.stores).length
-    ? Object.entries(builds.data.stores).map(([store, b]) => ({ store: STORE[store] ?? store, build: b.build_id, at: b.built_at, quarters: span }))
+    ? Object.entries(builds.data.stores).map(([store, b]) => ({ store: STORE[store] ?? store, build: b.build_id, at: b.data_built_at ?? b.built_at, quarters: span }))
     : [
         ...(stamps.data?.idx ? [{ store: 'Fund books', build: stamps.data.idx.build_id, at: stamps.data.idx.data_built_at ?? stamps.data.idx.generated_at }] : []),
         ...(stamps.data?.hlr?.generated_at ? [{ store: 'Holders by stock', at: stamps.data.hlr.generated_at }] : []),

@@ -190,7 +190,8 @@ export function Status() {
   const filingDay = isEdgarDay(new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }))
   // Every filer's holder tables (stock pages' wider views) are ingest's hl/ build, on its own schedule (Nov 16: still
   // the Nov 11 build while full runs failed), so its age is shown apart and never implied by the tracked-fund build.
-  const hl = useAsync(() => fetch(`${DATA}meta/builds.json?m=${Math.floor(Date.now() / 600_000)}`).then((r) => (r.ok ? (r.json() as Promise<{ stores?: Record<string, { built_at?: string }> }>) : null)).then((b) => b?.stores?.hl?.built_at ?? null).catch(() => null), [tick])
+  // data_built_at is the build's own time; built_at, the upload watermark, is the fallback until it's published.
+  const hl = useAsync(() => fetch(`${DATA}meta/builds.json?m=${Math.floor(Date.now() / 600_000)}`).then((r) => (r.ok ? (r.json() as Promise<{ stores?: Record<string, { built_at?: string; data_built_at?: string }> }>) : null)).then((b) => b?.stores?.hl?.data_built_at ?? b?.stores?.hl?.built_at ?? null).catch(() => null), [tick])
   const hlLate = hl.data ? Date.now() - Date.parse(hl.data) > 6 * 3600_000 : false
   const dataLate = lagS != null && filingDay && lagS > 2 * 3600
   const dataTone: Tone = lagS == null ? (fresh.loading ? 'wait' : 'warn') : dataLate || (filingDay && hlLate) ? 'warn' : 'up'
