@@ -433,6 +433,8 @@ describe('copybook api', () => {
     const ev = await call('/events?tickers=MU&window=quarter', { token: r.token });
     const hi = await call('/history/warren-buffett', { token: r.token });
     expect([ev.status, hi.status === 403]).toEqual([200, false]);
+    // Its alert log reads too (empty until the link: nothing is delivered).
+    expect(await (await call('/me/alerts', { token: r.token })).json()).toEqual({ ok: true, limit: 50, alerts: [] });
     const ackman = { slug: 'bill-ackman', slugs: ['bill-ackman'], manager: 'Bill Ackman', name: 'Pershing Square', quarter: '2026Q3', report_date: '2026-09-30', filing_date: new Date().toISOString().slice(0, 10), accession: '0001336528-26-000099', sec_url: 'https://www.sec.gov/x', accepted: new Date().toISOString(), moves: { bought_usd: 5e6, sold_usd: 0, new: [], added: [{ ticker: 'HHH', display_name: null, issuer: 'HHH', cusip: '44267T102', put_call: null, shares: 10, prev_shares: 5, value: 1e7, value_delta: 5e6, change: 'added' }], trimmed: [], exited: [] } };
     const before = sent.length;
     await (await import('../src/alerts')).deliver(env, [ackman as never], [], Date.now());
@@ -573,6 +575,12 @@ describe('copybook api', () => {
     await flushHeld(env, t0 + 61 * 60_000);
     const cap1 = sent.filter((m) => m.to[0] === 'cap1@example.com').map((m) => m.subject);
     expect([cap1.length, /^2 funds you follow filed: /.test(cap1[1])]).toEqual([2, true]);
+    // GET /me/alerts: each alert and what each channel did. Kahn's email went at once; Baupost's and Oaktree's were
+    // batched to the hour's end (deadline week); all three reached the feed.
+    const myAlerts = async (c: string) => (await (await handleRequest(new Request('https://api.test/me/alerts', { headers: { authorization: `Bearer ${await signToken(env.SESSION_SECRET, 'session', c, 3600)}` } }), env)).json()) as { ok: boolean; alerts: { manager: string; kind: string; channels: { email: { state: string; until?: string }; feed?: string } }[] };
+    const a1 = await myAlerts('cap1');
+    expect(a1.alerts.map((r) => [r.manager, r.kind, r.channels.email.state, r.channels.feed])).toEqual([['Oaktree', '13f', 'batched', 'delivered'], ['Baupost', '13f', 'batched', 'delivered'], ['Kahn Brothers', '13f', 'sent', 'delivered']]);
+    expect(a1.alerts[0].channels.email.until).toBe(new Date(t0 + 3600_000).toISOString().replace('.000Z', 'Z'));
     // Two emails of room left (100 less the 15 kept for account mail, less 83): two members get the next 13F now; the
     // other two paying members' emails wait for the 00:00 UTC reset, marked (the lead, Nov 11), with no feed note.
     const t1 = t0 + 3 * 3600_000;
@@ -589,6 +597,8 @@ describe('copybook api', () => {
     const capq = async () => JSON.parse((await env.DB.get('host:mail-capq')) ?? '{}');
     const q1 = await capq();
     expect([sent.length, notes.filter(Boolean).length, await env.DB.get(`mail:capskip:${day}`), Object.keys(q1).length, Object.values(q1).every((x: any) => x.filings.length === 1), await env.DB.get('host:mail-delayed')]).toEqual([2, 0, null, 2, true, null]);
+    const berkshire = await Promise.all(['cap1', 'cap2', 'cap3', 'cap4'].map(async (c) => (await myAlerts(c)).alerts[0]));
+    expect([berkshire.every((r) => r.manager === 'Berkshire'), berkshire.map((r) => r.channels.email.state).sort()]).toEqual([true, ['delayed_to_reset', 'delayed_to_reset', 'sent', 'sent']]);
     // 15 left, under the 20 kept for 13Fs: a Form 4 sale (routine) is skipped for every member, with the feed note.
     resendUsed = 70;
     mailQuota.used = 70;
@@ -597,6 +607,7 @@ describe('copybook api', () => {
     const ev = (id: string, kind: string, action: string, t: number, ticker = 'OXY') => ({ id, slug: 'warren-buffett', manager: 'Warren Buffett', form: kind === 'form4' ? '4' : 'SCHEDULE 13D', kind, action, filing_date: '2026-11-16', url: 'https://www.sec.gov/y', issuer: 'OCCIDENTAL', display_name: null, ticker, shares: 1000, value_usd: 500_000, avg_price: 50, shares_after: 1000, percent_of_class: null, accepted: new Date(t).toISOString() });
     await deliver(env, [], [ev('0001193125-26-123456', 'form4', 'sell', t2) as never], t2);
     expect([sent.length, JSON.parse((await env.DB.get(`mail:capskip:${day}`))!).count, notes.length]).toEqual([0, 4, 4]);
+    expect(await Promise.all(['cap1', 'cap2', 'cap3', 'cap4'].map(async (c) => (await myAlerts(c)).alerts[0].channels.email.state))).toEqual(Array(4).fill('skipped_daily_limit'));
     expect((await Promise.all(['cap1', 'cap2', 'cap3', 'cap4'].map(async (c) => JSON.parse((await env.DB.get(`feed:${c}`)) ?? '[]').find((i: { title: string }) => i.title === CAP_NOTE)))).every((n) => n && /email resumes at 7pm ET\.$/.test(n.text) && !/chat|webhook|UTC/.test(n.text))).toBe(true);
     const { alertHealth } = await import('../src/status');
     const ah = await alertHealth(env, t2);
@@ -633,7 +644,7 @@ describe('copybook api', () => {
     ]);
     // Feed only, no chat: the line says so and links the account page; never claims chat, webhooks or UTC.
     const two = sent.find((m) => m.subject.startsWith("Monday's 13Fs"))!;
-    expect(two.text.split('\n')[0]).toBe(`Delayed by our daily email limit: this email waited until 7pm ET. These alerts reached your feed when they were filed. You have no instant channel yet. Connect one so this never waits: ${SITE}account/`);
+    expect(two.text.split('\n')[0]).toBe(`Delayed by our daily email limit: this email waited until 7pm ET. These alerts reached your feed when they were filed. You have no instant channel yet. Connect one so this never waits: ${SITE}account/#alerts`);
     expect(two.text).toMatch(/Berkshire/);
     expect(await env.DB.get('host:mail-capq')).toBe('{}');
     // /speed/'s per-day counts, in emails: Monday's 4 digests (one per member), 3 coalesced sends, 4 + 4 skipped.
@@ -645,7 +656,7 @@ describe('copybook api', () => {
     const { delayLine } = await import('../src/alerts');
     const cap4 = JSON.parse((await env.DB.get('cus:cap4'))!);
     expect(await delayLine(env, cap4, { feed_token: 'x', telegram: { bot_token: 't', chat_id: '1' }, verified: { telegram: '2026-11-12T00:00:00Z' } } as never, 1, Date.UTC(2026, 10, 17, 0, 5))).toBe('Delayed by our daily email limit: this email waited until 7pm ET. This alert reached your feed and Telegram when it was filed.');
-    expect(await delayLine(env, cap4, {} as never, 1, Date.UTC(2026, 10, 17, 0, 5))).toBe(`Delayed by our daily email limit: this email waited until 7pm ET. You have no instant channel yet. Connect one so this never waits: ${SITE}account/`);
+    expect(await delayLine(env, cap4, {} as never, 1, Date.UTC(2026, 10, 17, 0, 5))).toBe(`Delayed by our daily email limit: this email waited until 7pm ET. You have no instant channel yet. Connect one so this never waits: ${SITE}account/#alerts`);
     resendUsed = 0;
     mailQuota.used = 0;
   });

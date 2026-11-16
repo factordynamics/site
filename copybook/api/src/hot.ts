@@ -79,7 +79,8 @@ export function hotHist(r2: R2): R2 {
  * ~30 s on a power cut) can't send anything twice or bill wrongly: /track counts, rate limits, sync and poller state,
  * per-host check caches. Alert-sent records, dedupe, the mail meter, the job queue, members, follows and billing stay in DB.
  */
-const OPS = ['track', 'rl:', 'sync:', 'host:', 'issuers:checked', 'alerts:recheck-at', 'status:fresh', 'idx:etag', 'index:contract', 'types:guard', 'bulk:check'];
+// alertlog: (GET /me/alerts' per-member delivery log) records sends, it gates none.
+const OPS = ['track', 'rl:', 'sync:', 'host:', 'issuers:checked', 'alerts:recheck-at', 'status:fresh', 'idx:etag', 'index:contract', 'types:guard', 'bulk:check', 'alertlog:'];
 // host:mail-* (the mail meter, the delayed queue, the 7pm ET digests) and host:mail80 gate sends: they stay in DB.
 const isOps = (k: string) => OPS.some((p) => k.startsWith(p)) && !k.startsWith('host:mail');
 

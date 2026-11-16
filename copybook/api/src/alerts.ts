@@ -2,7 +2,7 @@ import { addToFeed, type Channels, flushChannelLatency, getChannels, getFailures
 import { refreshBooks } from './book';
 import { countAlerts, logSent, pausedFilingMail, resumeUrl, runRevenue, yearlyPeakLine } from './revenue';
 import { DEADLINES, deadlineMs, inFilingWeek } from './seasons';
-import { alertMail, digestMail, FOOTER, type FeedItem, feedItems, holdtermAlertMail, type Mail, resetEt, sendMail, weeklyNamesMail } from './email';
+import { alertMail, digestMail, FOOTER, type FeedItem, feedItems, holdtermAlertMail, type Mail, resetEt, sendMail, SINK_UNTIL, weeklyNamesMail } from './email';
 import { guardShares, markUnreliable, unreliableSide, offFilers, reissuedTicker, isReissued, reissueRatio, loadReissues, bookSuspect, companyFilings, computeMoves, tagClasses, filingId, posKey, gateMoves, gateRow, movesOf, netRenamed, type Consensus, type HeldRow, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, prevQuarterEnd, prior13F, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
 import { isActive, isPaused, isPro, testAddress, type Env, type Member } from './env';
 import { getFollows, getMember, listMembers, putMember, type Follows } from './members';
@@ -324,7 +324,7 @@ export async function delayLine(env: Env, m: Member, ch: Channels, n: number, no
   const list = reached.length > 1 ? `${reached.slice(0, -1).join(', ')} and ${reached[reached.length - 1]}` : reached[0];
   const r = reached.length ? `${n > 1 ? 'These alerts' : 'This alert'} reached your ${list} when ${n > 1 ? 'they were' : 'it was'} filed.` : '';
   const head = `Delayed by our daily email limit: this email waited until ${resetEt(now)}.`;
-  return [head, r, live.length ? '' : `You have no instant channel yet. Connect one so this never waits: ${env.SITE_URL}account/`].filter(Boolean).join(' ');
+  return [head, r, live.length ? '' : `You have no instant channel yet. Connect one so this never waits: ${env.SITE_URL}account/#alerts`].filter(Boolean).join(' ');
 }
 
 /** A member's working, verified chat or webhook destinations (what replaces alert email). */
@@ -433,7 +433,7 @@ async function capSkipped(env: Env, m: Member, ch: Pick<Channels, 'feed_token'>,
     const key = `feed:${m.customer}`;
     const items = JSON.parse((await env.DB.get(key)) ?? '[]') as FeedItem[];
     const at = new Date(now).toISOString().replace(/\.\d{3}Z$/, 'Z');
-    const note: FeedItem = { id: `capnote:${day}`, title: CAP_NOTE, text: `${CAP_NOTE}. Today's other alerts arrive here as they happen; email resumes at ${resetEt(now)}.`, url: `${env.SITE_URL}account/`, published: at, sent: at };
+    const note: FeedItem = { id: `capnote:${day}`, title: CAP_NOTE, text: `${CAP_NOTE}. Today's other alerts arrive here as they happen; email resumes at ${resetEt(now)}.`, url: `${env.SITE_URL}account/#alerts`, published: at, sent: at };
     if (!items.some((x) => x.id === note.id)) await env.DB.put(key, JSON.stringify([note, ...items].slice(0, 50)));
   }
 }
@@ -677,6 +677,12 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
   // Chat and webhook destinations already posted to in this delivery (per alert): a destination shared
   // by several members, such as a Fund team's Slack, gets each alert once.
   const posted = new Set<string>();
+  // What each member's channels did with these alerts, for GET /me/alerts: kept in memory, written after the send.
+  const outcomes = new Map<string, { items: AlertLogItem[]; channels: AlertLogChannels }>();
+  const outcome = (c: string, email: AlertLogChannels['email']) => {
+    const o = outcomes.get(c);
+    if (o) o.channels.email = email;
+  };
   let digest = 0;
   let held = 0;
   let testCapped = 0;
@@ -718,14 +724,28 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
     await countAlerts(env, m.customer, mine.filings, mine.events, f.owned, now, !!only);
     // Chat, feed and webhook get every alert as it happens, whatever the email schedule.
     const ch = replay ? ({} as Awaited<ReturnType<typeof getChannels>>) : await getChannels(env, m.customer);
-    if (ch.discord || ch.slack || ch.telegram) chats.push(...Object.entries(await sendChats(env, m.customer, ch, mine.filings, mine.events, f, now, posted)).map(([k, v]) => `${k} ${v}`));
-    if (ch.webhook) await sendWebhooks(env, m, ch, mine.filings, mine.events, now, posted);
-    if (ch.feed_token) await addToFeed(env, m, ch, mine.filings, mine.events, now);
+    const got: AlertLogChannels = { email: { state: 'pending' } };
+    if (!only) outcomes.set(m.customer, { items: logItems(mine.filings, mine.events), channels: got });
+    if (ch.discord || ch.slack || ch.telegram) {
+      const sent = await sendChats(env, m.customer, ch, mine.filings, mine.events, f, now, posted);
+      for (const [k, v] of Object.entries(sent)) got[k as 'discord' | 'slack' | 'telegram'] = chatState(v);
+      chats.push(...Object.entries(sent).map(([k, v]) => `${k} ${v}`));
+    }
+    if (ch.webhook) {
+      const w = await sendWebhooks(env, m, ch, mine.filings, mine.events, now, posted);
+      if (w) got.webhook = w === 'ok' ? 'delivered' : 'retrying';
+    }
+    if (ch.feed_token) {
+      await addToFeed(env, m, ch, mine.filings, mine.events, now);
+      got.feed = 'delivered';
+    }
     // Without a feed, what was delivered is remembered (ids by day, 30 days) so a feed created later
     // starts with exactly what the member got, whatever their scope is by then.
     else if (!only) await rememberDelivered(env, m.customer, now, [...mine.filings.map((a) => `${filingId(a)}`), ...mine.events.map((e) => `${e.id}${e.followup ? ':details' : ''}`)]);
-    if (f.digest) digest++;
-    else {
+    if (f.digest) {
+      digest++;
+      outcome(m.customer, { state: 'weekly_digest' });
+    } else {
       // A verified, working Discord, Slack, Telegram or webhook destination replaces email, unless the member kept email
       // (keep_email); then email too, while there's room for it today. Never for a replay or with all destinations failing.
       if (!only) {
@@ -736,6 +756,7 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
           pressure ??= await emailPressure(env, now);
           if (dests.some((d) => !fails[d]) && (!ch.keep_email || pressure.room - mails.length <= 0)) {
             chatOnly++;
+            outcome(m.customer, { state: 'replaced_by_chat' });
             continue;
           }
         }
@@ -744,11 +765,15 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
       // Test members get no 13G or 13G/A by email (feed, chat and webhooks above only): the most frequent form, and
       // the least worth the shared email budget.
       const evs = test && !only ? mine.events.filter((e) => e.kind !== '13g') : mine.events;
-      if (!mine.filings.length && !evs.length) continue;
+      if (!mine.filings.length && !evs.length) {
+        outcome(m.customer, { state: 'not_emailed' });
+        continue;
+      }
       // Test members: at most TEST_MAIL_CAP alert emails a day; past that, the feed, chat and webhooks above only.
       const n = test && !only ? Number((await env.DB.get(testMailKey(m.customer, now))) ?? 0) : 0;
       if (test && !only && n >= TEST_MAIL_CAP) {
         testCapped++;
+        outcome(m.customer, { state: 'test_daily_cap' });
         continue;
       }
       let send = { filings: mine.filings, events: evs };
@@ -764,6 +789,7 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
           // Inside this member's window: held, sent with the window's other alerts at its end.
           await env.DB.put(`mailwin:${m.customer}`, JSON.stringify({ ...win, filings: [...win.filings, ...mine.filings], events: [...win.events, ...evs] }));
           held++;
+          outcome(m.customer, { state: 'batched', until: new Date(win.until).toISOString().replace(/\.\d{3}Z$/, 'Z') });
           continue;
         }
         // Anything still held goes out with this email (the window ended, or email is no longer short).
@@ -781,13 +807,17 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
           const r = await overRoom(env, m, ch, send.filings, send.events, now);
           capLate += Number(r.queued);
           capSkips += Number(r.skipped);
+          outcome(m.customer, { state: r.queued ? 'delayed_to_reset' : 'skipped_daily_limit' });
           continue;
         }
       }
       // Never the same alert twice to one member (an operator's replay excepted).
       if (!only) {
         send = await unmailed(env, m.customer, send.filings, send.events, now);
-        if (!send.filings.length && !send.events.length) continue;
+        if (!send.filings.length && !send.events.length) {
+          outcome(m.customer, { state: 'already_emailed' });
+          continue;
+        }
       }
       if (test && !only) await env.DB.put(testMailKey(m.customer, now), String(n + 1), { expirationTtl: 2 * 86400 });
       const am0 = alertMail(env, m.email, send.filings, send.events, f, m);
@@ -798,11 +828,13 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
       const am = yl ? { ...am0, text: am0.text.replace(FOOTER, `\n\n${yl}${FOOTER}`), html: am0.html && foot >= 0 ? am0.html.slice(0, foot) + ylHtml + am0.html.slice(foot) : am0.html } : am0;
       mails.push({ ...am, ...(replay ? { subject: `Replay (test): ${am.subject}` } : {}), test, filing: send.filings.length > 0, ids: [...send.filings.map((a) => a.accession), ...send.events.map((e) => e.id)] });
       notes.push(m);
+      outcome(m.customer, { state: test && env.TEST_MAIL_SINK !== 'off' && Date.now() < SINK_UNTIL ? 'test_inbox' : 'sending' });
     }
   }
   if (heldIndex) await env.DB.put(HELD, JSON.stringify(heldIndex));
   // An operator's replay or preview (`only`) counts against the day's preview cap.
   const mail = await sendMail(env, mails, { bulk: true, preview: !!only });
+  await logOutcomes(env, outcomes, mail, now);
   await logSent(env, mails.length, now);
   await flushChannelLatency(env, !only);
   if (mail.split(',').every((s) => s === '200')) for (const m of notes) await noted(env, m);
@@ -836,6 +868,69 @@ export async function deliveryRecord(env: Env, id: string, now: number) {
     }
   }
   return { id, alert, recipients, counts: { members: new Set(recipients.map((r) => r.customer)).size, real: new Set(recipients.filter((r) => !r.test).map((r) => r.customer)).size }, note: 'delivered: keeps 30 days and at most 50 IDs a member a day' };
+}
+
+/** One alert a member got, as GET /me/alerts lists it: the filing, and what each of their channels did with it. */
+export interface AlertLogItem {
+  id: string;
+  kind: '13f' | 'form4' | '13d' | '13g';
+  form: string;
+  manager: string;
+  slug: string;
+  accession: string;
+  accepted: string | null;
+  followup?: boolean;
+}
+/**
+ * Email: sent (the provider took it); queued (not confirmed sent: held for the daily limit's reset, or retried);
+ * test_inbox (a test member's mail, through Nov 16); batched until `until` (one email an hour in deadline week, or a
+ * short window); delayed_to_reset (past the day's limit, one email at 7pm ET);
+ * skipped_daily_limit (past it, not queued: feed, chat and webhooks only); replaced_by_chat (a verified chat or webhook
+ * takes the member's alerts); weekly_digest; already_emailed; not_emailed (test members' 13Gs); test_daily_cap.
+ * Chat and webhook: delivered, or retrying (queued with backoff; a revoked destination shows as failed on the account
+ * page). Feed: delivered.
+ */
+export interface AlertLogChannels {
+  email: { state: 'sent' | 'queued' | 'test_inbox' | 'sending' | 'batched' | 'delayed_to_reset' | 'skipped_daily_limit' | 'replaced_by_chat' | 'weekly_digest' | 'already_emailed' | 'not_emailed' | 'test_daily_cap' | 'pending'; until?: string };
+  feed?: 'delivered';
+  discord?: 'delivered' | 'retrying';
+  slack?: 'delivered' | 'retrying';
+  telegram?: 'delivered' | 'retrying';
+  webhook?: 'delivered' | 'retrying';
+}
+export type AlertLogRow = AlertLogItem & { sent_at: string; channels: AlertLogChannels };
+/** Kept per member (alertlog:{customer}), newest first: what GET /me/alerts returns. */
+export const ALERT_LOG_ROWS = 50;
+const logItems = (filings: Alert13F[], events: AlertEvent[]): AlertLogItem[] => [
+  ...filings.map((a) => ({ id: filingId(a), kind: '13f' as const, form: a.reveal ? '13F-HR/A' : '13F-HR', manager: a.manager, slug: a.slug, accession: a.accession, accepted: a.accepted ?? null, ...(a.followup ? { followup: true } : {}) })),
+  ...events.map((e) => ({ id: `${e.id}${e.followup ? ':details' : ''}`, kind: e.kind, form: e.form, manager: e.manager, slug: e.slug, accession: e.id, accepted: e.accepted ?? e.accepted_at ?? null, ...(e.followup ? { followup: true } : {}) })),
+];
+// "already posted": a teammate's delivery reached the shared destination in this run.
+const chatState = (status: string) => (/^2\d\d$/.test(status) || status === 'already posted' ? ('delivered' as const) : ('retrying' as const));
+
+/**
+ * After a delivery's send: each member's outcome per channel on the front of alertlog:{customer}. Never fails the
+ * delivery it records (the alerts already went out).
+ */
+async function logOutcomes(env: Env, outcomes: Map<string, { items: AlertLogItem[]; channels: AlertLogChannels }>, mail: string, now: number): Promise<void> {
+  const sent_at = new Date(now).toISOString().replace(/\.\d{3}Z$/, 'Z');
+  const ok = mail.split(',').every((s) => s === '200');
+  for (const [customer, o] of outcomes) {
+    try {
+      if (o.channels.email.state === 'sending') o.channels.email = { state: ok ? 'sent' : 'queued' };
+      const key = `alertlog:${customer}`;
+      const log = JSON.parse((await env.DB.get(key)) ?? '[]') as AlertLogRow[];
+      const add = o.items.map((i) => ({ ...i, sent_at, channels: o.channels }));
+      await env.DB.put(key, JSON.stringify([...add, ...log.filter((r) => !add.some((x) => x.id === r.id))].slice(0, ALERT_LOG_ROWS)), { expirationTtl: 90 * 86400 });
+    } catch (e) {
+      console.log(`alert log ${customer}: ${e}`);
+    }
+  }
+}
+
+/** GET /me/alerts: the member's last ALERT_LOG_ROWS alerts, newest first, with each channel's outcome. */
+export async function alertLog(env: Env, customer: string): Promise<AlertLogRow[]> {
+  return (JSON.parse((await env.DB.get(`alertlog:${customer}`)) ?? '[]') as AlertLogRow[]).slice(0, ALERT_LOG_ROWS);
 }
 
 async function rememberDelivered(env: Env, customer: string, now: number, ids: string[]): Promise<void> {

@@ -1445,7 +1445,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   // /events, history, holdings and CSV links answer, and only delivery (email, chat, webhooks) waits for the link. API
   // keys and seats stay behind it.
   const read = (req.method === 'GET' && !/^\/(keys|seats)(\/|$)/.test(path)) || (req.method === 'POST' && path.startsWith('/csv-link/'));
-  const setup = read || (req.method === 'GET' && path === '/me') || path === '/follows' || path.startsWith('/follows/') || (req.method === 'POST' && (path === '/portal/card' || path === '/yearly' || path === '/book/import')) || (!!m.email_pending && ((path === '/channels' && (req.method === 'GET' || req.method === 'PUT')) || (req.method === 'POST' && path === '/alerts')));
+  const setup = read || (req.method === 'GET' && (path === '/me' || path === '/me/alerts')) || path === '/follows' || path.startsWith('/follows/') || (req.method === 'POST' && (path === '/portal/card' || path === '/yearly' || path === '/book/import')) || (!!m.email_pending && ((path === '/channels' && (req.method === 'GET' || req.method === 'PUT')) || (req.method === 'POST' && path === '/alerts')));
   if (PROVISIONAL.has(m) && !setup) {
     return json({ ok: false, error: 'Open the sign-in link we emailed you to do this.', code: 'verify_email', delivery: 'pending_email_confirmation' }, 403, h);
   }
@@ -1467,6 +1467,13 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   }
 
   // channels_failing: chat or webhook destinations that stopped (reason, since), so /account/ can flag them.
+  // The member's last 50 alerts, newest first, with what each channel did (sent, batched, delayed to the 7pm ET reset,
+  // skipped past the day's limit, replaced by chat; chat and webhook delivered or retrying). Provisional sessions read it.
+  if (req.method === 'GET' && path === '/me/alerts') {
+    const { alertLog, ALERT_LOG_ROWS } = await import('./alerts');
+    return json({ ok: true, limit: ALERT_LOG_ROWS, alerts: await alertLog(env, m.customer) }, 200, h);
+  }
+
   if (req.method === 'GET' && path === '/me') {
     const { referralView } = await import('./referrals');
     // Free members' saved names from the KV mirror every change writes: no Durable Object read on a page view.
