@@ -310,6 +310,8 @@ export async function startSession(body: { checkout_session: string } | { login:
   if (r.code === 'trial_used') throw new ApiError(409, { code: r.code, error: r.error })
   if (!r.token) return { member: null, existing: r.code === 'existing_account' }
   setToken(r.token, r.session === 'provisional' ? (r.member?.email ?? null) : null)
+  // The header mounted signed out: it takes the new member now, not on the next reload (the lead, Nov 12).
+  if (r.member) window.dispatchEvent(new CustomEvent('copybook:me', { detail: r.member }))
   return { member: r.member, existing: false }
 }
 
@@ -514,19 +516,22 @@ export function useMemberState() {
   // Fresh from this tab's cache, else the last-known member (shown at once, marked updating), else loading.
   const [member, setMember] = useState<Member | null | undefined>(() => (api && getToken() ? (cachedMe() ?? lastMe() ?? undefined) : null))
   useEffect(() => {
-    if (!api || !getToken()) return
-    if (!cachedMe() && lastMe()) setStale(true)
-    readMe().then(
-      (m) => {
-        setStale(false)
-        setMember(m)
-      },
-      // A failing API keeps the last-known member (the status banner says why); a 401 has signed out.
-      () => {
-        setStale(false)
-        setMember(getToken() ? (lastMe() ?? null) : null)
-      },
-    )
+    if (!api) return
+    // Listen even when this mounted signed out: an emailed link or a checkout signs in on the same page.
+    if (getToken()) {
+      if (!cachedMe() && lastMe()) setStale(true)
+      readMe().then(
+        (m) => {
+          setStale(false)
+          setMember(m)
+        },
+        // A failing API keeps the last-known member (the status banner says why); a 401 has signed out.
+        () => {
+          setStale(false)
+          setMember(getToken() ? (lastMe() ?? null) : null)
+        },
+      )
+    }
     // Back in the tab after the cache has expired: one fresh read.
     const onFocus = () => document.visibilityState === 'visible' && getToken() && !cachedMe() && fetchMe().then(setMember, () => null)
     const onMe = (e: Event) => setMember((e as CustomEvent<Member>).detail)
