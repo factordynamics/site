@@ -9,11 +9,11 @@ import { Share } from '../components/Share'
 import { PositionLine, rollUp, type Position } from '../components/FundNotes'
 import { downloadFile, getToken, isPro, lastMe, loadEvents, loadHolders, needsVerify, pendingEmail, useMember, type ApiHolder } from '../lib/account'
 import { ResendLink } from '../components/ConfirmEmail'
-import { Stale } from '../components/Stale'
+import { Stale, asOfLabel } from '../components/Stale'
 import { FridayBox } from '../components/FridayBox'
 import { issuerLatest, whenLabel } from '../lib/insiders'
 import { Arrow, Badge, Button, edgeFade, LoadFailed, Lock, Monogram, NotCounted, Panel, Skeleton, Stat } from '../components/ui'
-import { DATA, getJSON, dateLabel, pricingTo, displayName, money, pct, quarterLabel, sharesFmt, loadIndex, typesAsOfLabel, useAsync, useTitle, flagNote, flagOf, heldLinesNote, notFound, NOT_COUNTED } from '../lib/data'
+import { DATA, getJSON, live, dateLabel, pricingTo, displayName, money, pct, quarterLabel, sharesFmt, loadIndex, typesAsOfLabel, useAsync, useTitle, flagNote, flagOf, heldLinesNote, notFound, NOT_COUNTED } from '../lib/data'
 import { dueLead, stockTitle } from '../lib/titles.mjs'
 import { MARQUEE, possessive, shortName } from '../lib/names.mjs'
 import { aboutET, dayET, fridayAfter, loadExpected, loadFilerHolders, loadStock, recapPath, resolveTicker, seasonNow, shortDay, stockPath, type StockHolder } from '../lib/stocks'
@@ -71,6 +71,10 @@ export function StockPage() {
     return { ...x, filers: b ? b.current + b.older : 0, cur: b?.current ?? 0, older: b?.older ?? 0, quarters: b?.quarters ?? {}, rows: x.rows.filter((r) => r[typed]) }
   }, [wide, view, fh.data])
   const filersLoading = wide && !fh.data && !fh.error
+  // The wider lenses read ingest's hl/ build, which can trail EDGAR by days (Nov 16: the Nov 11 build): say when it
+  // was built, so a deadline-day visitor never reads it as today's.
+  const hlAt = useAsync(() => (wide ? getJSON<{ stores?: Record<string, { built_at?: string }> }>(live('meta/builds.json')).then((b) => b.stores?.hl?.built_at ?? null, () => null) : Promise.resolve(null)), [wide])
+  const hlNote = hlAt.data ? `Holder table as of ${asOfLabel(hlAt.data)}; 13Fs filed after that aren’t in it yet. ` : 'This holder table can trail EDGAR by a day or more, so the latest 13Fs may not be in it yet. '
   // Pro and Fund: every holder from the API (1,000 a page), with each filer's change since its previous
   // 13F. Used only once the list is whole: not the public top 25 (truncated), and for the smart-money
   // tab, typed beyond the funds we track (about as many as the public index counts).
@@ -310,8 +314,8 @@ export function StockPage() {
           {wide
             ? filers
               ? filedSq < filers.cur
-                ? `Mid-season: ${num(filedSq)} of ${num(filers.cur)} ${who} holding it have filed ${quarterLabel(sq)}; the rest are on earlier 13Fs${filers.older ? `, ${num(filers.older)} of them older than last quarter (counted apart)` : ''}. Each row is labelled with its quarter.`
-                : `From each filer’s ${quarterLabel(sq)} 13F.`
+                ? `${hlNote}In it, ${num(filedSq)} of ${num(filers.cur)} ${who} holding it have filed ${quarterLabel(sq)}; the rest are on earlier 13Fs${filers.older ? `, ${num(filers.older)} of them older than last quarter (counted apart)` : ''}. Each row is labelled with its quarter.`
+                : `${hlNote}From each filer’s ${quarterLabel(sq)} 13F.`
               : ''
             : d
             ? d.quarters.length > 1 && holders.length && holders.every((h) => h.quarter === d.quarters[0])

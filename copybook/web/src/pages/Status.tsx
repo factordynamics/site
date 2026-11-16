@@ -185,7 +185,12 @@ export function Status() {
   const builtAt = Math.max(fresh.data?.generated_at ? Date.parse(fresh.data.generated_at) : 0, st.data?.freshness?.data_built_at ? Date.parse(st.data.freshness.data_built_at) : 0) || null
   const lagS = builtAt ? (Date.now() - builtAt) / 1000 : null
   const filingDay = isEdgarDay(new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }))
-  const dataTone: Tone = lagS == null ? (fresh.loading ? 'wait' : 'warn') : filingDay && lagS > 2 * 3600 ? 'warn' : 'up'
+  // Every filer's holder tables (stock pages' wider views) are ingest's hl/ build, on its own schedule (Nov 16: still
+  // the Nov 11 build while full runs failed), so its age is shown apart and never implied by the tracked-fund build.
+  const hl = useAsync(() => fetch(`${DATA}meta/builds.json?m=${Math.floor(Date.now() / 600_000)}`).then((r) => (r.ok ? (r.json() as Promise<{ stores?: Record<string, { built_at?: string }> }>) : null)).then((b) => b?.stores?.hl?.built_at ?? null).catch(() => null), [tick])
+  const hlLate = hl.data ? Date.now() - Date.parse(hl.data) > 6 * 3600_000 : false
+  const dataLate = lagS != null && filingDay && lagS > 2 * 3600
+  const dataTone: Tone = lagS == null ? (fresh.loading ? 'wait' : 'warn') : dataLate || (filingDay && hlLate) ? 'warn' : 'up'
   // The newest 13F by EDGAR acceptance: payments' status.json once it has read a build, else the site build's.
   const newest13f = st.data?.freshness?.last_13f
     ? { manager: st.data.freshness.last_13f.manager, at: `accepted ${utc(st.data.freshness.last_13f.accepted_at)}` }
@@ -399,9 +404,10 @@ export function Status() {
                   Data publishes are held until it’s fixed{st.data.index_contract.checked_at ? `; checked ${utc(st.data.index_contract.checked_at)}` : ''}.
                 </Row>
               )}
-              <Row name="Filing data" tone={dataTone} state={lagS == null ? 'Not known yet' : `Last data build ${ago(lagS)} ago${dataTone === 'warn' ? ', later than usual for a filing day' : ''}`}>
+              <Row name="Filing data" tone={dataTone} state={lagS == null ? 'Not known yet' : `Last data build ${ago(lagS)} ago${dataLate ? ', later than usual for a filing day' : ''}${hlLate ? ` · holder tables for every filer from ${utc(hl.data!)}` : ''}`}>
                 {newest13f ? `Newest 13F in the data: ${displayName(newest13f.manager)}, ${newest13f.at}. ` : ''}
-                Tracked funds are rebuilt about every 20 minutes, every other 13F filer every 3 hours; past 2 hours this turns amber.
+                {hl.data ? `Holder tables for every 13F filer (stock pages’ wider views) were last built ${utc(hl.data)}${hlLate ? ', so 13Fs filed since then aren’t in them yet' : ''}. ` : ''}
+                Tracked funds are rebuilt about every 20 minutes and every other 13F filer every 3 hours, when those runs succeed. On a filing day this turns amber past 2 hours for tracked funds, or 6 hours for every filer.
               </Row>
               {quality.data?.held && quality.data.held.rows > 0 && <HeldRows q={quality.data} />}
               <Row name="Filing pages" tone="up" state="Up">

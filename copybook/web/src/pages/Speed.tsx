@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Signup } from '../components/Signup'
-import { Badge, Panel, Skeleton } from '../components/ui'
+import { Badge, LoadFailed, Panel, Skeleton } from '../components/ui'
 import { gapLabel, loadLatency, type Latency, type LatencyStat } from '../lib/account'
 import { displayName } from '../lib/names.mjs'
 import { quarterLabel, useAsync, useTick, useTitle } from '../lib/data'
@@ -43,7 +43,11 @@ export function Speed() {
   useTitle('Alert speed: EDGAR to inbox, every alert logged · Copybook')
   const tick = useTick(60_000, true)
   const lat = useAsync(loadLatency, [tick])
-  const d = lat.data
+  // A failed minute's read keeps the last good log on screen; with none, the page says the load failed and never
+  // reads as a season with no alerts (deadline day, Nov 16).
+  const [good, setGood] = useState<Latency | null>(null)
+  if (lat.data && lat.data !== good) setGood(lat.data)
+  const d = lat.data ?? good
   // One computation for every figure on the page (lib/latencyStats speedRows): each row once, replays, tests,
   // later sends and missed filings listed but never in a median or a count of alerts.
   const all = useMemo(() => speedRows<LogRow>(d) as Row[], [d])
@@ -66,13 +70,24 @@ export function Speed() {
   const p90 = overall.p90_seconds
   const season = d?.season ?? seasonNow().quarter
   const loading = lat.loading && !d
-  const empty = !loading && !all.length
+  const failed = !loading && !d
+  const empty = !loading && !failed && !all.length
   // Once /latency tags each alert curated or any_filer, show the split.
   const cov = (d?.alerts ?? []) as (Alert & { coverage?: 'curated' | 'any_filer' })[]
   const tagged = cov.filter((a) => a.coverage)
   const limitDays = emailLimitDays(d, all)
   const coverage = tagged.length ? ` Of the latest ${tagged.length}: ${tagged.filter((a) => a.coverage === 'curated').length} for funds we track closely, ${tagged.filter((a) => a.coverage === 'any_filer').length} for other filers.` : ''
 
+  if (failed)
+    return (
+      <div className="container-x pt-12 md:pt-16">
+        <header className="max-w-2xl">
+          <p className="text-[13px] font-medium text-accent">Speed</p>
+          <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-h1">From EDGAR to you, timed.</h1>
+        </header>
+        <LoadFailed what="the alert timings" onRetry={lat.retry} className="mt-8 max-w-2xl" />
+      </div>
+    )
   return (
     <div className="container-x pt-12 md:pt-16">
       <header className="max-w-2xl">
