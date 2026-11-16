@@ -19,7 +19,7 @@ export const checkout = {
 // to the Worker, and remembers the last one it read; the same contract as copybook/web/src/config.ts. Only https
 // bases on hosts we run are accepted, since a member's session token is sent there. A tester can pin one browser
 // with localStorage['holdterm-api'] = 'https://…' (no URL parameter, so a link can't send a token elsewhere).
-const BUILD_API = 'https://solid-amanda-dir-fiction.trycloudflare.com/copybook'
+const BUILD_API = 'https://messages-dialog-genome-hunter.trycloudflare.com/copybook'
 export const API_JSON_URL = 'https://pub-c691ec38c5cd4db6acb8e6bfef337500.r2.dev/api.json'
 const okBase = (v: unknown): string | null =>
   typeof v === 'string' && /^https:\/\/(([a-z0-9-]+\.)+(trycloudflare\.com|factordynamics\.com)|gene\.tail70ba3\.ts\.net|copybook-api\.factordynamics\.workers\.dev)(\/[^\s?#]*)?$/i.test(v) ? v.replace(/\/$/, '') : null
