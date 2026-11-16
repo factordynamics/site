@@ -1,6 +1,6 @@
 import type { Alert13F, AlertEvent } from './alerts';
 import { siteFirm, siteName } from './names';
-import { cleanItem4, countedMoves, exchangeLine, filingId, FILER_VALUE, posKey, UNUSUAL, type MoveRow, type Moves } from './edgar';
+import { cleanItem4, countedMoves, exchangeLine, filingId, FILER_VALUE, holdCusipPairs, posKey, UNUSUAL, type MoveRow, type Moves } from './edgar';
 import { testAddress, WORKER_URL, type Env, type Member } from './env';
 import type { Follows } from './members';
 import { firmName, publicSlug } from '../../../holdterm/src/names';
@@ -584,7 +584,7 @@ const odd = (r: MoveRow) => `${r.unusual ? ` · ${UNUSUAL}` : ''}${r.filer_value
 function unreliableNote(r: MoveRow): string {
   if (r.unreliable === 'value') return 'value unavailable, not in totals';
   if (r.unreliable === 'shares') return r.change === 'new' || r.change === 'exited' ? "share counts don't reconcile, not in totals" : 'not counted';
-  if (r.unreliable === 'both') return 'share count unreliable in this filing, not in totals';
+  if (r.unreliable === 'both') return `${BOTH_UNRELIABLE}, not in totals`;
   return '';
 }
 /** An add or trim whose share counts don't reconcile: shown by its filed values only, no computed trade. */
@@ -688,14 +688,18 @@ export const filingUrl = (env: Env, a: Alert13F) => (a.card ? `${env.SITE_URL}f/
 function yourMoves(a: Alert13F, f: Follows): MoveRow[] {
   const mv = a.moves;
   if (!mv) return [];
-  const all = [...(a.changed ?? []), ...mv.new, ...mv.added, ...mv.trimmed, ...mv.exited];
+  // The raw changed rows get the lists' CUSIP-pair hold too: Mizuho's ORCL (68389X204 -> 68389X105), held under "Not
+  // counted" above, read "ORCL new +$21.0M" here for a watcher.
+  const all = [...holdCusipPairs(a.changed ?? []), ...mv.new, ...mv.added, ...mv.trimmed, ...mv.exited];
   const seen = new Set<string>();
   return all.filter((r) => r.ticker && (f.owned.includes(r.ticker) || f.stocks.includes(r.ticker)) && !seen.has(`${r.ticker}:${r.put_call ?? ''}`) && !!seen.add(`${r.ticker}:${r.put_call ?? ''}`));
 }
 const verb = (r: MoveRow) => (!r.prev_shares ? 'new' : !r.shares ? 'exited' : r.shares > r.prev_shares ? 'added' : 'trimmed');
 /** One of your names: a trade in $, a \"value\" trade by shares, or a held line's facts. */
 const yourLine = (r: MoveRow) =>
-  r.unreliable === 'value'
+  r.cusip_pair === true
+    ? 'possible CUSIP change, not counted'
+    : r.unreliable === 'value'
     ? `${verb(r)} ${shareTrade(r) || shareMove(r)}, value unavailable`
     : r.unreliable
       ? `${heldFacts(r) ? `${heldFacts(r)}, ` : ''}not counted (${notCountedWhy(r)})`
@@ -713,8 +717,11 @@ function heldLine(a: Alert13F): string {
 /** Why a line isn't counted, in a few words. */
 // \"pre-split\" only where ingest's held_reason says so (the trader, Nov 11): Mizuho's Oracle and O read \"pre-split count\"
 // from a fallback, which was wrong.
+// A line marked "both" in the fund page's words (the lead, Nov 12). A line the gate held (reason unreliable_shares)
+// carries no side: a unit error (GuardCap's BKNG) is held the same way, so it keeps "share counts don't reconcile".
 const notCountedWhy = (x: { unreliable?: string; put_call: string | null; reason?: string; cusip_pair?: boolean | string; held_reason?: string }) =>
-  x.cusip_pair === true ? 'possible CUSIP change' : /pre.?split|mixed.?scale/i.test(x.held_reason ?? '') ? 'share count looks pre-split' : x.unreliable === 'value' ? 'value unavailable' : x.unreliable === 'both' && x.put_call ? "filed figures don't reconcile" : "share counts don't reconcile";
+  x.cusip_pair === true ? 'possible CUSIP change' : /pre.?split|mixed.?scale/i.test(x.held_reason ?? '') ? 'share count looks pre-split' : x.unreliable === 'value' ? 'value unavailable' : x.unreliable === 'both' ? BOTH_UNRELIABLE : "share counts don't reconcile";
+const BOTH_UNRELIABLE = 'share count and value both unreliable';
 const perShare = (x: number) => (x >= 10 ? Math.round(x).toLocaleString('en-US') : x.toFixed(2));
 /** \"filed value implausible (≈$7,758/sh vs ~$78)\": a line priced far off other filers, without its filed $. */
 function implausible(r: MoveRow): string {
@@ -741,20 +748,21 @@ function heldFacts(r: MoveRow): string {
   }
   const d = r.shares - (r.prev_shares ?? 0);
   const sh = r.change === 'new' ? `new, ${compact(r.shares)} sh` : r.change === 'exited' ? `sold all${r.prev_shares ? ` ${compact(r.prev_shares)} sh` : ''}` : r.unreliable === 'value' ? (d ? `${d >= 0 ? '+' : '-'}${Math.abs(d).toLocaleString('en-US')} sh` : '') : r.prev_shares ? `${compact(r.prev_shares)} → ${compact(r.shares)} sh as filed` : '';
-  // A "both" line: neither figure is blamed (the analyst, Nov 11: O's $11.1M is plausible, its 23.3M shares aren't).
-  // "new; 23.3M sh and $11.1M as filed don't reconcile (≈$0.48/sh vs ~$54)". Options keep no filed $ (above).
+  // A "both" line: neither figure is blamed (the analyst, Nov 11: O's $11.1M is plausible, its 23.3M shares aren't), in
+  // the fund page's words (the lead, Nov 12). "new; 23.3M sh and $11.1M as filed; share count and value both unreliable
+  // (≈$0.48/sh vs ~$54)". Options keep no filed $ (above).
   if (r.unreliable === 'both' && !r.put_call) {
     const ps = r.filed_per_share ?? (r.shares > 0 && r.value > 0 ? r.value / r.shares : null);
     const m = r.median_per_share;
     const filed = r.change === 'exited' ? { sh: r.prev_shares ?? 0, v: r.prev_value ?? (r.value_delta < 0 ? -r.value_delta : 0) } : { sh: r.shares, v: r.value };
     const head = r.change === 'new' ? 'new' : r.change === 'exited' ? 'sold all' : r.change;
-    return `${head}; ${compact(filed.sh)} sh and ${usd(filed.v, false)} as filed don't reconcile${ps && r.change !== 'exited' ? ` (≈$${perShare(ps)}/sh${m ? ` vs ~$${perShare(m)}` : ''})` : ''}`;
+    return `${head}; ${compact(filed.sh)} sh and ${usd(filed.v, false)} as filed; ${BOTH_UNRELIABLE}${ps && r.change !== 'exited' ? ` (≈$${perShare(ps)}/sh${m ? ` vs ~$${perShare(m)}` : ''})` : ''}`;
   }
   // A "both" option line keeps no filed $ either, and blames neither figure.
   if (r.unreliable === 'both') {
     const ps = r.filed_per_share ?? (r.shares > 0 && r.value > 0 ? r.value / r.shares : null);
     const m = r.median_per_share;
-    return [sh, `shares and value as filed don't reconcile${ps ? ` (≈$${perShare(ps)}/sh${m ? ` vs ~$${perShare(m)}` : ''})` : ''}`].filter(Boolean).join('; ');
+    return [sh, `${BOTH_UNRELIABLE}${ps ? ` (≈$${perShare(ps)}/sh${m ? ` vs ~$${perShare(m)}` : ''})` : ''}`].filter(Boolean).join('; ');
   }
   const why = implausible(r);
   return [sh, why].filter(Boolean).join('; ');
@@ -784,7 +792,7 @@ function notCountedLine(a: Alert13F): string {
     const facts = isMoveRow(x) ? heldFacts(x) : '';
     const why = notCountedWhy(x);
     // \"EW puts new, 3.9M sh; filed value implausible (≈$7,758/sh vs ~$78)\" already says why.
-    if (facts) by.set(/implausible|don't reconcile/.test(facts) ? `${posName(x)} ${facts}` : `${posName(x)} ${facts} (${why})`, []);
+    if (facts) by.set(/implausible|don't reconcile|both unreliable/.test(facts) ? `${posName(x)} ${facts}` : `${posName(x)} ${facts} (${why})`, []);
     else by.set(why, [...(by.get(why) ?? []), posName(x)]);
   }
   return `Not counted: ${[...by].map(([k, names]) => (names.length ? `${[...new Set(names)].join(', ')} (${k})` : k)).join('; ')}.`;

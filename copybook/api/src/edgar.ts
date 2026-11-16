@@ -562,6 +562,8 @@ export interface HeldRow {
   put_call: string | null;
   change?: string;
   reason: 'units' | 'price_vs_filers' | 'split_basis' | 'own_prior' | 'unreliable_shares';
+  /** Set when ingest's book marks the line "both" (a stored alert re-marked from the book), for the "Not counted" wording. */
+  unreliable?: 'both';
 }
 
 /**

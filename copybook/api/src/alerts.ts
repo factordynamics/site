@@ -1897,7 +1897,7 @@ export async function restateFeeds(env: Env, now: number): Promise<{ feeds: numb
       const needMedian = marked0.filter((r) => r && (r.unreliable === 'value' || r.unreliable === 'both') && r.median_per_share == null);
       const cons = needMedian.length ? await consensusFor(env, x.quarter, needMedian.map((r) => r!.cusip)).catch(() => null) : null;
       const now1 = marked0.map((r) => (r && cons?.get(r.cusip)?.cur && (r.unreliable === 'value' || r.unreliable === 'both') && r.median_per_share == null ? { ...r, median_per_share: cons.get(r.cusip)!.cur! } : r));
-      const heldNow = paired.filter((r, i) => !now1[i] && sideOf(r)?.unreliable === 'both').map((r) => ({ cusip: r.cusip, ticker: r.ticker, issuer: r.issuer, display_name: r.display_name, put_call: r.put_call, change: r.change, reason: 'unreliable_shares' as const }));
+      const heldNow = paired.filter((r, i) => !now1[i] && sideOf(r)?.unreliable === 'both').map((r) => ({ cusip: r.cusip, ticker: r.ticker, issuer: r.issuer, display_name: r.display_name, put_call: r.put_call, change: r.change, reason: 'unreliable_shares' as const, unreliable: 'both' as const }));
       const isHeld = (p: { cusip: string; put_call?: string | null }) => heldNow.some((h) => posKey(h) === posKey(p));
       const ch = now1.filter((r): r is MoveRow => !!r);
       const splits = x.corrected?.rows.length ? await splitsFor(env, x.quarter) : null;
