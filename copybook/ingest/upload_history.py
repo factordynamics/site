@@ -54,6 +54,9 @@ TARGET = os.environ.get("COPYBOOK_UPLOAD_TARGET", "gene-2026-11-09")  # the stor
 UPLOAD_BUDGET_S = float(os.environ.get("COPYBOOK_UPLOAD_BUDGET_S") or 3600)
 MANIFEST = Path(os.environ.get("COPYBOOK_H_MANIFEST") or (HIST.parent / ".h-manifest.json"))
 BUILD = json.loads((HIST.parent / "build.json").read_text()) if (HIST.parent / "build.json").exists() else {}  # names R2 objects
+# One-off dispatch (restamp_hl): re-send every hl/ key not stamped by this build, so the complete store's built_at
+# (the oldest stamp, meta/builds.json) is this build's and not the oldest unchanged file's (Nov 11 23:27 on Nov 16).
+RESTAMP_HL = os.environ.get("COPYBOOK_RESTAMP_HL") == "1"
 KEY = re.compile(r"^h/[a-z0-9][a-z0-9-]*/(\d{4}Q[1-4](\.json|\.csv|\.v1\.json)|index\.json)$"
                  r"|^fb/\d{4}Q[1-4]/\d{10}\.json$|^s/[0-9A-Z]{6}\.json$|^bulk/\d{4}Q[1-4](\.part\d+)?\.csv\.gz$"
                  r"|^changes/\d{4}Q[1-4]\.json$|^v/\d{10}/\d{10}-\d{2}-\d{6}\.json$|^hl/[0-9A-Z]{6}\.json$")
@@ -217,7 +220,8 @@ def main() -> int:
         if KEY.match(key):
             digest = digests[key] = hashlib.sha256(path.read_bytes()).hexdigest()
             # A gated key with no recorded stamp is re-sent (last in order) so its store can be vouched for.
-            if manifest.get(key) != digest or (gated(key) and key not in stamps):
+            if manifest.get(key) != digest or (gated(key) and key not in stamps) \
+                    or (RESTAMP_HL and key.startswith("hl/") and stamps.get(key) != BUILD.get("data_built_at")):
                 todo.append((key, path, digest))
     pair = link_files(root)
     first = {k for k, _, _ in fresh_only(todo)}
