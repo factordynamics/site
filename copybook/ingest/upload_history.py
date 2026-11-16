@@ -57,6 +57,8 @@ BUILD = json.loads((HIST.parent / "build.json").read_text()) if (HIST.parent / "
 # One-off dispatch (restamp_hl): re-send every hl/ key not stamped by this build, so the complete store's built_at
 # (the oldest stamp, meta/builds.json) is this build's and not the oldest unchanged file's (Nov 11 23:27 on Nov 16).
 RESTAMP_HL = os.environ.get("COPYBOOK_RESTAMP_HL") == "1"
+HL_BUILD = HIST.parent / "hlf" / "BUILD"  # moves.py: the full run whose all-filer books built hlf/ (build.json)
+
 KEY = re.compile(r"^h/[a-z0-9][a-z0-9-]*/(\d{4}Q[1-4](\.json|\.csv|\.v1\.json)|index\.json)$"
                  r"|^fb/\d{4}Q[1-4]/\d{10}\.json$|^s/[0-9A-Z]{6}\.json$|^bulk/\d{4}Q[1-4](\.part\d+)?\.csv\.gz$"
                  r"|^changes/\d{4}Q[1-4]\.json$|^v/\d{10}/\d{10}-\d{2}-\d{6}\.json$|^hl/[0-9A-Z]{6}\.json$")
@@ -185,6 +187,10 @@ def main() -> int:
     manifest = json.loads(MANIFEST.read_text()) if MANIFEST.exists() else {}
     if manifest.get("_target") != TARGET:  # written for another store: it has none of this yet
         manifest = {"_target": TARGET}
+    # This step runs only after gate.py passed, so a full run that built hlf/ here vouches for it: meta/builds.json then
+    # carries that run's data_built_at for hl/ (stores.hl.data_built_at; built_at stays the API's oldest-stamp watermark).
+    if (hb := hl_build()).get("build_id") and hb["build_id"] == BUILD.get("build_id"):
+        manifest["_hl_gated"] = hb
     token = Token()
     started = time.monotonic()
     root = HIST.parent
@@ -301,6 +307,10 @@ def main() -> int:
     return 0
 
 
+def hl_build() -> dict:
+    return json.loads(HL_BUILD.read_text()) if HL_BUILD.exists() else {}
+
+
 def store_of(key: str) -> tuple[str, str | None] | None:
     """The /v1 store a key belongs to (meta/builds.json): hl, changes/{q}, or a filer view (h/ or fb/) of {q}."""
     if key.startswith("hl/"):
@@ -330,6 +340,9 @@ def publish_builds(sources: dict, digests: dict, manifest: dict, token) -> None:
     stores = {}
     if ("hl", None) in ok:
         stores["hl"] = {"build_id": BUILD.get("build_id"), "built_at": ok[("hl", None)]}
+        gated = manifest.get("_hl_gated") or {}
+        if gated.get("data_built_at") and gated.get("build_id") == hl_build().get("build_id"):
+            stores["hl"] |= {"data_built_at": gated["data_built_at"], "data_build_id": gated["build_id"]}
     for name in ("changes", "filer_view"):
         if quarters:
             stores[name] = {"build_id": BUILD.get("build_id"), "built_at": min(ok[(name, q)] for q in quarters)}

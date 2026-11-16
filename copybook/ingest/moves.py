@@ -1119,6 +1119,9 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
     for p in full.glob("*.json"):
         if p.name not in written:
             p.unlink()
+    if os.environ.get("SCOPE", "full") == "full":  # hlf/BUILD: the full run whose all-filer books built this index;
+        # curated rebuilds keep it. upload_history.py publishes it as meta/builds.json stores.hl.data_built_at.
+        write(full / "BUILD", read(DATA / "build.json") or {})
     write(out / "index.json", {"note": "ticker -> issuer code (first 6 of the CUSIP); one file per issuer in hl/",
                                "schema": HL_SCHEMA,
                                "types_sig": signature(types), "tickers": dict(sorted(index.items()))})
