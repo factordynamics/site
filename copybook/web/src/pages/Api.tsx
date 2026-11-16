@@ -305,6 +305,20 @@ export function ApiDocs() {
             </dl>
           </Panel>
         )}
+        <Panel title="cusip_pair" sub="On holders and changes rows the data run paired with a line under another CUSIP">
+          <dl className="divide-y divide-line text-[13.5px]">
+            {[
+              ['merged_misfiled', 'Last quarter’s line was filed under another CUSIP (filed_cusip) at this stock’s price (filed_price), so it is matched to this CUSIP (matched_cusip) and the move is counted. Mizuho’s ORCL: Q2 was filed under 68389X204 at common’s price; treated as common.'],
+              ['possible_cusip_change', 'Two lines that may be one position under a changed CUSIP, but the prices don’t match closely enough to merge them. The row is held: unreliable both, change unknown, in no totals.'],
+              ['different_security', 'A note or other security and the issuer’s common stock. Each is its own position and they are never compared.'],
+            ].map(([v, what]) => (
+              <div key={v} className="flex gap-4 py-2">
+                <dt className="w-40 shrink-0 font-mono text-[12.5px] text-ink [overflow-wrap:anywhere]">{v}</dt>
+                <dd className="min-w-0 text-ink-2">{what}</dd>
+              </div>
+            ))}
+          </dl>
+        </Panel>
         </div>
       </div>
 
