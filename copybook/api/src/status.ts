@@ -59,6 +59,14 @@ const PLANNED: { from: string; to: string; row: Restart }[] = [
     to: '2026-11-11T08:59:00Z',
     row: { started_at: '2026-11-11T08:53:19Z', at: '2026-11-11T08:56:00Z', prev_up_since: '2026-11-11T08:40:00Z', down_seconds: 114, kind: 'planned', build: 'caad4f5b6df5', prev_build: 'caad4f5b6df5', note: 'Planned failover test, 08:53–08:58 UTC. Member pages and the API returned errors for about 2 minutes until access moved to the backup automatically (1 min 54 s). Pages already open kept failing until reloaded. Alerts were not affected.' },
   },
+  // Not planned: the probe logged this boot as a 60 s gap because the Worker served members throughout. The API machine's
+  // service was stopped from 18:03:00 Nov 13 (its desktop session ended and the user services went with it) until the
+  // boot at 04:22 Nov 16 (the runner, Nov 16): 209,940 s.
+  {
+    from: '2026-11-16T04:21:00Z',
+    to: '2026-11-16T04:23:00Z',
+    row: { started_at: '2026-11-13T18:03:00Z', at: '2026-11-16T04:22:00Z', prev_up_since: '2026-11-12T01:26:35Z', down_seconds: 209_940, kind: 'unplanned', build: 'b79463a79c3d', prev_build: 'b79463a79c3d', note: 'The API machine was down for 58 hours, Nov 13 18:03 to Nov 16 04:22 UTC: its service stopped when the machine’s desktop session ended. Member pages and the API were served by the Cloudflare backup throughout, and filing alerts went out from Cloudflare as usual. The machine’s re-checks of held 13F lines and its data uploads waited until it was back.' },
+  },
 ];
 /**
  * Events that weren't restarts (gene stayed up), for /status/'s list: planned drills, and incidents with their fix.
