@@ -2,23 +2,21 @@
 # Every minute (copybook-tunnel-watch.timer): keeps the front ends' API base on a working entry point.
 #  - Current base: the quick tunnel (https://<x>.trycloudflare.com/copybook) when it answers /health; when it has failed
 #    for 2+ minutes, Funnel (https://gene.tail70ba3.ts.net/copybook).
-#  - Publishes the base to https://pub-c691ec38c5cd4db6acb8e6bfef337500.r2.dev/api.json, which the front ends read at load.
-#  - When main's copybook/web/api.config.mjs or holdterm/src/config.ts holds a different Funnel or trycloudflare base,
-#    rewrites that one value, commits and pushes to factordynamics/site main (build-time fallback for api.json).
-#    A base that is neither (e.g. a future named tunnel) is left alone.
+#  - Publishes the base to https://pub-c691ec38c5cd4db6acb8e6bfef337500.r2.dev/api.json, which the Cloudflare Worker reads
+#    to find gene (src/index.ts movedBase). Neither front end reads it or names a tunnel: both call the Worker's stable
+#    name (Copybook c5ed8ee, Holdterm 2026-11-16), so nothing here commits to main any more.
 #  - Emails CONTACT_EMAIL when the tunnel URL changes, when the tunnel is down for 2+ minutes, and when it recovers.
 set -uo pipefail
 ROOT=$HOME/copybook-api
-FE=$ROOT/fe
 FUNNEL=https://gene.tail70ba3.ts.net/copybook
 DOWN_SINCE=$ROOT/state.tunnel-down-since
 log() { echo "$(date -u +%FT%TZ) $*"; }
 set -a; . "$ROOT/secrets.env"; set +a
 # After the service-account move it runs twice: as the service user with NO_FE=1 (health, api.json, alerts, and the
-# current base copied to $STATUS_DIR), and as the maintainers' account with FE_ONLY=1, which only rewrites the
-# front-end configs on main (it has the git credentials) from $STATUS_DIR/api-published.
+# current base copied to $STATUS_DIR), and as the maintainers' account with FE_ONLY=1, which used to rewrite the
+# front-end configs on main and now does nothing.
 if [ "${FE_ONLY:-0}" = 1 ]; then
-  want=$(cat "${STATUS_DIR:-/var/lib/copybook-status}/api-published" 2>/dev/null); [ -n "$want" ] || exit 0
+  exit 0   # the front ends no longer carry an API host to rewrite
 else
 alert() { # subject, text
   local body
@@ -59,34 +57,9 @@ elif [ "$prev" != "$want" ]; then
   if curl -sf -m 30 -X PUT -H "Authorization: Bearer $CF_API_TOKEN" -H 'content-type: application/json' --data-binary "$body" \
       "https://api.cloudflare.com/client/v4/accounts/967e13dd88bb23b24662e62cbb6fd84f/r2/buckets/copybook-public/objects/api.json" -o /dev/null; then
     echo "$want" > "$ROOT/state.api-published"; log "api.json -> $want"
-    case "$prev$want" in *trycloudflare*trycloudflare*) alert "Copybook API tunnel URL changed" "cloudflared restarted with a new quick-tunnel URL. api.json and both front-end configs now point at $want (was $prev). Stripe's webhook and links in email stay on $FUNNEL.";; esac
+    case "$prev$want" in *trycloudflare*trycloudflare*) alert "Copybook API tunnel URL changed" "cloudflared restarted with a new quick-tunnel URL. api.json, which the Worker follows, now points at $want (was $prev). Stripe's webhook and links in email stay on $FUNNEL.";; esac
   else log "api.json upload failed"; fi
 fi
 
 fi
 if [ -n "${STATUS_DIR:-}" ] && [ "${FE_ONLY:-0}" != 1 ]; then cp "$ROOT/state.api-published" "$STATUS_DIR/api-published" 2>/dev/null; fi
-[ "${NO_FE:-0}" = 1 ] && exit 0
-if [ ! -d "$FE/.git" ]; then
-  git clone -q --filter=blob:none --sparse https://github.com/factordynamics/site.git "$FE" && git -C "$FE" sparse-checkout set copybook/web holdterm/src || exit 1
-fi
-cd "$FE"
-for attempt in 1 2 3; do
-  git fetch -q origin main && git reset -q --hard origin/main || { log "fetch failed"; exit 0; }
-  changed=0
-  # api.config.mjs: process.env.VITE_API || '<base>'   holdterm/src/config.ts: export const api = '<base>'
-  for f in copybook/web/api.config.mjs holdterm/src/config.ts; do
-    cur=$(grep -oE "'https://(gene\.tail70ba3\.ts\.net|[a-z0-9-]+\.trycloudflare\.com)/copybook'" "$f" | head -1 | tr -d "'")
-    [ -z "$cur" ] || [ "$cur" = "$want" ] && continue
-    sed -i "s|'$cur'|'$want'|" "$f" && changed=1 && log "$f: $cur -> $want"
-  done
-  [ $changed = 0 ] && exit 0
-  if [ "${DRY_RUN:-0}" = 1 ]; then git diff; git reset -q --hard origin/main; exit 0; fi
-  git -c user.name=refcell -c user.email=abigger87@gmail.com commit -q -am "copybook, holdterm: API base -> $want (tunnel watcher on gene)
-
-The quick tunnel's URL changes when cloudflared restarts; this keeps both front ends on a working entry point.
-
-Amp-Thread-ID: https://ampcode.com/threads/T-01a1be80-c5ff-7641-b745-6abf1056e5e3"
-  if git push -q origin HEAD:main; then log "pushed $(git rev-parse --short HEAD); Pages and Holdterm redeploy"; exit 0; fi
-  log "push rejected, retrying"; sleep 5
-done
-log "gave up after 3 push attempts"
