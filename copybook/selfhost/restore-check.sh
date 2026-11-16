@@ -20,7 +20,7 @@ if node r2obj.mjs get "backups/$day.manifest.json" "$tmp/m.json" >/dev/null 2>&1
   want=$(python3 -I -c 'import json,sys;print(json.load(open(sys.argv[1]))["plaintext_sha256"])' "$tmp/m.json")
   [ "$(sha256sum < "$tmp/b.tgz" | cut -c1-64)" = "$want" ] && psha=match || psha=MISMATCH
 fi
-live() { sqlite3 "file:$(ls "$ROOT"/state/kv/miniflare-KVNamespaceObject/*.sqlite | grep -v metadata)?mode=ro" "select count(*) from _mf_entries where key like '$1%' and (expiration is null or expiration > $(date +%s%3N))"; }
+live() { sqlite3 "file:$ROOT/state/kv/miniflare-KVNamespaceObject/86c782669b53e48b3b2e014f8f25bbf476c6fb00e489386ae2ddb90d794963fc.sqlite?mode=ro" "select count(*) from _mf_entries where key like '$1%' and (expiration is null or expiration > $(date +%s%3N))"; }
 STATE_DIR=$tmp/state PORT=0 CRON_FLAG=/nonexistent node restore-count.mjs 2>"$tmp/err" | tail -1 > "$tmp/r.json" || { grep -vE "^\s+at " "$tmp/err" | head -20 | sed -E 's/([A-Za-z0-9._%+-])[A-Za-z0-9._%+-]*@([A-Za-z0-9-]+\.)/\1***@\2/g'; exit 1; }
 echo "backup $day: $(cat "$tmp/r.json") live_members=$(live cus:) live_keys=$(live '') do_files=$(find "$tmp/state/do" -name '*.sqlite' | wc -l) plaintext_sha256=$psha"
 [ "$psha" != MISMATCH ]

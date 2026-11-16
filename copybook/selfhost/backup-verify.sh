@@ -29,7 +29,7 @@ newest=$(echo "$days" | tail -1)
 [ -n "$newest" ] || { echo "FAIL: no backups in R2"; exit 1; }
 age_h=$(( ( $(date +%s) - $(date -d "$(grep "backups/$newest.tar.age " "$tmp/list" | awk '{print $3}')" +%s) ) / 3600 ))
 [ "$age_h" -lt 30 ] || { echo "FAIL newest backup $newest is ${age_h} h old"; fail=1; }
-db=$(ls "$ROOT"/state/kv/miniflare-KVNamespaceObject/*.sqlite | grep -v metadata); now=$(date +%s%3N)
+db="$ROOT/state/kv/miniflare-KVNamespaceObject/86c782669b53e48b3b2e014f8f25bbf476c6fb00e489386ae2ddb90d794963fc.sqlite"; now=$(date +%s%3N)  # DB binding, not OPS_KV
 live() { sqlite3 "file:$db?mode=ro" "select count(*) from _mf_entries where key like '$1%' and (expiration is null or expiration > $now)"; }
 lm=$(live cus:); lk=$(live '')
 if [ -f "$tmp/newest.json" ]; then
