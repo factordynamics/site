@@ -25,10 +25,13 @@ type Health = {
 type Probe = { base: string; health: Health | null; ms: number | null }
 
 type Window = { uptime: number | null; checks: number; failed: number }
+/** status.json's reasons and notes are clauses ("a 13F move held …"): shown as sentences. */
+const asSentence = (s: string) => s.charAt(0).toUpperCase() + s.slice(1) + (/[.!?]$/.test(s) ? '' : '.')
+
 /** Payments' status.json, written by Cloudflare's cron every minute: 13F alert health and the API probe. */
 type StatusFile = {
   generated_at?: string
-  alerts_13f?: { state: 'ok' | 'amber'; reasons?: string[]; pending_moves?: number; oldest_pending_seconds?: number | null; reset_queue?: number }
+  alerts_13f?: { state: 'ok' | 'amber'; reasons?: string[]; notes?: string[]; pending_moves?: number; oldest_pending_seconds?: number | null; held_rows?: number; reset_queue?: number }
   probe?: { target?: string; interval_seconds?: number; last_at?: string; last_ok?: boolean; down_since?: string | null; '24h'?: Window; '7d'?: Window; daily?: (Window & { day: string })[] }
   /** 13F alerts waiting on the API machine's moves fallback; the wait counts from EDGAR acceptance. */
   moves_queue?: { pending: number; oldest_wait_seconds: number | null; last_fallback_send_at?: string | null } | null
@@ -335,7 +338,8 @@ export function Status() {
               >
                 {(a13 || mq) && (
                   <span className="block">
-                    13F alert health: {late ? 'delayed' : 'normal'} · 13F moves pending: {pending}.{' '}
+                    13F alert health: {late ? 'delayed' : 'normal'} · 13F moves pending: {pending}
+                    {a13?.held_rows ? ` · lines held for a check: ${a13.held_rows}` : ''}.{' '}
                     {!late
                       ? ''
                       : pending === 1
@@ -344,7 +348,8 @@ export function Status() {
                           ? `${pending} 13F alerts are waiting for their moves${oldest ? `, the oldest for ${ago(oldest)}` : ''}. `
                           : ''}
                     {a13?.reset_queue ? `${a13.reset_queue} alert ${a13.reset_queue === 1 ? 'email is' : 'emails are'} held until the daily sending limit resets. ` : ''}
-                    {late && !pending && !a13?.reset_queue && a13?.reasons?.length ? `${a13.reasons.join('; ')}. ` : ''}
+                    {late && !pending && !a13?.reset_queue && a13?.reasons?.length ? a13.reasons.map(asSentence).join(' ') + ' ' : ''}
+                    {a13?.notes?.length ? a13.notes.map(asSentence).join(' ') + ' ' : ''}
                   </span>
                 )}
                 {pollerHost === 'cloudflare' || pollerHost == null ? 'Checks EDGAR every minute from Cloudflare, with the API machine as backup.' : 'Cloudflare’s checks paused; the API machine is polling EDGAR as backup.'}

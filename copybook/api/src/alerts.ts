@@ -56,6 +56,8 @@ export interface Alert13F {
   card?: boolean;
   /** Rows the publish gate held back (named "pending check", figures left out); gene re-checks them against ingest's build. */
   held?: HeldRow[];
+  /** Set by gene's re-check while ingest's build doesn't serve this filing yet, so /status/ can tell that from a held row the gate still refuses. */
+  waiting_on?: 'build';
   /** A follow-up with held rows that passed against ingest's build. */
   checked?: boolean;
   /** Reconciliation found emailed rows that differ from the build: the stored, feed and archive copies say so. */
@@ -1941,7 +1943,7 @@ export async function checkHeld(env: Env, now: number): Promise<Record<string, u
   for (const a of queue) {
     const b = await buildRows(env, a);
     if (!b) {
-      if (now - Date.parse(a.accepted ?? a.filing_date) < 7 * DAY) wait.push(a);
+      if (now - Date.parse(a.accepted ?? a.filing_date) < 7 * DAY) wait.push({ ...a, waiting_on: 'build' });
       else {
         log.push({ accession: a.accession, result: 'expired', rows: a.held!.length });
         for (const h of a.held!) end(a, h, 'expired');
@@ -1992,7 +1994,7 @@ export async function checkHeld(env: Env, now: number): Promise<Record<string, u
     }
     log.push({ accession: a.accession, build: b.build, passed: ok.length, held: still.length, dropped: a.held!.length - ok.length - still.length });
     if (ok.length) ready.push({ ...a, moves: movesOf(ok), changed: ok, tickers: [...new Set(ok.map((x) => x.ticker).filter((t): t is string => !!t))], followup: true, checked: true, held: undefined, moves_pending: undefined, sent_at: undefined });
-    if (still.length && now - Date.parse(a.accepted ?? a.filing_date) < 7 * DAY) wait.push({ ...a, held: still });
+    if (still.length && now - Date.parse(a.accepted ?? a.filing_date) < 7 * DAY) wait.push({ ...a, held: still, waiting_on: undefined });
   }
   if (ended.length) {
     const prev = JSON.parse((await env.DB.get(HELD_LOG)) ?? '[]') as HeldEnd[];

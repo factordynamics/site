@@ -169,18 +169,33 @@ export async function alertHealth(env: Env, now: number) {
   const ages = pending.map((p) => (p.accepted ? Math.round((now - Date.parse(p.accepted)) / 1000) : 0));
   const oldest = ages.length ? Math.max(...ages) : null;
   const reset = (JSON.parse((await env.DB.get('host:mail-delayed')) ?? '[]') as unknown[]).length;
-  const held = JSON.parse((await env.DB.get('alerts:pending-check')) ?? '[]') as { accepted?: string; filing_date?: string; held?: unknown[] }[];
-  const heldAges = held.map((a) => Math.round((now - Date.parse(a.accepted ?? a.filing_date ?? '')) / 1000)).filter((x) => Number.isFinite(x));
-  const oldestHeld = heldAges.length ? Math.max(...heldAges) : null;
+  const held = JSON.parse((await env.DB.get('alerts:pending-check')) ?? '[]') as { accepted?: string; filing_date?: string; held?: unknown[]; waiting_on?: 'build' }[];
+  const ageOf = (a: (typeof held)[number]) => Math.round((now - Date.parse(a.accepted ?? a.filing_date ?? '')) / 1000);
+  const oldestOf = (xs: typeof held) => {
+    const ages = xs.map(ageOf).filter((x) => Number.isFinite(x));
+    return ages.length ? Math.max(...ages) : null;
+  };
+  // A held row whose filing ingest's build doesn't serve yet waits on the data build, not on the alert path: the alert
+  // itself went out, without that line. Said as a note, not as delayed alerts; the gate still decides when the build lands.
+  const gateHeld = held.filter((a) => a.waiting_on !== 'build');
+  const buildHeld = held.filter((a) => a.waiting_on === 'build');
+  const oldestHeld = oldestOf(held);
+  const oldestGate = oldestOf(gateHeld);
+  const oldestBuild = oldestOf(buildHeld);
+  const buildRows = buildHeld.reduce((s, a) => s + (a.held?.length ?? 0), 0);
   // Emails skipped for the day's limit (the lead, Nov 11): said plainly, with when it was reached and how many.
   const cap = JSON.parse((await env.DB.get(`mail:capskip:${new Date(now).toISOString().slice(0, 10)}`)) ?? 'null') as { count: number; first_at: string; members: number } | null;
   const reasons = [
     ...(cap ? [`the daily email limit was reached at ${cap.first_at.slice(11, 16)} UTC: ${cap.count} alert email${cap.count === 1 ? '' : 's'} to ${cap.members} member${cap.members === 1 ? '' : 's'} were skipped; those alerts went to feeds, chat and webhooks as usual, and email resumes after 00:00 UTC`] : []),
     ...(oldest != null && oldest > 600 ? ['a 13F alert has waited over 10 minutes for its moves'] : []),
-    ...(oldestHeld != null && oldestHeld > 1800 ? ['a 13F move held by the publish gate has waited over 30 minutes for its check'] : []),
+    ...(oldestGate != null && oldestGate > 1800 ? ['a 13F move held by the publish gate has waited over 30 minutes for its check'] : []),
     ...(reset ? ['alert emails are waiting for the daily email reset'] : []),
   ];
-  return { state: reasons.length ? 'amber' : 'ok', reasons, pending_moves: pending.length, oldest_pending_seconds: oldest, held_rows: held.reduce((s, a) => s + (a.held?.length ?? 0), 0), oldest_held_seconds: oldestHeld, reset_queue: reset, email_limit: cap ? { reached_at: cap.first_at, skipped_emails: cap.count, members: cap.members } : null };
+  const notes =
+    buildRows && oldestBuild != null && oldestBuild > 1800
+      ? [`${buildRows} 13F ${buildRows === 1 ? 'line' : 'lines'} marked “pending check” in alerts already sent ${buildRows === 1 ? 'is' : 'are'} waiting for our data build to include ${buildHeld.length === 1 ? 'its filing' : 'their filings'}; ${buildRows === 1 ? 'its figures go' : 'their figures go'} out once the build confirms ${buildRows === 1 ? 'it' : 'them'}`]
+      : [];
+  return { state: reasons.length ? 'amber' : 'ok', reasons, notes, pending_moves: pending.length, oldest_pending_seconds: oldest, held_rows: held.reduce((s, a) => s + (a.held?.length ?? 0), 0), oldest_held_seconds: oldestHeld, held_rows_waiting_on_build: buildRows, reset_queue: reset, email_limit: cap ? { reached_at: cap.first_at, skipped_emails: cap.count, members: cap.members } : null };
 }
 
 /** 13F alerts waiting for their moves, and gene's last fallback send; the same shape on /health and status.json. */

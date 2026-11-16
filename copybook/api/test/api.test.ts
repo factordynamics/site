@@ -991,6 +991,18 @@ describe('copybook api', () => {
     const later = await alertHealth(env, at + 31 * 60_000);
     expect([later.state, later.held_rows, later.reasons]).toEqual(['amber', 1, ['a 13F move held by the publish gate has waited over 30 minutes for its check']]);
     expect((await alertHealth(env, at + 29 * 60_000)).state).toBe('ok');
+    // gene's re-check finds no Q3 book for the filing: the row waits on the data build, which /status/ says as a note,
+    // not as delayed alerts; nothing is released or dropped.
+    const { checkHeld } = await import('../src/alerts');
+    expect(await checkHeld(env, at + 31 * 60_000)).toMatchObject({ pending: 1, checked: [] });
+    const waiting = await alertHealth(env, at + 31 * 60_000);
+    expect([waiting.state, waiting.held_rows, waiting.held_rows_waiting_on_build, waiting.reasons]).toEqual(['ok', 1, 1, []]);
+    expect(waiting.notes).toEqual(['1 13F line marked “pending check” in alerts already sent is waiting for our data build to include its filing; its figures go out once the build confirms it']);
+    // Once the build serves the filing and the gate still refuses the row, it counts as held by the gate again.
+    hist.m.set('h/warren-buffett/2026Q3.json', new TextEncoder().encode(JSON.stringify({ accession: acc, holdings: [{ cusip: '032095101', put_call: null, issuer: 'AMPHENOL CORP', ticker: 'APH', shares: 1_047_486, value: 88_303_070, prev_shares: 614_660, prev_value: 108_376_851, change: 'added', value_delta: -20_073_781 }] })));
+    await checkHeld(env, at + 32 * 60_000);
+    const again = await alertHealth(env, at + 32 * 60_000);
+    expect([again.state, again.held_rows_waiting_on_build, again.notes]).toEqual(['amber', 0, []]);
   });
 
   it('minute poll: emails a curated 13F within the minute with its moves, targeted by follows and watchlist, once', async () => {
