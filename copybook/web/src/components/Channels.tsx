@@ -124,6 +124,9 @@ export function Channels() {
 
   return (
     <section id="channels" className="mt-5 scroll-mt-24 rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
+      {/* /account/#alerts (the API's delay line and feed note link here) lands on where alerts go, with the alert log
+          below. Here, not on a wrapper: this section mounts once /channels has loaded, so the page above has settled. */}
+      <span id="alerts" className="block scroll-mt-28" aria-hidden />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-[15px] font-semibold">{c?.scope === 'team' ? 'Where your team’s alerts go' : c?.team ? 'Your own channels' : 'Where alerts go'}</h2>

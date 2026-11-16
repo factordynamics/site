@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Onboarding } from '../components/Onboarding'
 import { ApiKeys } from '../components/ApiKeys'
 import { Channels, FailingBanner } from '../components/Channels'
+import { AlertLog } from '../components/AlertLog'
 import { Team } from '../components/Team'
 import { FundSetup } from '../components/FundSetup'
 import { UpgradePro } from '../components/UpgradePro'
@@ -424,7 +425,12 @@ function SignedIn({ member, welcome, back = false, upgraded, kept, resumed = fal
       {member.active && member.plan === 'copy' && !member.seat && !member.cancel_at_period_end && <UpgradePro member={member} className="mt-5" />}
       {member.active && member.referral && member.plan !== 'fund' && <Referral r={member.referral} />}
       {member.active && member.plan === 'fund' && !member.seat && <Team />}
-      {member.active && PLAN_NAME[member.plan ?? 'copy'] && <Channels />}
+      {member.active && PLAN_NAME[member.plan ?? 'copy'] && (
+        <>
+          <Channels />
+          <AlertLog />
+        </>
+      )}
       {member.active && <ApiKeys member={member} focus={focus} />}
 
       {(member.active || paused) && status === 'ready' && follows.onboarded && !editing && (
