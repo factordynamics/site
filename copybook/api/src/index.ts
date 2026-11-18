@@ -939,7 +939,8 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const { eraseMember } = await import('./free');
     const rows: { customer: string; status: string; subscription: string | null; deleted?: number }[] = [];
     for (const m of await listMembers(env)) {
-      if (!(m.test || testAddress(m.email ?? ''))) continue;
+      // Ops accounts (probe-latency: the latency probe's member) are kept.
+      if (!(m.test || testAddress(m.email ?? '')) || m.customer.startsWith('probe-')) continue;
       const row: (typeof rows)[number] = { customer: m.customer, status: m.status, subscription: m.subscription?.startsWith('sub_') ? m.subscription : null };
       if (!dry) {
         if (m.email) row.deleted = (await eraseMember(env, m.email)).deleted;

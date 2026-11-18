@@ -2178,13 +2178,14 @@ describe('copybook api', () => {
     await putMember('cus_et1', 'copybook-test-et@fldubai.com', 'canceled', []);
     await env.DB.put('email:copybook-test-et@fldubai.com', 'cus_et1');
     await putMember('cus_er1', 'someone@fund.co', 'active', []);
+    await putMember('probe-latency', 'copybook-test-probe@fldubai.com', 'active', []);
     const call = (dry: boolean) => handleRequest(new Request('https://api.test/ops/erase-test-members', { method: 'POST', body: JSON.stringify({ dry }), headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), env).then((r) => r.json());
     const d = await call(true);
     expect(d.rows.map((r: { customer: string }) => r.customer)).toContain('cus_et1');
     expect(d.rows.map((r: { customer: string }) => r.customer)).not.toContain('cus_er1');
     expect(await env.DB.get('cus:cus_et1')).not.toBeNull();
     await call(false);
-    expect([await env.DB.get('cus:cus_et1'), await env.DB.get('email:copybook-test-et@fldubai.com'), !!(await env.DB.get('cus:cus_er1'))]).toEqual([null, null, true]);
+    expect([await env.DB.get('cus:cus_et1'), await env.DB.get('email:copybook-test-et@fldubai.com'), !!(await env.DB.get('cus:cus_er1')), !!(await env.DB.get('cus:probe-latency'))]).toEqual([null, null, true, true]);
     expect((await call(true)).test_members).toBe(0);
   });
 
