@@ -656,7 +656,7 @@ def mark_refiled(trail: list[dict], refiled: list[dict]) -> list[dict]:
 CHANGE_FIELDS = ("prev_shares", "prev_value", "prev_weight", "change", "share_change", "value_delta", "delta_pct_of_book",
                  "value_delta_basis")
 # Set by with_changes only when they apply; a row read back from an earlier build must not keep them.
-STALE = ("split", "prev_shares_as_filed", "unreliable", "cusip_mismatch", "class_switch", "cusip_pair", "cusip_as_filed", "filed_cusip", "filed_price", "matched_cusip", "value_change", "suspect_units", "suspect_units_basis", "suspect_reason", "row_type", "prev_cusip", "suspect_duplicate",
+STALE = ("split", "prev_shares_as_filed", "unreliable", "cusip_mismatch", "class_switch", "cusip_pair", "cusip_as_filed", "filed_cusip", "filed_price", "matched_cusip", "reference_price", "value_change", "suspect_units", "suspect_units_basis", "suspect_reason", "row_type", "prev_cusip", "suspect_duplicate",
          "prev_principal_amount")
 MOVE_ROWS = 10  # per bucket in {slug}.json `moves`; alerts carry the top 5
 CHANGE_KINDS = ("new", "added", "trimmed", "exited", "unchanged", "disclosed_later")
@@ -1025,7 +1025,7 @@ def unreliable_side(r: dict, quarter: str | None) -> str | None:
     not flagged."""
     if not (r.get("suspect_units") or r.get("price_outlier")) or r.get("shares_type") == "PRN":
         return None
-    if r.get("suspect_reason") in ("reissue_ratio_not_applied", "mixed_scale", "sign_mismatch", "possible_cusip_change") \
+    if r.get("suspect_reason") in ("reissue_ratio_not_applied", "mixed_scale", "sign_mismatch", "different_security") \
             or r.get("put_call") \
             or r.get("value_rescale") == "rejected":  # Mizuho Securities MCHP: neither as filed nor x1000 reconciles
         return "both"  # an option line held by classify_options: neither its shares nor its value is reliable
@@ -1087,7 +1087,7 @@ def _px(h: dict) -> float | None:
     return h["value"] / h["shares"] if (h.get("shares") or 0) > 0 and (h.get("value") or 0) > 0 else None
 
 
-BAND_LO, BAND_HI = 0.8, 1.25  # the options band
+BAND_LO, BAND_HI = 0.8, 1.25  # the options band; a misfiled line merges only within it of the matched CUSIP's median
 
 
 def mistyped(h: dict, quarter: str | None, other: str) -> bool:
@@ -1100,6 +1100,16 @@ def mistyped(h: dict, quarter: str | None, other: str) -> bool:
 def priced_at_own(h: dict, quarter: str | None) -> bool:
     px, own = _px(h), consensus().get((quarter or "", h["cusip"]))
     return bool(px and own and abs(math.log(px / own)) < math.log(1.5))
+
+
+def as_filed(book: dict | None) -> dict | None:
+    """The book with every line under the CUSIP its filing used: a cached quarter (h/{slug}/{q}.json) carries the
+    code an earlier diff merged it into (Mizuho Securities 2026Q2/A ORCL 68389X204, SO 842587DZ7, stored under the
+    common), which hid the merge from the next quarter's diff. Each diff re-derives its pairs from the filed codes."""
+    if not book or not any(h.get("cusip_as_filed") for h in book.get("holdings") or []):
+        return book
+    return book | {"holdings": [{k: v for k, v in h.items() if k != "cusip_as_filed"} | {"cusip": h["cusip_as_filed"]}
+                                if h.get("cusip_as_filed") else h for h in book["holdings"]]}
 
 
 def with_changes(latest: dict, prev: dict | None) -> list[dict]:
@@ -1119,7 +1129,7 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
     value_delta over the share-position book (equity_value). PRN notes compare
     principal amounts and never count as shares (share_change null).
     """
-    latest, prev = classify_options(latest), classify_options(prev)
+    latest, prev = classify_options(as_filed(latest)), classify_options(as_filed(prev))
     if prev is None:  # no prior quarter: the cross-filer check still runs on each share line
         return [hold({f: v for f, v in h.items() if f not in STALE} | {f: None for f in CHANGE_FIELDS} | {"row_type": "holding"}
                 | units(h, None, 1.0, 1.0, latest.get("quarter"), None), latest.get("quarter")) for h in latest["holdings"]]
@@ -1164,23 +1174,26 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
         if len(cands) != 1 or sum(1 for f in fresh if f[0][:6] == k[0][:6] and f[1] == k[1]) != 1:
             continue
         pk = cands[0]
-        if debt_cusip(k[0]) != debt_cusip(pk[0]):
-            # A note beside common under one prefix (Mizuho Securities WEC 92939UAP1 -> 92939U106, ON 682189AU9 ->
-            # 682189105) is a different security: never paired, the two rows say so (cusip_pair).
-            different |= {k, pk}
-            continue
         h_, p_ = next(x for x in latest["holdings"] if line_key(x) == k), gone[pk]
-        typo_new, typo_old = mistyped(h_, q_to, pk[0]), mistyped(p_, q_from, k[0])
+        if debt_cusip(k[0]) != debt_cusip(pk[0]):
+            # A share line filed under a sibling note CUSIP (Mizuho Securities 2026Q2/A SO 842587DZ7 at $95.71, the
+            # common's $95.71 cross-filer median) is the common, merged visibly when its price is in the band of the
+            # common's same-quarter cross-filer median; otherwise a different security (ON 682189AU9 priced as a note).
+            typo_new, typo_old = debt_cusip(k[0]), debt_cusip(pk[0])
+        else:
+            typo_new, typo_old = mistyped(h_, q_to, pk[0]), mistyped(p_, q_from, k[0])
         if typo_new or typo_old:
             # Merged only when the misfiled line's price is within the options band (0.8-1.25) of the matched CUSIP's
             # median (lead, Nov 11: Mizuho ORCL Q2 68389X204 at $146.8, common's price): cusip_pair merged_misfiled,
             # shown on every surface. Nearer than 1.5x but outside the band: the pair is held (possible_cusip_change).
             line, q_line, other = (h_, q_to, pk[0]) if typo_new else (p_, q_from, k[0])
             px, m = _px(line), consensus().get((q_line or "", other))
+            if not (px and m and BAND_LO <= px / m <= BAND_HI):  # outside the band: never compared, both held
+                different |= {k, pk}
+                continue
             renamed[k] = pk
             mismatch[k] = {"cusip": k[0], "prev_cusip": pk[0], "mistyped": line["cusip"],
-                           "filed_price": round(px, 4) if px else None,
-                           "in_band": bool(px and m and BAND_LO <= px / m <= BAND_HI)}
+                           "filed_price": round(px, 4), "reference_price": round(m, 4)}
         elif priced_at_own(h_, q_to) and priced_at_own(p_, q_from):
             switch |= {k, pk}
 
@@ -1239,7 +1252,7 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
         if k in mismatch:  # the mistyped line is read as the other CUSIP, so the unit checks price it against the right median
             mm = mismatch[k]
             h = h | {"cusip_mismatch": {f: mm[f] for f in ("cusip", "prev_cusip", "mistyped")},
-                     "cusip_pair": "merged_misfiled" if mm["in_band"] else "possible_cusip_change",
+                     "cusip_pair": "merged_misfiled", "reference_price": mm["reference_price"],
                      "filed_cusip": mm["mistyped"], "filed_price": mm["filed_price"],
                      "matched_cusip": mm["prev_cusip"] if mm["mistyped"] == mm["cusip"] else mm["cusip"]}
             if mismatch[k]["mistyped"] == h["cusip"]:
@@ -1302,10 +1315,8 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
                 and abs(now / amount(p) - 1) <= 0.005:
             row |= {"suspect_units": True, "suspect_units_basis": "own_prior", "suspect_reason": "reissue_ratio_not_applied",
                     "change": None, "share_change": None, "value_delta": 0, "delta_pct_of_book": 0.0, "value_delta_basis": None}
-        if row.get("cusip_pair") == "possible_cusip_change":  # outside the band: held, no trade, out of every sum
-            row |= {"suspect_units": True, "suspect_units_basis": "own_prior", "suspect_reason": "possible_cusip_change",
-                    "change": None, "share_change": None, "value_delta": 0, "delta_pct_of_book": 0.0,
-                    "value_delta_basis": None}
+        if row.get("cusip_pair") == "different_security":  # never compared: shown, held, no trade in any sum
+            row |= {"suspect_units": True, "suspect_units_basis": "own_prior", "suspect_reason": "different_security"}
         rows.append(row)
     for key in dup:  # the duplicate's own prior line is the new code's position, not a sale
         before.pop(key, None)
@@ -1328,7 +1339,8 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
                 **{k: p[k] for k in ("display_name", "sector", "shares_type") if k in p},
                 **extra(p, "exited", -p["value"], -amount(p) * r, r, prn),
                 **({"class_switch": True} if (p["cusip"], p["put_call"] or "") in switch else {}),
-                **({"cusip_pair": "different_security"} if (p["cusip"], p["put_call"] or "") in different else {}),
+                **({"cusip_pair": "different_security", "suspect_units": True, "suspect_units_basis": "own_prior",
+                    "suspect_reason": "different_security"} if (p["cusip"], p["put_call"] or "") in different else {}),
             }
         )
     return [hold(r, q_to) for r in rows]
@@ -1744,7 +1756,7 @@ def shares_out(x):
 V1_EXTRA = ("pct_of_book", "notional_pct_of_book", "delta_pct_of_book", "display_name", "late_disclosure", "parts",
             "value_delta_basis", "unreliable", "value_change", "price_outlier", "suspect_units", "suspect_reason",
             "shares_basis", "shares_as_filed", "option_held", "held_lines", "mixed_scale", "value_rescale",
-            "cusip_mismatch", "class_switch", "cusip_pair", "cusip_as_filed", "filed_cusip", "filed_price", "matched_cusip",
+            "cusip_mismatch", "class_switch", "cusip_pair", "cusip_as_filed", "filed_cusip", "filed_price", "matched_cusip", "reference_price",
             "split", "prev_shares_as_filed", "suspect_duplicate", "prev_reason", "discretion", "other_managers", "vote_sole", "vote_shared", "vote_none")
 
 

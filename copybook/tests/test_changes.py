@@ -582,11 +582,12 @@ class MoveMathTest(unittest.TestCase):
             self.assertEqual([(x["cusip_pair"], x["filed_cusip"], x["filed_price"], x["matched_cusip"]) for x in r],
                              [("merged_misfiled", "68389X204", round(19_500_000 / 132845, 4), "68389X105")])
             self.assertEqual(r[0]["shares_basis"], "as_filed")
-            # Priced 1.3x common (inside 1.5x, outside the 0.8-1.25 band): held as a possible CUSIP change, no trade.
+            # Priced 1.3x common (outside the 0.8-1.25 band): never compared, both lines held as different securities.
             r = build.with_changes({"quarter": "2026Q3", "holdings": [self.row("68389X105", "ORCL", 165927, 21_000_000)]},
                                    {"quarter": "2026Q2", "holdings": [self.row("68389X204", "ORCL", 132845, 132845 * 190.5)]})
-            self.assertEqual([(x["change"], x["cusip_pair"], x["suspect_reason"], x["unreliable"], x["value_delta"])
-                              for x in r], [(None, "possible_cusip_change", "possible_cusip_change", "both", 0)])
+            self.assertEqual(sorted((x["change"], x["cusip_pair"], x["suspect_reason"], x["value_delta"]) for x in r),
+                             [("exited", "different_security", "different_security", 0),
+                              ("new", "different_security", "different_security", 0)])
             # GOOGL -> GOOG, each priced at its own median: exit plus new, both class_switch.
             r = build.with_changes({"quarter": "2026Q3", "holdings": [self.row("02079K107", "GOOG", 1000, 340_740)]},
                                    {"quarter": "2026Q2", "holdings": [self.row("02079K305", "GOOGL", 1000, 357_370)]})
@@ -897,6 +898,39 @@ class ShareClassHoldersTest(unittest.TestCase):
 
 
 class DebtPairTest(unittest.TestCase):
+    def test_misfiled_sibling_cusips_merge_on_the_cross_filer_median(self):
+        # Mizuho Securities 2026Q2 13F-HR/A 0001062993-26-003864 filed six commons under a sibling note or preferred
+        # CUSIP, with no common line beside them (EDGAR). Reference: the common's same-quarter cross-filer median.
+        from ingest import build
+        med = {"68389X105": (146.55, 137.3), "86800U302": (29.33, 41.07), "842587107": (95.71, 82.89),
+               "00971T101": (118.21, 106.35), "92939U106": (116.77, 100.78), "682189105": (94.54, 76.87)}
+        for c, (q2, q3) in med.items():
+            build.CONSENSUS.update({("2026Q2", c): q2, ("2026Q3", c): q3})
+        try:
+            r = lambda c, t, sh, v: {"issuer": c, "title": t, "cusip": c, "ticker": None, "value": v, "shares": sh,
+                                     "put_call": None, "shares_type": "SH", "weight": 0}
+            q2 = [r("68389X204", "6.5 DEP CUM SR D", 132845, 19468435), r("86800UAD6", "NOTE 2.250% 7/1", 44001, 1290549),
+                  r("842587DZ7", "NOTE 4.500% 6/1", 88255, 8446886), r("00971TAN1", "NOTE 1.125% 2/1", 11382, 1345466),
+                  r("92939UAP1", "NOTE 4.375% 6/0", 25501, 2977752), r("682189AU9", "NOTE 0.500% 3/0", 30682, 2900676)]
+            q3 = [r("68389X105", "COM", 165927, 21041266), r("86800U302", "COM NEW", 45941, 1712680),
+                  r("842587107", "COM", 343938, 8262174), r("00971T101", "COM", 11211728, 1273895),
+                  r("92939U106", "COM", 3523607, 2824865), r("682189105", "COM", 21388779, 2354506)]
+            rows = {x["cusip"]: x for x in build.with_changes({"quarter": "2026Q3", "holdings": q3},
+                                                              {"quarter": "2026Q2", "holdings": q2})}
+            # Every pair merged visibly: no exit row for the misfiled code, the marker and the code as filed on the row.
+            self.assertEqual(sorted(rows), sorted(med))
+            self.assertEqual({c: (x["cusip_pair"], x["prev_cusip"], x["filed_cusip"]) for c, x in rows.items()},
+                             {c: ("merged_misfiled", x["prev_cusip"], x["prev_cusip"]) for c, x in rows.items()})
+            self.assertEqual({c: x["reference_price"] for c, x in rows.items()}, {c: v[0] for c, v in med.items()})
+            # ORCL and SMCI reconcile in Q3 and count; SO, AKAM, WEC and ON are mis-scaled in Q3, so the units
+            # guard still holds them (merged, no trade).
+            self.assertEqual((rows["68389X105"]["change"], rows["68389X105"]["value_delta"]), ("added", 4195141))
+            self.assertEqual((rows["86800U302"]["change"], rows["86800U302"]["value_delta"]), ("added", 72323))
+            self.assertEqual({c for c, x in rows.items() if x.get("unreliable")},
+                             {"842587107", "00971T101", "92939U106", "682189105"})
+        finally:
+            build.CONSENSUS.clear()
+
     def test_note_beside_common_is_not_a_cusip_change(self):
         from ingest import build
         build.CONSENSUS.update({("2026Q2", "92939UAP1"): 1.02, ("2026Q3", "92939U106"): 95.0})
