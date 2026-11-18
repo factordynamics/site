@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-09T03:09:21.890Z",
+ "generated_at": "2026-11-18T21:35:03.165Z",
  "period": "30-JUN-2026",
  "source": "SEC Form 13F data sets",
  "rule": {
@@ -1424,6 +1424,17 @@
    "predecessor": null
   },
   {
+   "cik": "0001032814",
+   "slug": "check-capital-management-inc-ca-2814",
+   "filer_slug": "check-capital-management-inc-ca-2814",
+   "firm": "CHECK CAPITAL MANAGEMENT INC/CA",
+   "value": 1626545566,
+   "positions": 52,
+   "top10": 0.8853,
+   "turnover": 0.0501,
+   "predecessor": null
+  },
+  {
    "cik": "0001592413",
    "slug": "strategy-capital-llc-2413",
    "filer_slug": "strategy-capital-llc-2413",
@@ -1765,6 +1776,17 @@
    "predecessor": null
   },
   {
+   "cik": "0001764000",
+   "slug": "wilkinson-global-asset-management-llc-4000",
+   "filer_slug": "wilkinson-global-asset-management-llc-4000",
+   "firm": "Wilkinson Global Asset Management LLC",
+   "value": 1258896980,
+   "positions": 62,
+   "top10": 0.5555,
+   "turnover": 0.1521,
+   "predecessor": null
+  },
+  {
    "cik": "0001006407",
    "slug": "fishman-jay-a-ltd-mi-6407",
    "filer_slug": "fishman-jay-a-ltd-mi-6407",
@@ -2042,35 +2064,7 @@
    "turnover": 0.1688,
    "predecessor": null,
    "fails": [
-    "66% of its 13F is notes and bonds, not stocks"
-   ]
-  },
-  {
-   "cik": "0001032814",
-   "slug": "check-capital-management-inc-ca-2814",
-   "filer_slug": "check-capital-management-inc-ca-2814",
-   "firm": "CHECK CAPITAL MANAGEMENT INC/CA",
-   "value": 1626545566,
-   "positions": 52,
-   "top10": 0.8853,
-   "turnover": 0.0501,
-   "predecessor": null,
-   "fails": [
-    "its Q2 2026 13F was amended and then refiled, so this quarter’s changes can’t be worked out reliably yet"
-   ]
-  },
-  {
-   "cik": "0001764000",
-   "slug": "wilkinson-global-asset-management-llc-4000",
-   "filer_slug": "wilkinson-global-asset-management-llc-4000",
-   "firm": "Wilkinson Global Asset Management LLC",
-   "value": 1258896980,
-   "positions": 62,
-   "top10": 0.5555,
-   "turnover": 0.1521,
-   "predecessor": null,
-   "fails": [
-    "its holdings add up to $28.82B, but its 13F cover page says $1.26B"
+    "54% of its 13F is notes and bonds, not stocks"
    ]
   },
   {
@@ -2084,7 +2078,7 @@
    "turnover": 0.1948,
    "predecessor": null,
    "fails": [
-    "70% of its 13F is notes and bonds, not stocks"
+    "72% of its 13F is notes and bonds, not stocks"
    ]
   },
   {
@@ -2098,7 +2092,7 @@
    "turnover": 0.0207,
    "predecessor": null,
    "fails": [
-    "its largest position is 80% of the portfolio, counting all share classes"
+    "its largest position is 75% of the portfolio, counting all share classes"
    ]
   }
  ],
