@@ -1,6 +1,6 @@
 import { possessive } from '../lib/names.mjs'
 import { Signup } from '../components/Signup'
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { ClassLines, classLine, mixedLabel } from '../components/ShareClasses'
 import { ChangeBars, Donut, foldSlices, Legend, StackBar, Treemap, WeightBars } from '../components/charts'
@@ -20,7 +20,7 @@ import { TRIAL_DAYS, TRIAL_LINE } from '../config'
 import { track } from '../lib/track'
 import { loadIndex } from '../lib/data'
 import { investorTitle, recapTitle } from '../lib/titles.mjs'
-import { CuratedRedirect, displayName, pricingTo, useTitle, shortName, dateLabel, loadManager, money, pct, quarterLabel, secFilerUrl, shareClass, sharesFmt, splitApplied, splitRatio, useAsync, unreliable, flagNote, flagOf, heldLinesNote, misfiledNote, notFound, type ManagerFile } from '../lib/data'
+import { CuratedRedirect, displayName, pricingTo, useTitle, shortName, dateLabel, loadManager, money, pct, quarterLabel, secFilerUrl, shareClass, sharesFmt, splitApplied, splitRatio, useAsync, unreliable, flagNote, flagOf, heldLinesNote, misfiledNote, notFound, type Holding, type ManagerFile } from '../lib/data'
 
 export function ManagerPage() {
   const { slug = '' } = useParams()
@@ -73,11 +73,26 @@ export function ManagerPage() {
   // (it needs a prior quarter to compare with).
   const card = f && ((acc && !f.filer && f.prev_quarter ? acc : undefined) ?? cards.data?.get(f.slug) ?? (acc && cardSet.data?.has(acc) ? acc : undefined))
 
+  // Every line kept out of the totals and moves, from one list: the button, the Not counted heading and the filtered
+  // table all count it (analyst, Nov 12). Share lines, then option lines, then exited lines that are held themselves.
+  const notCounted = useMemo(() => {
+    const isHeld = (h: Holding) => unreliable(h) || Boolean(h.held_lines?.length)
+    const lines = (h: Holding) => (unreliable(h) ? 1 : 0) + (h.held_lines?.length ?? 0)
+    const exited = (f?.holdings ?? []).filter((h) => !(h.value > 0) && isHeld(h)).map((h, i) => ({ ...h, sector: '', weight: 0, key: `x-${h.cusip}-${h.put_call || ''}-${i}` }))
+    const groups = [
+      { id: 'shares', label: 'Share lines', rows: book.rows.filter(isHeld) },
+      { id: 'options', label: 'Option lines', rows: book.options.filter(isHeld) },
+      { id: 'exited', label: 'Exited lines', rows: exited },
+    ].map((g) => ({ ...g, n: g.rows.reduce((n, h) => n + lines(h), 0) }))
+    return { groups, n: groups.reduce((n, g) => n + g.n, 0) }
+  }, [f, book.rows, book.options])
   const rows = useMemo(() => {
     const s = q.trim().toLowerCase()
-    const all = held ? book.rows.filter((h) => unreliable(h) || h.held_lines?.length) : view === 'options' ? book.options : book.rows
+    const all = held ? notCounted.groups.flatMap((g) => g.rows) : view === 'options' ? book.options : book.rows
     return s ? all.filter((h) => `${h.ticker ?? ''} ${h.issuer} ${h.cusip}`.toLowerCase().includes(s)) : all
-  }, [book.rows, book.options, view, q, held])
+  }, [book.rows, book.options, notCounted, view, q, held])
+  // In the Not counted view, each group's first row carries its subheading.
+  const groupStart = held ? new Map(notCounted.groups.filter((g) => g.rows.length).map((g) => [g.rows[0].key, g])) : null
 
   if (m.error instanceof CuratedRedirect && m.error.slug !== slug) return <Navigate to={`/investors/${m.error.slug}/`} replace />
   if (m.error && !notFound(m.error))
@@ -302,7 +317,7 @@ export function ManagerPage() {
           )}
           {f?.prev_quarter && (
             <NotCounted
-              n={(f.holdings || []).reduce((n, h) => n + (!h.put_call && unreliable(h) ? 1 : 0) + (h.held_lines?.length ?? 0), 0)}
+              n={notCounted.n}
               onShow={() => {
                 setView('shares')
                 setQ('')
@@ -331,7 +346,8 @@ export function ManagerPage() {
             <p className="text-[13px] text-ink-3">
               {held ? (
                 <>
-                  {rows.length.toLocaleString('en-US')} {rows.length === 1 ? 'line' : 'lines'} left out of the totals and moves, as filed, each with its reason ·{' '}
+                  {notCounted.n.toLocaleString('en-US')} {notCounted.n === 1 ? 'line' : 'lines'} left out of the totals and moves, as filed, each with its reason
+                  {notCounted.groups.filter((g) => g.n).length > 1 ? ` (${notCounted.groups.filter((g) => g.n).map((g) => `${g.n} ${g.label.toLowerCase().replace(/s$/, g.n === 1 ? '' : 's')}`).join(', ')})` : ''} ·{' '}
                   <button type="button" onClick={() => setHeld(false)} className="font-medium text-accent hover:text-accent-2">
                     Show all holdings
                   </button>
@@ -381,7 +397,15 @@ export function ManagerPage() {
                   </tr>
                 ))}
               {rows.slice(0, n).map((h) => (
-                <tr key={h.key} className="border-b border-line last:border-0 hover:bg-ink/[0.025]">
+                <Fragment key={h.key}>
+                {groupStart?.get(h.key) && (
+                  <tr className="border-b border-line bg-ink/[0.02] text-[12px] font-medium text-ink-3">
+                    <td colSpan={5} className="px-5 py-1.5 md:px-6">
+                      {groupStart.get(h.key)!.label} · {groupStart.get(h.key)!.n.toLocaleString('en-US')}
+                    </td>
+                  </tr>
+                )}
+                <tr className="border-b border-line last:border-0 hover:bg-ink/[0.025]">
                   <td className="px-5 py-2.5 md:px-6">
                     {/* Below sm the name and badges wrap under the ticker, so Value and Weight stay on screen at 390 px. */}
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 sm:flex-nowrap">
@@ -399,6 +423,11 @@ export function ManagerPage() {
                         </Badge>
                       ) : (
                         !h.issuer.includes('Class') && shareClass(h.title) && <Badge className="shrink-0">{shareClass(h.title)}</Badge>
+                      )}
+                      {h.cusip_pair === 'merged_misfiled' && (
+                        <span className="shrink-0" title={misfiledNote(h, f?.prev_quarter) ?? undefined}>
+                          <Badge>merged CUSIP</Badge>
+                        </span>
                       )}
                       {h.cusip_pair === 'different_security' && (
                         <span className="shrink-0" title="A note and its common stock: each is its own position and they aren't compared">
@@ -437,16 +466,22 @@ export function ManagerPage() {
                     {h.shares == null ? <span className="text-ink-3" title="Share classes without a conversion ratio can’t be added up">—</span> : sharesFmt(h.shares)}
                     {h.shares_unit && <span className="block whitespace-nowrap text-[11.5px] text-ink-3">in {h.shares_unit} shares</span>}
                   </td>
-                  <td className="num px-3 py-2.5 text-right font-medium">{flagOf(h) === 'value' ? <span className="font-normal text-ink-3">n/a</span> : money(h.value)}</td>
+                  <td className="num px-3 py-2.5 text-right font-medium">{flagOf(h) === 'value' ? <span className="font-normal text-ink-3">n/a</span> : h.value > 0 ? money(h.value) : <span className="font-normal text-ink-3">—</span>}</td>
                   <td className="px-5 py-2.5 md:px-6">
+                    {/* A held line sits outside the sums: no weight bar, and an exited one has no value to weigh. */}
+                    {unreliable(h) || !(h.value > 0) ? (
+                      <span className="num block text-right text-ink-3">—</span>
+                    ) : (
                     <div className="flex items-center justify-end gap-3">
                       <div className="hidden h-1.5 w-24 rounded-full bg-ink/[0.05] sm:block">
-                        <div className="h-1.5 rounded-full bg-accent" style={{ width: `${Math.max(2, (h.weight / ((view === 'options' ? book.options[0]?.weight : book.top1?.weight) || 1)) * 100)}%` }} />
+                        <div className="h-1.5 rounded-full bg-accent" style={{ width: `${Math.max(2, (h.weight / ((h.put_call ? book.options[0]?.weight : book.top1?.weight) || 1)) * 100)}%` }} />
                       </div>
                       <span className="num w-14 text-right">{pct(h.weight)}</span>
                     </div>
+                    )}
                   </td>
                 </tr>
+                </Fragment>
               ))}
             </tbody>
           </table>

@@ -94,13 +94,13 @@ export function flagNote(h: Flaggable): string | null {
 }
 
 /** A counted row whose prior quarter was filed under another CUSIP at this stock's price (ingest's merged_misfiled):
- *  "ORCL added 33,082 sh: Q2 was filed under 68389X204 at common's price, treated as common" (the lead, Nov 11). */
+ *  "Q2 was filed under 68389X204 at common's price; treated as common" (the PM and analyst, Nov 12). The filed CUSIP
+ *  is filed_cusip, or prev_cusip as ingest's book rows carry it. */
 export function misfiledNote(h: Holding, prevQuarter?: string | null): string | null {
-  if (h.cusip_pair !== 'merged_misfiled' || !h.filed_cusip) return null
-  const d = (h.shares ?? 0) - (h.prev_shares ?? 0)
-  const move = h.change && h.change !== 'unchanged' && d ? `${h.change} ${Math.abs(d).toLocaleString('en-US')} sh` : 'unchanged'
+  const filed = h.filed_cusip ?? h.prev_cusip
+  if (h.cusip_pair !== 'merged_misfiled' || !filed) return null
   const q = prevQuarter ? `Q${prevQuarter.slice(-1)}` : 'Last quarter'
-  return `${h.ticker || shortName(h.issuer)} ${move}: ${q} was filed under ${h.filed_cusip} at common’s price, treated as common`
+  return `${q} was filed under ${filed} at common’s price; treated as common`
 }
 
 export type HeldLine = { shares: number; value: number; implied_price?: number | null }

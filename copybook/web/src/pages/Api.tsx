@@ -169,6 +169,12 @@ assert h.hexdigest() == link["sha256"]`,
 
 const METHOD_TONE: Record<string, 'up' | 'accent' | 'down' | 'neutral'> = { get: 'up', post: 'accent', delete: 'down' }
 
+const CUSIP_PAIRS: [string, string][] = [
+  ['merged_misfiled', 'Last quarter was filed under another CUSIP (filed_cusip, at filed_price, common’s price) and is matched to this line (matched_cusip): counted as one position.'],
+  ['possible_cusip_change', 'The position may have moved to a new CUSIP between quarters: held, not counted, until it’s confirmed.'],
+  ['different_security', 'A note and the same issuer’s common stock: each is its own line, never compared.'],
+]
+
 export function ApiDocs() {
   useTitle('API · Copybook')
   const cov = useAsync(loadCoverage, [])
@@ -290,6 +296,19 @@ export function ApiDocs() {
                   <dd className="min-w-0 text-ink-2">Response header: the schema served, your pin when valid, otherwise the default{xv.current ? ` (${xv.current})` : ''}. See versioning.</dd>
                 </div>
               )}
+            </dl>
+          </Panel>
+        )}
+        {/* cusip_pair's values, one line each (the analyst, Nov 12), until the spec's glossary lists them itself. */}
+        {!info.glossary.some(([f]) => f === 'cusip_pair') && (
+          <Panel title="cusip_pair" sub="On /v1/changes and book rows that pair a line with another CUSIP">
+            <dl className="divide-y divide-line text-[13.5px]">
+              {CUSIP_PAIRS.map(([v, what]) => (
+                <div key={v} className="flex gap-4 py-2">
+                  <dt className="w-40 shrink-0 font-mono text-[12.5px] text-ink [overflow-wrap:anywhere]">{v}</dt>
+                  <dd className="min-w-0 text-ink-2">{what}</dd>
+                </div>
+              ))}
             </dl>
           </Panel>
         )}
