@@ -2180,14 +2180,27 @@ def share_reporter_books(payload: dict) -> None:
 
 
 def main() -> int:
+    import time
+    t = [time.monotonic()]
+
+    def lap(step: str) -> None:  # step timings for the curated-cycle plan (Nov 18); log only
+        now = time.monotonic()
+        print(f"build: {step} {now - t[0]:.1f}s", flush=True)
+        t[0] = now
+
     payload = ingest()
+    lap("ingest")
     share_reporter_books(payload)
     payload["build"] = write_build_info()
     print(f"splits: {detect_splits(payload)} known", flush=True)
+    lap("splits")
     save_amend_types()
     write_alerts(payload)
+    lap("alerts")
     write_json(payload)
+    lap("write_json")
     print(f"versions: {write_versions(payload)} superseded books written", flush=True)
+    lap("versions")
     print(
         f"wrote {payload['filed_count']}/{payload['manager_count']} managers, "
         f"{payload['copycat']['num_positions']} copycat names"
