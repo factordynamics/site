@@ -2,7 +2,7 @@ import { addToFeed, type Channels, flushChannelLatency, getChannels, getFailures
 import { refreshBooks } from './book';
 import { countAlerts, logSent, pausedFilingMail, resumeUrl, runRevenue, yearlyPeakLine } from './revenue';
 import { DEADLINES, deadlineMs, inFilingWeek } from './seasons';
-import { alertMail, digestMail, FOOTER, type FeedItem, feedItems, holdtermAlertMail, type Mail, resetEt, sendMail, SINK_UNTIL, weeklyNamesMail } from './email';
+import { alertMail, digestMail, FOOTER, type FeedItem, feedItems, holdtermAlertMail, type Mail, resetEt, sendMail, SINK_UNTIL, undeliverable, weeklyNamesMail } from './email';
 import { guardShares, markUnreliable, unreliableSide, offFilers, reissuedTicker, isReissued, reissueRatio, loadReissues, bookSuspect, companyFilings, computeMoves, tagClasses, filingId, posKey, gateMoves, gateRow, movesOf, netRenamed, type Consensus, type HeldRow, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, prevQuarterEnd, prior13F, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
 import { isActive, isPaused, isPro, testAddress, type Env, type Member } from './env';
 import { getFollows, getMember, listMembers, putMember, type Follows } from './members';
@@ -828,7 +828,7 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
       const am = yl ? { ...am0, text: am0.text.replace(FOOTER, `\n\n${yl}${FOOTER}`), html: am0.html && foot >= 0 ? am0.html.slice(0, foot) + ylHtml + am0.html.slice(foot) : am0.html } : am0;
       mails.push({ ...am, ...(replay ? { subject: `Replay (test): ${am.subject}` } : {}), test, filing: send.filings.length > 0, ids: [...send.filings.map((a) => a.accession), ...send.events.map((e) => e.id)] });
       notes.push(m);
-      outcome(m.customer, { state: test && env.TEST_MAIL_SINK !== 'off' && Date.now() < SINK_UNTIL ? 'test_inbox' : 'sending' });
+      outcome(m.customer, { state: (test && env.TEST_MAIL_SINK !== 'off' && Date.now() < SINK_UNTIL) || (env.TEST_MAIL_SINK !== 'off' && undeliverable(m.email)) ? 'test_inbox' : 'sending' });
     }
   }
   if (heldIndex) await env.DB.put(HELD, JSON.stringify(heldIndex));

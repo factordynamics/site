@@ -206,6 +206,8 @@ export const SINK_UNTIL = Date.parse('2026-11-17T00:00:00Z');
 /** The cap rules in plain words, for /health, status.json and /status/. */
 export const MAIL_POLICY = `Account emails (sign-in, welcome, billing) are sent even past the alert cap, until Resend itself refuses them; then they go out after the daily reset at ${resetEt()}. Past the cap, paid and trialing members' 13F alerts, new 13D stakes and insider open-market buys in their names wait for ${resetEt()} and arrive then as one email per member, "delayed by our daily email limit", first in the new day's room. Other alert emails over the cap (13G and amendments, Form 4 sells and other routine filings, free members' alerts) are skipped, with a note in the member's feed. Feed, chat and webhook alerts go at once either way. Test and preview mail goes to a test inbox, not by email, through Nov 16.`;
 const isTestMail = (m: Mail) => !!m.preview || !!m.test || testAddress(m.to);
+/** Reserved domains (RFC 2606/6761) Resend refuses with a 422 that fails its whole batch: always the sink, never Resend. */
+export const undeliverable = (to: string) => /@(example\.(com|net|org)|[^@]*\.(test|example|invalid|localhost))$/i.test(to.trim());
 /** The sink's object for one address: unguessable (HMAC of the address), readable at PUBLIC_URL + this key. */
 /** Each critic's aliases (copybook-test-<critic>-<anything>) share the critic's own test inbox. */
 const CRITIC_INBOX: Record<string, string> = {
@@ -268,6 +270,17 @@ export async function sendMail(env: Env, mails: Mail[], opts: { bulk?: boolean; 
         await env.DB.put(METER, JSON.stringify(mailQuota));
         return 'sunk';
       }
+    }
+  }
+  // After launch week too: one refused address would drop every other mail in its batch (Nov 17-18: 31 dropped).
+  const reserved = env.TEST_MAIL_SINK === 'off' ? [] : mails.filter((m) => undeliverable(m.to));
+  if (reserved.length) {
+    await sinkMail(env, reserved);
+    counted('sinked', reserved.length);
+    mails = mails.filter((m) => !reserved.includes(m));
+    if (!mails.length) {
+      await env.DB.put(METER, JSON.stringify(mailQuota));
+      return 'sunk';
     }
   }
   const tally = (m: Mail) => {

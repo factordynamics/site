@@ -2089,13 +2089,13 @@ describe('copybook api', () => {
     const { sendMail, sinkKey } = await import('../src/email');
     env.TEST_MAIL_SINK = undefined;
     sent = [];
-    await sendMail(env, [{ to: 'copybook-test-x@fldubai.com', subject: 'Your Copybook sign-in link', text: 'link' }, { to: 'real@example.com', subject: 'Real', text: 'r' }]);
+    await sendMail(env, [{ to: 'copybook-test-x@fldubai.com', subject: 'Your Copybook sign-in link', text: 'link' }, { to: 'real@fund.co', subject: 'Real', text: 'r' }]);
     expect(await sendMail(env, [{ to: 'someone@example.com', subject: 'Preview', text: 'p' }], { preview: true })).toBe('sunk');
-    expect(sent.map((m) => m.to[0])).toEqual(['real@example.com']);
+    expect(sent.map((m) => m.to[0])).toEqual(['real@fund.co']);
     const box = JSON.parse((await env.DB.get(await sinkKey(env, 'copybook-test-x@fldubai.com')))!);
     expect(box.items.map((i: { subject: string }) => i.subject)).toEqual(['Your Copybook sign-in link']);
     // The operator gets each test address's inbox URL; real addresses are refused.
-    const r = await (await handleRequest(new Request('https://api.test/ops/test-inbox', { method: 'POST', body: JSON.stringify({ emails: ['copybook-test-x@fldubai.com', 'real@example.com'] }), headers: { authorization: 'Bearer health_test_token' } }), env)).json();
+    const r = await (await handleRequest(new Request('https://api.test/ops/test-inbox', { method: 'POST', body: JSON.stringify({ emails: ['copybook-test-x@fldubai.com', 'real@fund.co'] }), headers: { authorization: 'Bearer health_test_token' } }), env)).json();
     expect(r.inboxes).toEqual([{ email: 'copybook-test-x@fldubai.com', url: expect.stringMatching(new RegExp(`${await sinkKey(env, 'copybook-test-x@fldubai.com')}$`)) }]);
     // A critic's aliases share the critic's own inbox (the trader's fresh signups land where it already reads).
     expect(await sinkKey(env, 'Copybook-Test-Trader-Signup7@fldubai.com')).toBe(await sinkKey(env, 'copybook-test-trader-f94afc@fldubai.com'));
@@ -2104,19 +2104,19 @@ describe('copybook api', () => {
     const { inviteSeat } = await import('../src/seats');
     const owner = { customer: 'cus_tt', email: 'copybook-test-owner@fldubai.com', status: 'active', plan: 'fund', interval: 'month', period_end: 0, subscription: 'sub_tt', alerts: [] } as never;
     expect((await inviteSeat(env, owner, 'Analyst@RealFund.example')).ok).toBe(true);
-    expect(sent.map((m) => m.to[0])).toEqual(['real@example.com']);
+    expect(sent.map((m) => m.to[0])).toEqual(['real@fund.co']);
     expect(JSON.parse((await env.DB.get(await sinkKey(env, 'analyst@realfund.example')))!).items[0].subject).toBe('You have a Copy Fund seat on Copybook');
     // Every mail ends in one counted state. At Resend's cap: account and alert mail are queued (each once, even when
     // the retry is refused again), test mail sinked; the kinds add up to Resend's count.
     const { mailQuota, retryMail } = await import('../src/email');
     const k0 = { ...mailQuota.kinds! };
     resendUsed = 100;
-    await sendMail(env, [{ to: 'member@example.com', subject: 'Your Copybook sign-in link', text: 'l' }]);
-    await sendMail(env, [{ to: 'member@example.com', subject: 'Alert', text: 'a' }], { bulk: true, tier: 'alert' });
+    await sendMail(env, [{ to: 'member@fund.co', subject: 'Your Copybook sign-in link', text: 'l' }]);
+    await sendMail(env, [{ to: 'member@fund.co', subject: 'Alert', text: 'a' }], { bulk: true, tier: 'alert' });
     await sendMail(env, [{ to: 'copybook-test-y@fldubai.com', subject: 'T', text: 't' }]);
     await retryMail(env);
     const k1 = mailQuota.kinds!;
-    expect([k1.queued! - (k0.queued ?? 0), k1.sinked! - (k0.sinked ?? 0), k1.account - k0.account, k1.real - k0.real]).toEqual([2, 1, 0, 0]);
+    expect([k1.queued! - (k0.queued ?? 0), k1.sinked! - (k0.sinked ?? 0), k1.account - k0.account, k1.real - k0.real]).toEqual([2, 2, 0, 0]); // sinked: the test address, and the cap notice to this suite's hello@example.com
     resendUsed = 0;
     expect((await retryMail(env)).mail_retry).toMatchObject({ n: 1 });
     expect(mailQuota.kinds!.account - k0.account).toBe(1);
@@ -2137,6 +2137,21 @@ describe('copybook api', () => {
     env.PUBLIC_URL = undefined;
     expect([h2.scope, h2.as_of, h2.used, h2.kinds, h2.by_kind, h2.waiting_now]).toEqual(['both hosts', '2026-11-11T11:40:00Z', both.resend_used, both.by_kind, both.by_kind, both.waiting_now]);
     expect([h2.this_host.scope, h2.this_host.used, h2.this_host.kinds]).toEqual(['this host', health.used, kv]);
+    env.TEST_MAIL_SINK = 'off';
+  });
+
+  it('after launch week: mail to a reserved test domain goes to the sink, so its 422 never drops the rest of the batch', async () => {
+    const { sendMail, sinkKey, mailQuota } = await import('../src/email');
+    env.TEST_MAIL_SINK = undefined;
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.parse('2026-11-18T21:00:00Z') });
+    sent = [];
+    const d0 = mailQuota.kinds?.dropped ?? 0;
+    await sendMail(env, [{ to: 'copybook-test-fe@example.com', subject: 'Your Copybook sign-in link', text: 'l' }, { to: 'buyer@fund.co', subject: 'Your Copybook sign-in link', text: 'l' }, { to: 'copybook-test-y@fldubai.com', subject: 'T', text: 't' }]);
+    // Only the reserved address is held back; a test address on a real domain goes to Resend after Nov 16.
+    expect(sent.map((m) => m.to[0])).toEqual(['buyer@fund.co', 'copybook-test-y@fldubai.com']);
+    expect(JSON.parse((await env.DB.get(await sinkKey(env, 'copybook-test-fe@example.com')))!).items[0].subject).toBe('Your Copybook sign-in link');
+    expect((mailQuota.kinds?.dropped ?? 0) - d0).toBe(0);
+    vi.useRealTimers();
     env.TEST_MAIL_SINK = 'off';
   });
 
