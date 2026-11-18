@@ -2317,7 +2317,7 @@ export async function reconcileAlerts(env: Env, now: number, only?: { accession:
     const rec = await deliveryRecord(env, a.accession, now);
     const members = new Map((await listMembers(env)).map((m) => [m.customer, m]));
     // Only undisclosed errors are mailed: disclosed ones have their /status/ entry, explained ones aren't wrong figures.
-    const mailable = failed.filter((x) => x.class === 'wrong');
+    const mailable = (await import('./email')).visibleCorrections(failed.filter((x) => x.class === 'wrong'));
     const to = only?.to ?? (mailable.length && (a.accepted ?? '') >= RECONCILE_MAIL_FROM ? rec.recipients.map((x) => members.get(x.customer)?.email).filter((e): e is string => !!e) : []);
     let mailed = 0;
     if (mailable.length) {

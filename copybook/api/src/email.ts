@@ -828,6 +828,10 @@ const corrLine = (r: CorrectionRow) =>
     ? `${r.ticker || r.name}${r.put_call ? ` ${r.put_call.toLowerCase()}s` : ''}: share counts don't reconcile in this filing, so no change is computed (not ${said(r.emailed)}).`
     : `${r.ticker || r.name}${r.put_call ? ` ${r.put_call.toLowerCase()}s` : ''} was ${said(r.v1)}, not ${said(r.emailed)}.`;
 
+/** The rows a correction email can carry: a figure that reads the same once rounded (Apollo, Nov 16: "Total sold was
+ *  $2.0B, not $2.0B") corrects nothing the member saw, so it isn't mailed (it stays in the reconciliation log). */
+export const visibleCorrections = (rows: CorrectionRow[]) => rows.filter((r) => r.v1.change === 'held' || said(r.v1) !== said(r.emailed));
+
 /** One wrong row in a sent 13F alert: what the email said and what the data run's build (and /v1) has. */
 export interface CorrectionRow {
   cusip: string;

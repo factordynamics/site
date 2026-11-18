@@ -2165,6 +2165,15 @@ describe('copybook api', () => {
     await expect(companyFilings('0001179392', '4', 40)).resolves.toEqual([]);
   });
 
+  it('a correction whose figures read the same once rounded is never mailed ("Total sold was $2.0B, not $2.0B")', async () => {
+    const { visibleCorrections } = await import('../src/email');
+    const total = (emailed: number, v1: number) => ({ cusip: 'total:sold', ticker: null, name: 'Total sold', put_call: null, emailed: { change: 'total', value_delta: emailed }, v1: { change: 'total', value_delta: v1 }, class: 'wrong' as const });
+    const apollo = total(2_012_400_000, 1_968_100_000);
+    const moore = total(183_900_000, 2_300_000_000);
+    const sameMove = { cusip: '1', ticker: 'APH', name: 'APH', put_call: null, emailed: { change: 'added', value_delta: 36_480_000 }, v1: { change: 'trimmed', value_delta: 36_480_000 }, class: 'wrong' as const };
+    expect(visibleCorrections([apollo, moore, sameMove]).map((r) => r.emailed.value_delta)).toEqual([183_900_000, 36_480_000]);
+  });
+
   it('latency rows from before the moves tag are re-timed once from the day stores', async () => {
     const day = new Date(Date.now() - 5 * 3600_000).toISOString().slice(0, 10);
     const at = (s: number) => new Date(Date.parse(`${day}T15:00:00Z`) + s * 1000).toISOString();
