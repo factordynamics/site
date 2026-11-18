@@ -346,7 +346,20 @@ def publish_builds(sources: dict, digests: dict, manifest: dict, token) -> None:
     for name in ("changes", "filer_view"):
         if quarters:
             stores[name] = {"build_id": BUILD.get("build_id"), "built_at": min(ok[(name, q)] for q in quarters)}
+    # Curated runs have no changes/ or fq/ (full runs write them) and send no plain fb/ books, so they can't vouch for
+    # those stores themselves; without this every curated run re-sent meta/builds.json with quarters [] within ~20 min
+    # of a full run vouching 2026Q3 (Nov 18). They keep the last full run's vouched quarters and stores, as long as
+    # every key of those stores this run does hold (new filings' h/ books) is in R2 as built here.
+    prior = manifest.get("_vouched") or {}
+    if os.environ.get("SCOPE", "full") == "full":
+        if quarters:
+            manifest["_vouched"] = {"quarters": quarters, "stores": {n: stores[n] for n in ("changes", "filer_view")}}
+    elif not quarters and prior.get("quarters") and all(
+            (n, q) in ok or (n, q) not in keys for n in ("changes", "filer_view") for q in prior["quarters"]):
+        quarters = list(prior["quarters"])
+        stores |= prior.get("stores") or {}
     print(f"upload: builds complete for {sorted(stores)} quarters {quarters}; incomplete {incomplete[:8]}", flush=True)
+    MANIFEST.write_text(json.dumps(manifest, separators=(",", ":")))
     if not stores or not BUILD.get("build_id"):
         return
     body = json.dumps({"quarters": quarters, "stores": stores}, separators=(",", ":")).encode()
