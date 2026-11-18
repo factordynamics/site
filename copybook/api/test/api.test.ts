@@ -2174,6 +2174,20 @@ describe('copybook api', () => {
     expect(visibleCorrections([apollo, moore, sameMove]).map((r) => r.emailed.value_delta)).toEqual([183_900_000, 36_480_000]);
   });
 
+  it('/ops/erase-test-members erases test members only, and its dry run lists them', async () => {
+    await putMember('cus_et1', 'copybook-test-et@fldubai.com', 'canceled', []);
+    await env.DB.put('email:copybook-test-et@fldubai.com', 'cus_et1');
+    await putMember('cus_er1', 'someone@fund.co', 'active', []);
+    const call = (dry: boolean) => handleRequest(new Request('https://api.test/ops/erase-test-members', { method: 'POST', body: JSON.stringify({ dry }), headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), env).then((r) => r.json());
+    const d = await call(true);
+    expect(d.rows.map((r: { customer: string }) => r.customer)).toContain('cus_et1');
+    expect(d.rows.map((r: { customer: string }) => r.customer)).not.toContain('cus_er1');
+    expect(await env.DB.get('cus:cus_et1')).not.toBeNull();
+    await call(false);
+    expect([await env.DB.get('cus:cus_et1'), await env.DB.get('email:copybook-test-et@fldubai.com'), !!(await env.DB.get('cus:cus_er1'))]).toEqual([null, null, true]);
+    expect((await call(true)).test_members).toBe(0);
+  });
+
   it('latency rows from before the moves tag are re-timed once from the day stores', async () => {
     const day = new Date(Date.now() - 5 * 3600_000).toISOString().slice(0, 10);
     const at = (s: number) => new Date(Date.parse(`${day}T15:00:00Z`) + s * 1000).toISOString();

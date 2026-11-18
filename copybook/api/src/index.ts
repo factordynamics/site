@@ -931,6 +931,26 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return json({ ok: true, dry, dropped: ghosts.length, customers: ghosts }, 200, h);
   }
 
+  // Operator: every test member (marked test, or a test address) erased as /ops/erase-member does; {dry: true} lists
+  // their row and subscription IDs (cancel those in Stripe first). Never touches a real member.
+  if (req.method === 'POST' && path === '/ops/erase-test-members') {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    const dry = (await body(req)).dry === true;
+    const { eraseMember } = await import('./free');
+    const rows: { customer: string; status: string; subscription: string | null; deleted?: number }[] = [];
+    for (const m of await listMembers(env)) {
+      if (!(m.test || testAddress(m.email ?? ''))) continue;
+      const row: (typeof rows)[number] = { customer: m.customer, status: m.status, subscription: m.subscription?.startsWith('sub_') ? m.subscription : null };
+      if (!dry) {
+        if (m.email) row.deleted = (await eraseMember(env, m.email)).deleted;
+        else for (const k of ['cus:', 'follows:', 'channels:', 'feed:', 'mailed:', 'delivered:']) await env.DB.delete(`${k}${m.customer}`);
+      }
+      rows.push(row);
+    }
+    await logAccess(env, req, 'POST /ops/erase-test-members', rows.map((r) => r.customer), dry ? 'test members listed' : 'test members erased');
+    return json({ ok: true, dry, test_members: rows.length, rows }, 200, h);
+  }
+
   if (req.method === 'GET' && path === '/ops/member-counts') {
     if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
     const counts: Record<string, number> = {};
