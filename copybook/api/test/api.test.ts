@@ -2489,6 +2489,10 @@ describe('copybook api', () => {
       expect(await (await track(b)).json()).toEqual({ ok: true, counted: true });
     // A load test's or our own check's calls (utm_source=opscheck) are kept apart: in no page, source, post or hour count.
     for (const kind of ['visit', 'signup_view']) await track({ kind, page: '/season/', utm_source: 'opscheck', utm_content: 'load' });
+    // Marketing's headless renders (copybook-mkt-render) are ours too: counted apart, readable with ?ops=1.
+    await handleRequest(new Request('https://api.test/track', { method: 'POST', body: JSON.stringify({ kind: 'visit', page: '/season/', utm_source: 'x', utm_content: 'seed-season' }), headers: { origin: 'https://refcell.github.io', 'cf-connecting-ip': '9.9.9.7', 'user-agent': 'Mozilla/5.0 HeadlessChrome/131.0 copybook-mkt-render' } }), env);
+    const opsTrack = await (await handleRequest(new Request('https://api.test/ops/funnel?days=1&ops=1', { headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), env)).json();
+    expect(Object.values(opsTrack.track)[0]).toMatchObject({ visit: { utm: { 'opscheck|load': 1, 'x|seed-season': 1 }, client: { bot: 2 } } });
     // Client class, never the User-Agent: a page's own fetch (Sec-Fetch-*) is a browser, an unfurler or a prefetch a bot.
     const tr = (headers: Record<string, string>) => handleRequest(new Request('https://api.test/track', { method: 'POST', body: JSON.stringify({ kind: 'trial_click', page: '/pricing/' }), headers: { origin: 'https://refcell.github.io', 'cf-connecting-ip': '9.9.9.8', ...headers } }), env);
     const chrome = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36';

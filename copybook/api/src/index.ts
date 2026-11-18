@@ -581,7 +581,8 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const post = `${src}|${clean(b.utm_content, 60) ?? '-'}`;
     // Load tests and our own checks (utm_source=opscheck) count apart, so no funnel figure (pages, sources, hours)
     // ever includes them; they still do the same reads and writes as a real visit.
-    const ops = src === 'opscheck' ? 'ops' : '';
+    // Marketing's headless renders (user agent copybook-mkt-render, from Nov 18 21:35Z) are ours too.
+    const ops = src === 'opscheck' || /copybook-mkt-render/i.test(req.headers.get('user-agent') ?? '') ? 'ops' : '';
     const key = `track${ops}:${new Date(Date.now() - 5 * 3600_000).toISOString().slice(0, 10)}`;
     const cls = clientClass(req);
     const at = new Date().toISOString();
@@ -778,7 +779,8 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const track: Record<string, unknown> = {};
     for (let d = 0; d < days; d++) {
       const day = new Date(Date.now() - 5 * 3600_000 - d * 86_400_000).toISOString().slice(0, 10);
-      const t = await env.DB.get(`track:${day}`);
+      // ?ops=1: our own checks and renders (opscheck, copybook-mkt-render), counted apart from the funnel.
+      const t = await env.DB.get(`track${url.searchParams.get('ops') === '1' ? 'ops' : ''}:${day}`);
       if (t) track[day] = JSON.parse(t);
     }
     // Totals over the window by post ("utm_source|utm_content"): page counts from /track, signups and the rest from the funnel.
