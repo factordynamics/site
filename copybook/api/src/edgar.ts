@@ -36,8 +36,11 @@ export async function latestFilings(type: string, start = 0): Promise<FeedEntry[
   return parseFeed(await res.text());
 }
 
-/** One filer's latest filings of a type, from its EDGAR company feed (a few KB). */
-export async function companyFilings(cik: string, type: string, count = 3, start = 0, dateb = ''): Promise<FeedEntry[]> {
+/** The only counts EDGAR's company feed accepts; any other is a 400 "Invalid count" (seen from Nov 16, 2026). */
+const COMPANY_COUNTS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 500];
+/** One filer's latest filings of a type, from its EDGAR company feed (a few KB). `count` rounds up to an allowed one. */
+export async function companyFilings(cik: string, type: string, want = 10, start = 0, dateb = ''): Promise<FeedEntry[]> {
+  const count = COMPANY_COUNTS.find((n) => n >= want) ?? 500;
   const res = await sec(`https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${cik}&type=${encodeURIComponent(type)}&dateb=${dateb}&owner=include&count=${count}${start ? `&start=${start}` : ''}&output=atom`);
   if (!res.ok) throw new Error(`edgar company ${cik}: ${res.status}`);
   return parseFeed(await res.text(), cik);

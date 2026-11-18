@@ -216,6 +216,8 @@ beforeEach(async () => {
           ? `company:${u.searchParams.get('CIK')}`
           : `feed${Number(u.searchParams.get('start')) ? `@${u.searchParams.get('start')}` : ''}`
         : url.slice('https://www.sec.gov/'.length);
+      // EDGAR's company feed refuses any other count with a 400 (Nov 16, 2026).
+      if (key.startsWith('company:') && ![10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 500].includes(Number(u.searchParams.get('count')))) return new Response('Invalid count', { status: 400 });
       const typed = `${key}:${u.searchParams.get('type')}`;
       if (key.startsWith('feed') && u.searchParams.get('type') !== '13F-HR') return new Response(secFiles[typed] ?? '<feed></feed>');
       if (key.startsWith('company:') || key.startsWith('feed@')) return new Response(secFiles[typed] ?? secFiles[key] ?? '<feed></feed>');
@@ -2153,6 +2155,14 @@ describe('copybook api', () => {
     expect((mailQuota.kinds?.dropped ?? 0) - d0).toBe(0);
     vi.useRealTimers();
     env.TEST_MAIL_SINK = 'off';
+  });
+
+  it("EDGAR's company feed is only asked for a count it accepts (count=3 is a 400 since Nov 16)", async () => {
+    const { companyFilings } = await import('../src/edgar');
+    secFiles['company:0001179392:13F-HR'] = '<feed></feed>';
+    await expect(companyFilings('0001179392', '13F-HR')).resolves.toEqual([]);
+    await expect(companyFilings('0001179392', '13F-HR', 3)).resolves.toEqual([]);
+    await expect(companyFilings('0001179392', '4', 40)).resolves.toEqual([]);
   });
 
   it('latency rows from before the moves tag are re-timed once from the day stores', async () => {
