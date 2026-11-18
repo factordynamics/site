@@ -41,13 +41,34 @@ export function Layout() {
       window.scrollTo(0, 0)
       return
     }
+    // Sections above the target can finish loading after the first scroll (/account/#channels landed too high about
+    // one load in two): keep the target in place until it has held still for half a second, for at most 5 seconds,
+    // and stop as soon as the visitor scrolls themselves.
     let n = 0
+    let still = 0
+    let last: number | null = null
+    const stop = () => clearInterval(t)
     const t = setInterval(() => {
+      if (++n > 50) return stop()
       const el = document.getElementById(decodeURIComponent(id))
-      if (el || ++n > 30) clearInterval(t)
-      el?.scrollIntoView()
+      if (!el) return
+      const top = Math.round(el.getBoundingClientRect().top + window.scrollY)
+      if (top !== last) {
+        still = 0
+        last = top
+        el.scrollIntoView()
+      } else if (++still >= 5) stop()
     }, 100)
-    return () => clearInterval(t)
+    const opts = { passive: true, once: true } as const
+    window.addEventListener('wheel', stop, opts)
+    window.addEventListener('touchstart', stop, opts)
+    window.addEventListener('keydown', stop, opts)
+    return () => {
+      stop()
+      window.removeEventListener('wheel', stop)
+      window.removeEventListener('touchstart', stop)
+      window.removeEventListener('keydown', stop)
+    }
   }, [pathname, hash])
   useEffect(() => {
     const on = () => setScrolled(window.scrollY > 8)
