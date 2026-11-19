@@ -1064,3 +1064,19 @@ class CusipRepairTest(unittest.TestCase):
         build.CONSENSUS.pop(("2026Q3", "37045V100"))
         build._HELD = None
         self.assertEqual(self.repaired("35045V100", "GENERAL MTRS CO")["cusip"], "35045V100")
+
+
+class RefetchDiffTest(unittest.TestCase):
+    def test_a_refetch_may_change_only_the_merge_markers(self):
+        from ingest import gate
+        row = lambda **k: {"cusip": "68389X105", "put_call": None, "change": "added", "value": 21041266,
+                           "value_delta": 1234801, "prev_shares": 132845} | k
+        live = {"format": 5, "filing_key": "A|B", "total_value": 6_257_653_324, "holdings": [row()]}
+        marked = live | {"format": 6, "holdings": [row(cusip_pair="merged_misfiled", prev_cusip="68389X204")]}
+        self.assertEqual(gate.refetch_diff([("mizuho", live, marked)]), ([], []))
+        # The same book with a different trade is held; a book whose filing changed, or that wasn't refetched, isn't.
+        traded = marked | {"holdings": [row(value_delta=9_000_000, cusip_pair="merged_misfiled")]}
+        changed, held = gate.refetch_diff([("mizuho", live, traded)])
+        self.assertEqual(([n for _, n, _ in changed], len(held)), (["mizuho"], 1))
+        self.assertEqual(gate.refetch_diff([("mizuho", live, traded | {"filing_key": "A|C"}),
+                                            ("mizuho", live, traded | {"format": 5})]), ([], []))

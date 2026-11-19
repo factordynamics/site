@@ -418,6 +418,71 @@ def book_totals(hist: Path) -> list[str]:
     return bad
 
 
+# Cache format bumps refetch every stored curated quarter from EDGAR (build.CACHE_FORMAT 6, Nov 19: merged lines that
+# had lost their filed CUSIP). A refetch should change only the merge markers; anything else in a book whose filing is
+# unchanged is held for review (lead, Nov 19) unless the run is dispatched with reason refetch-accepted.
+REFETCH_MARKERS = {"cusip_pair", "prev_cusip", "cusip_as_filed", "filed_cusip", "filed_price", "matched_cusip",
+                   "reference_price", "cusip_mismatch"}
+REFETCH_ACCEPTED = os.environ.get("COPYBOOK_REFETCH_ACCEPTED") == "1"
+REFETCH_TOTAL_TOL = 0.005  # a refetched book's total moving more than 0.5% is held
+REFETCH_TRADE_MIN = 5_000_000  # a trade (value_delta or change) moving by at least this, or 0.5% of the book, is held
+
+
+def _rows(b: dict) -> dict[tuple, dict]:
+    if b.get("columns") and b.get("rows") is not None:
+        rows = [dict(zip(b["columns"], r)) for r in b["rows"]]
+    else:
+        rows = list(b.get("holdings") or [])
+    return {(r.get("cusip"), r.get("put_call") or "", r.get("change") == "exited"): r for r in rows}
+
+
+def refetch_diff(pairs: list[tuple[str, dict, dict]], refetched_only: bool = True) -> tuple[list[tuple[float, str, str]], list[str]]:
+    """For books refetched this run (format up, same filing_key), or every book with the same filing when
+    refetched_only is False: ([(dollars, name, what)] for every book with a change beyond the merge markers,
+    [held reasons])."""
+    changed, held = [], []
+    for name, b, a in pairs:
+        if (refetched_only and (b.get("format") or 0) >= (a.get("format") or 0)) \
+                or (b.get("filing_key") or b.get("accession")) \
+                != (a.get("filing_key") or a.get("accession")):
+            continue
+        rb, ra = _rows(b), _rows(a)
+        book = max(abs(a.get("total_value") or 0), 1)
+        dollars, what = 0.0, []
+        for k in ("total_value", "equity_value", "total_value_counted", "equity_value_counted"):
+            x, y = b.get(k), a.get(k)
+            if x is not None and y is not None and x != y:
+                dollars += abs(y - x)
+                what.append(f"{k} {x:,.0f}->{y:,.0f}")
+                if abs(y - x) > REFETCH_TOTAL_TOL * max(abs(x), 1):
+                    held.append(f"{name} {k} {x:,.0f} -> {y:,.0f}")
+        for key in set(rb) | set(ra):
+            x, y = rb.get(key), ra.get(key)
+            if x is None or y is None:
+                v = (x or y).get("value") or 0
+                dollars += abs(v)
+                what.append(f"{key[0]} {'gone' if y is None else 'added'} ${v:,.0f}")
+                if abs(v) >= min(REFETCH_TRADE_MIN, 0.005 * book):
+                    held.append(f"{name} {key[0]} row {'gone' if y is None else 'added'} (${v:,.0f})")
+                continue
+            diff = {f for f in set(x) | set(y) if f not in REFETCH_MARKERS and x.get(f) != y.get(f)
+                    and not (isinstance(x.get(f), (int, float)) and isinstance(y.get(f), (int, float))
+                             and abs((x.get(f) or 0) - (y.get(f) or 0)) < 1e-6 * max(1, abs(x.get(f) or 0)))}
+            if not diff:
+                continue
+            dv = abs((y.get("value") or 0) - (x.get("value") or 0))
+            dd = abs((y.get("value_delta") or 0) - (x.get("value_delta") or 0))
+            dollars += dv + dd
+            what.append(f"{key[0]} {','.join(sorted(diff))[:80]}")
+            if dd >= min(REFETCH_TRADE_MIN, 0.005 * book) or (x.get("change") != y.get("change")
+                                                                and abs(y.get("value") or 0) >= REFETCH_TRADE_MIN):
+                held.append(f"{name} {key[0]} change {x.get('change')}->{y.get('change')}, "
+                            f"value_delta {x.get('value_delta')}->{y.get('value_delta')}")
+        if what:
+            changed.append((dollars, name, "; ".join(what[:6])))
+    return sorted(changed, reverse=True), held
+
+
 def main() -> int:
     data = Path(sys.argv[1])
     rev = sys.argv[2] if len(sys.argv) > 2 else "HEAD"
@@ -544,6 +609,30 @@ def main() -> int:
             with open(summary, "a") as f:
                 f.write(f"### Books more than 0.1% off their filed cover totals ({len(drift)})\n\n"
                         + "".join(f"- {d}\n" for d in drift[:200]) + "\n")
+    ciks = {str(m.get("cik") or "").zfill(10) for m in (new("index.json") or {}).get("managers") or []}
+    changed, held = refetch_diff([(slug, before[slug], after[slug]) for slug in after if slug in before])
+    # The tracked funds' all-filer shards (f/, from the SEC data sets, never refetched): reported, not held.
+    shards = [(f"f/{c}", live(f"f/{c}.json") or {}, new(f"f/{c}.json") or {}) for c in sorted(ciks)]
+    f_changed, _ = refetch_diff([p for p in shards if p[1] and p[2]], refetched_only=False)
+    print(f"gate: tracked funds' f/ shards changed beyond the merge markers with the same filing: {len(f_changed)}"
+          + (": " + " | ".join(f"{n} ${d:,.0f} ({w})" for d, n, w in f_changed[:5]) if f_changed else ""), flush=True)
+    if changed:
+        print(f"gate: refetched books with changes beyond the merge markers: {len(changed)}; top 5 by $: "
+              + " | ".join(f"{n} ${d:,.0f} ({w})" for d, n, w in changed[:5]), flush=True)
+        summary = os.environ.get("GITHUB_STEP_SUMMARY")
+        if summary:
+            with open(summary, "a") as f:
+                f.write(f"### Refetched books changed beyond the merge markers ({len(changed)})\n\n"
+                        + "".join(f"- {n}: ${d:,.0f}: {w}\n" for d, n, w in changed[:100]) + "\n")
+    held_now = held and not REFETCH_ACCEPTED
+    gate("refetch_diff", "Refetched books", "A book refetched from EDGAR after a cache format change moves its totals "
+         f"more than {REFETCH_TOTAL_TOL:.1%} or a trade by ${REFETCH_TRADE_MIN:,} (or 0.5% of the book) without a new "
+         "filing.", NO_PUBLISH, held_now, held[:10])
+    if held:
+        print(("::warning::accepted (refetch-accepted): " if REFETCH_ACCEPTED else "::error::")
+              + f"refetched books changed totals or trades: {'; '.join(held[:20])}"
+              + ("" if REFETCH_ACCEPTED else "; not publishing."), flush=True)
+        failed = failed or held_now
     doubled = book_totals(data / "h")
     gate("book_totals", "Book totals", f"A book merged from several filings totals more than {BOOK_COVER_MAX}x its filed cover, or more than {BOOK_JUMP_MAX}x the prior quarter with the median position up more than {BOOK_MEDIAN_MAX}x.", NO_PUBLISH, doubled, doubled[:10])
     if doubled:
