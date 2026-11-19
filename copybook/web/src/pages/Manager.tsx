@@ -421,7 +421,7 @@ export function ManagerPage() {
                       ) : (
                         !h.issuer.includes('Class') && shareClass(h.title) && <Badge className="shrink-0">{shareClass(h.title)}</Badge>
                       )}
-                      {h.cusip_pair === 'merged_misfiled' && (
+                      {h.cusip_pair === 'merged_misfiled' && !unreliable(h) && (
                         <span className="shrink-0" title={misfiledNote(h, f?.prev_quarter) ?? 'Last quarter was filed under another CUSIP at this stock’s price and is matched to this one'}>
                           <Badge>merged CUSIP</Badge>
                         </span>

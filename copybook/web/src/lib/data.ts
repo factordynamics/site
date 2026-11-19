@@ -98,7 +98,8 @@ export function flagNote(h: Flaggable): string | null {
  *  A book that names the old CUSIP only as prev_cusip still gets the note. */
 export function misfiledNote(h: Holding, prevQuarter?: string | null): string | null {
   const filed = h.filed_cusip || h.prev_cusip
-  if (h.cusip_pair !== 'merged_misfiled' || !filed) return null
+  // A held row (ingest marks SO, AKAM, WEC and ON merged_misfiled too) isn't treated as common: it stays under Not counted.
+  if (h.cusip_pair !== 'merged_misfiled' || !filed || unreliable(h)) return null
   const d = (h.shares ?? 0) - (h.prev_shares ?? 0)
   const move = h.change && h.change !== 'unchanged' && d ? `${h.change} ${Math.abs(d).toLocaleString('en-US')} sh` : 'unchanged'
   const q = prevQuarter ? `Q${prevQuarter.slice(-1)}` : 'Last quarter'

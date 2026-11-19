@@ -344,7 +344,8 @@ const named = <T extends { manager: string }>(x: T) => ({ ...x, manager: display
 const settle = (h: StockHolder): StockHolder => {
   const f = flagOf(h)
   const held_note = heldLinesNote(h.held_lines)
-  const merge_note = h.cusip_pair === 'merged_misfiled' ? `Last quarter was filed under ${h.filed_cusip ?? 'another CUSIP'} at common’s price; treated as common` : null
+  // Only a counted row is "treated as common"; a held merged_misfiled row keeps its not-counted note alone.
+  const merge_note = h.cusip_pair === 'merged_misfiled' && !f ? `Last quarter was filed under ${h.filed_cusip ?? 'another CUSIP'} at common’s price; treated as common` : null
   if (!f) return { ...named(h), held_note, merge_note }
   const known = h.change === 'new' || h.change === 'exited' || (f !== 'both' && h.change !== ('unknown' as string))
   return { ...named(h), held_note, merge_note, flag: f, note: flagNote(h), change: known ? h.change : null, delta_value: 0 }
