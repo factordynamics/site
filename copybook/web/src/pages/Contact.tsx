@@ -126,7 +126,7 @@ export function Contact() {
             <>
               <p className="mt-4 text-[17px] leading-relaxed text-ink-2">Copy Fund is everything in Pro for up to {FUND_SEATS} seats at a flat price: each seat signs in on its own, and the team shares one book, watchlist and peer list. The API, signed webhooks and Slack alerts are included.</p>
               <ul className="mt-6 space-y-2.5 text-[15px] text-ink-2">
-                {['Founding price $1,990/yr, kept for as long as you stay subscribed', 'Invoiced yearly, net 30', 'W-9 available once our entity details are published', 'Your uploaded book stays private to your team', 'Prices exclude applicable taxes. Copybook does not currently collect sales tax.'].map((x) => (
+                {['$1,990/yr for up to 10 seats', 'Invoiced yearly, net 30', 'W-9 available once our entity details are published', 'Your uploaded book stays private to your team', 'Prices exclude applicable taxes. Copybook does not currently collect sales tax.'].map((x) => (
                   <li key={x} className="flex gap-2.5">
                     <Check className="mt-1 shrink-0 text-accent" /> {x}
                   </li>
@@ -176,7 +176,7 @@ export function Contact() {
                     ) : (
                       'Check your inbox to sign in.'
                     )}{' '}
-                    The invoice for $1,990 (the founding price, a year) comes on {day(started.invoice_on)}, due {day(started.due_on)}; nothing is charged before then. It’s payable online by card or US bank account (ACH). Cancel before {day(started.invoice_on)} in your account and nothing is owed.
+                    The invoice for $1,990 (a year) comes on {day(started.invoice_on)}, due {day(started.due_on)}; nothing is charged before then. It’s payable online by card or US bank account (ACH). Cancel before {day(started.invoice_on)} in your account and nothing is owed.
                     {/* Stripe emails the invoice to the owner; from 17:00 Nov 11 the AP address gets a copy when it's finalized (payments). */}{' '}
                     The invoice {started.po ? `will show PO ${started.po} and ` : ''}goes to {started.email}
                     {started.ap_email ? `; your AP team (${started.ap_email}) gets a copy, and it’s printed on the invoice` : ''}.
@@ -287,7 +287,7 @@ export function Contact() {
                       {hintFor('ap_email')}
                     </label>
                   </div>
-                  <p className="text-[12.5px] leading-relaxed text-ink-3">Both are printed on the invoice, and AP gets a copy. $1,990 a year at the founding price, invoiced on day 14, Net 30, payable online by card or US bank account (ACH). Prices exclude applicable taxes. Copybook does not currently collect sales tax.</p>
+                  <p className="text-[12.5px] leading-relaxed text-ink-3">Both are printed on the invoice, and AP gets a copy. $1,990 a year, invoiced on day 14, Net 30, payable online by card or US bank account (ACH). Prices exclude applicable taxes. Copybook does not currently collect sales tax.</p>
                 </fieldset>
               )}
               {fund && !invoiceTrial && (

@@ -14,7 +14,7 @@ export function UpgradePro({ member, className = '' }: { member: Member; classNa
             Copy and Copy Pro
           </h2>
           <p className="mt-1 text-[14px] text-ink-2">
-            Pro is ${yearly ? `${plans.pro.yearly}/yr` : `${plans.pro.monthly}/mo`} at the founding price, on your {yearly ? 'yearly' : 'monthly'} billing. Upgrading is prorated for the rest of this period, and you see the amount before you confirm.
+            Pro is ${yearly ? `${plans.pro.yearly}/yr` : `${plans.pro.monthly}/mo`} on your {yearly ? 'yearly' : 'monthly'} billing. Upgrading is prorated for the rest of this period, and you see the amount before you confirm.
           </p>
         </div>
         <Button to="/upgrade/?plan=pro">

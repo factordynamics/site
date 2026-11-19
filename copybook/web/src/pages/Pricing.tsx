@@ -78,8 +78,6 @@ const tiers = (filers: string, curated: string): Tier[] => [
 
 const FOUNDING: Partial<Record<PlanId, string>> = {
   copy: 'Founding price: $9/month or $79/year, locked while you stay subscribed (a pause keeps it). From Feb 1, 2027, new members pay $12/month or $99/year. Start your trial before Feb 1 and the founding price stays.',
-  pro: 'Founding price: $39/mo ($390/yr), kept for as long as you stay subscribed.',
-  fund: 'Founding price: $199/mo or $1,990/yr, kept for as long as you stay subscribed.',
 }
 
 // What each plan includes. true = included, false = not, 'soon' = coming (no date), 'by …' = coming by that date, string = shown as is.
@@ -318,7 +316,7 @@ export function Pricing() {
                 <p className={`mt-2.5 min-h-[3.6em] text-[11.5px] leading-snug ${dark ? 'text-white/55' : 'text-ink-3'}`}>
                   {tier.id === 'fund' ? (
                     <>
-                      {cycle === 'monthly' ? 'Founding price $199/mo. Monthly is billed by card; invoicing (net 30) is yearly. Email' : 'Founding price $1,990/yr, invoiced net 30. W-9 available once our entity details are published. Or email'}{' '}
+                      {cycle === 'monthly' ? '$199/mo. Monthly is billed by card; invoicing (net 30) is yearly. Email' : '$1,990/yr, invoiced net 30. W-9 available once our entity details are published. Or email'}{' '}
                       <a href="mailto:hello@factordynamics.com" className="underline underline-offset-2 hover:text-ink">
                         hello@factordynamics.com
                       </a>
@@ -339,7 +337,7 @@ export function Pricing() {
                       )}
                     </>
                   ) : plan && mine && !member?.seat && tier.id === 'pro' && mine === 'copy' ? (
-                    `Switches your Copy plan to Pro on the same ${member?.interval === 'monthly' ? 'monthly' : 'yearly'} billing, at the founding price, prorated for the rest of this period. You confirm the amount before anything changes.`
+                    `Switches your Copy plan to Pro on the same ${member?.interval === 'monthly' ? 'monthly' : 'yearly'} billing, prorated for the rest of this period. You confirm the amount before anything changes.`
                   ) : plan ? (
                     // Said plainly under every paid button: Copy's trial takes no card (Nov 11); Pro's still does.
                     <>
@@ -460,8 +458,8 @@ export function Pricing() {
                 'How does the free trial work?',
                 `Every paid plan is free for ${TRIAL_DAYS} days. Copy needs no card: add one before day ${TRIAL_DAYS + 1} to keep it, or the trial simply ends and nothing is charged. Pro and Fund take a card at signup so they continue without a gap; you’re charged on day ${TRIAL_DAYS + 1} unless you cancel from Manage billing before then (a fund can start by invoice instead, below).`,
               ],
-              ['Can a fund try Copy Fund without a card?', 'Yes. Start a 14-day trial, pay by invoice: no card. On day 14 we email an invoice for $1,990 (the founding price, a year), due in 30 days, payable online by card or US bank account (ACH); cancel before then and nothing is owed. One trial per company. Card trial? Switch to invoice in your account. Monthly Fund is paid by card.'],
-              ['What does the founding price mean?', 'Copy: $9/month or $79/year, locked while you stay subscribed (a pause keeps it); from Feb 1, 2027, new members pay $12/month or $99/year. Pro and Fund: $39/mo or $390/yr for Pro, $199/mo or $1,990/yr for Fund, kept for as long as you stay subscribed, even if list prices rise. There is no deadline.'],
+              ['Can a fund try Copy Fund without a card?', 'Yes. Start a 14-day trial, pay by invoice: no card. On day 14 we email an invoice for $1,990 (a year), due in 30 days, payable online by card or US bank account (ACH); cancel before then and nothing is owed. One trial per company. Card trial? Switch to invoice in your account. Monthly Fund is paid by card.'],
+              ['What does the founding price mean?', 'Copy: $9/month or $79/year, locked while you stay subscribed (a pause keeps it); from Feb 1, 2027, new members pay $12/month or $99/year. Pro and Fund have no founding offer: Pro is $39/mo or $390/yr and Fund is $199/mo or $1,990/yr.'],
               ['Can I switch plans?', 'Yes. Upgrade, downgrade or change between monthly and yearly from Manage billing on your account page. Stripe prorates the difference.'],
               [
                 'How fast are filing alerts?',
@@ -483,7 +481,7 @@ export function Pricing() {
               ],
               ['Do you show live prices or returns?', 'No. Values are what the fund reported at quarter end. We don’t re-price holdings or estimate performance.'],
               ['How are options shown?', 'Calls and puts are listed apart from shares. A 13F reports options at the value of the underlying shares, so we label them as notional and leave them out of portfolio weights and holder counts.'],
-              ['Can I cancel?', 'Yes, any time from Manage billing on your account page. After a paid period starts, you keep access until the end of the period you paid for. Monthly plans with a card can also pause instead: once a year, for up to 3 months, and keep your founding price.'],
+              ['Can I cancel?', 'Yes, any time from Manage billing on your account page. After a paid period starts, you keep access until the end of the period you paid for. Monthly plans with a card can also pause instead: once a year, for up to 3 months, and keep your price.'],
               ['Is this investment advice?', 'No. Copybook shows public filings. 13F omits short positions, most non-US holdings and cash, so a portfolio here is never the whole picture.'],
             ] as [string, ReactNode][]
           ).map(([q, a]) => (

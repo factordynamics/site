@@ -8,7 +8,7 @@ const UPDATED = 'November 9, 2026'
 // Material changes to /privacy/ and /security/, newest first. Every material edit adds a line here, and the
 // newest date is the page's "Last updated".
 const CHANGES: Partial<Record<'terms' | 'privacy' | 'security', [string, string][]>> = {
-  terms: [['November 11, 2026', 'Copy Fund: the founding price kept while subscribed, up to 10 seats at a flat price, net 30 invoicing on request, an uploaded book kept confidential and deleted on request with written confirmation, 60 days’ notice of price changes and a reminder 30 days before an annual renewal.'], ['November 11, 2026', 'Accounts and plans: if we discontinue a paid plan during a prepaid period, we refund the unused part pro rata.']],
+  terms: [['November 19, 2026', 'Copy Fund has no founding offer for new subscriptions: the price is $1,990 a year for up to 10 seats. A subscription that started at a founding price keeps it.'], ['November 11, 2026', 'Copy Fund: the founding price kept while subscribed, up to 10 seats at a flat price, net 30 invoicing on request, an uploaded book kept confidential and deleted on request with written confirmation, 60 days’ notice of price changes and a reminder 30 days before an annual renewal.'], ['November 11, 2026', 'Accounts and plans: if we discontinue a paid plan during a prepaid period, we refund the unused part pro rata.']],
   security: [
     ['November 19, 2026', 'Correction: the service account, rotated signing secrets, restricted Stripe key, offline backup key and logged shell reads described for November 17 did not happen on that date. They are planned, not done, with no date, and the maintenance agents still hold the backup key. MFA on admin accounts is not confirmed. No move to another API hostname is planned.'],
     ['November 11, 2026', 'Backups: the monthly decrypt drill runs on a separate machine of the owner’s; the private backup key never touches the self-hosted machine, not even in memory.'],
@@ -62,7 +62,7 @@ const PAGES: Record<'terms' | 'privacy' | 'security', { title: string; lead: str
         <>
           <p>If your team subscribes to Copy Fund, these commitments are part of these terms:</p>
           <ul className="mt-2.5 list-disc space-y-1.5 pl-5">
-            <li>Price: your founding price stays the same for as long as the subscription continues without a break.</li>
+            <li>Price: $1,990 a year for up to {FUND_SEATS} seats, whatever number are used. A subscription that started at a founding price keeps it for as long as it continues without a break.</li>
             <li>Seats: up to {FUND_SEATS} seats at one flat price. Adding or removing a seat doesn’t change what you pay.</li>
             <li>Invoicing: annual plans can be invoiced, payable net 30, on request to {email}.</li>
             <li>Your book: a book your team uploads or links is confidential to your team. We never share it and never use it in aggregates or anyone else’s figures, and we delete it on request and confirm the deletion in writing. A book linked to a public 13F filing is public through the filing itself.</li>

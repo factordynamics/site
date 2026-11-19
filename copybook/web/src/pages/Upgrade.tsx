@@ -7,7 +7,7 @@ import { ApiError, isFree, openPortal, PLAN_NAME, upgradeTo, useMemberState, typ
 import { useTitle } from '../lib/data'
 
 // /upgrade/?plan=pro|fund: the plan change before Stripe's confirm page. It keeps the member's interval
-// and founding price, estimates the prorated amount, and hands off to POST /upgrade (a billing-portal
+// and price, estimates the prorated amount, and hands off to POST /upgrade (a billing-portal
 // confirm session on the same subscription). The portal is the fallback when that call fails.
 
 const RANK: Record<string, number> = { copy: 1, pro: 2, fund: 3 }
@@ -156,13 +156,13 @@ function Change({ member, target }: { member: Member; target: 'pro' | 'fund' }) 
   return (
     <>
       <p className="mt-3 text-[17px] text-ink-2">
-        Same {yearly ? 'yearly' : 'monthly'} billing and renewal date, at the founding price. {trial ? 'You’re in your free trial, so nothing is charged today.' : 'You pay only the difference for the rest of this period.'}
+        Same {yearly ? 'yearly' : 'monthly'} billing and renewal date. {trial ? 'You’re in your free trial, so nothing is charged today.' : 'You pay only the difference for the rest of this period.'}
       </p>
 
       <section className="mt-8 rounded-[var(--radius-card)] bg-card shadow-[var(--shadow-card)]" aria-label="Plan change">
         <dl className="divide-y divide-line text-[14px]">
           <Line k="Now" v={`${from.name} · ${price(from)}`} />
-          <Line k="After" v={<span className="font-semibold">{`${to.name} · ${price(to)}`}</span>} sub="Founding price, kept for as long as you stay subscribed" />
+          <Line k="After" v={<span className="font-semibold">{`${to.name} · ${price(to)}`}</span>} />
           <Line k="Billing" v={`${yearly ? 'Yearly' : 'Monthly'}, unchanged`} sub={end ? `${trial ? 'Trial ends' : 'Next renewal'} ${timeLabel(end.getTime() / 1000)}` : undefined} />
           <Line
             k="Today"
