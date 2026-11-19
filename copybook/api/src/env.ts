@@ -169,7 +169,7 @@ export interface Member {
   paused_at?: number | null;
   /** Copy's founding price ($9/$79): a Copy subscription created before Feb 1, 2027, kept while subscribed (pause too). */
   founding_price?: boolean;
-  /** Yearly Copy, Pro or Fund: the yearly-only perks (founding price locked; history back to 2013Q2 from Dec 31). */
+  /** Yearly Copy, Pro or Fund: the yearly-only perks (the price stays the same while the yearly plan renews, Copy's founding price included; history back to 2013Q2 from Dec 31). */
   yearly_perks?: boolean;
   /** The 3-days-before reminder, sent for this paused_until. */
   pause_reminded?: number | null;

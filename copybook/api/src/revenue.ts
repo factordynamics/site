@@ -35,7 +35,7 @@ const money = (n: number) => `$${n.toLocaleString('en-US')}`;
 const monthsOf = (p: { month: number; year: number }) => (Number.isInteger(p.year / p.month) ? `the price of ${p.year / p.month} months of monthly` : `less than ${Math.ceil(p.year / p.month)} months of monthly`);
 /** Why yearly, for Copy (marketing's plan rev 78): no \"months free\" and no %. */
 export const COPY_YEARLY = 'Yearly $79: history back to 2013 (from Dec 31) · monthly costs $81+ even with a pause · founding price locked';
-const monthsFree = (p: { month: number; year: number }) => (p === PRICES.copy ? COPY_YEARLY.replace(/^Yearly \$79: /, '') : `${monthsOf(p)}, price locked`);
+const monthsFree = (p: { month: number; year: number }) => (p === PRICES.copy ? COPY_YEARLY.replace(/^Yearly \$79: /, '') : `${monthsOf(p)}, price locked while your yearly plan renews`);
 
 /** What one member got (email, digest or chat), for the trial and season emails: KV stats:{customer}. */
 export interface MemberStats {

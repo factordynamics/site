@@ -5855,9 +5855,9 @@ describe('copybook api', () => {
     expect(sent[0].text).toContain('Copybook sent you 41 alerts. Our median time from EDGAR acceptance to your inbox this season was 70 seconds.');
     expect(sent[0].text).toContain('Copy Pro monthly: $468 a year. Yearly is $390');
     // One button to the same portal confirm page as the trial's day 11; Pro has no founding price to mention.
-    expect(sent[0].text).toMatch(/Switch to yearly: \$390\/year, the price of 10 months of monthly, price locked \(you see the amount and confirm on the next page\): https:\/\/\S+\/keep\?t=/);
+    expect(sent[0].text).toMatch(/Switch to yearly: \$390\/year, the price of 10 months of monthly, price locked while your yearly plan renews \(you see the amount and confirm on the next page\): https:\/\/\S+\/keep\?t=/);
     expect(sent[0].text).not.toMatch(/founding/i);
-    expect(sent[0].html).toContain('Switch to yearly: $390/year, the price of 10 months of monthly, price locked</a>');
+    expect(sent[0].html).toContain('Switch to yearly: $390/year, the price of 10 months of monthly, price locked while your yearly plan renews</a>');
     sent = [];
     await cron(12, Date.UTC(2026, 10, 19, 15, 12));
     expect(sent).toHaveLength(0);
