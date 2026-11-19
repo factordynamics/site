@@ -26,18 +26,44 @@ def _sleep():
     _last_request = time.monotonic()
 
 
+# SEC fair access (Nov 19): a 429 or 403 means EDGAR is refusing this IP and user agent, a block of about 10 minutes.
+# Retrying hard keeps it going, so a refusal pauses the whole process (1 minute, then the 10-minute block), halves
+# its request rate for the rest of the run, and gives up on the URL after REFUSED_TRIES; callers resume next run.
+REFUSED_PAUSE_S = (60, 600)
+REFUSED_TRIES = 3
+_refusals = 0  # consecutive refusals across every URL; a success resets it
+
+
 def get(url: str, retries: int = 5) -> bytes:
+    global MIN_INTERVAL, _refusals
     backoff = 1.0
     last_err: Exception | None = None
+    refused = 0
     for attempt in range(retries):
         _sleep()
         req = Request(url, headers={"User-Agent": USER_AGENT, "Accept-Encoding": "identity"})
         try:
             with urlopen(req, timeout=45) as resp:
-                return resp.read()
+                body = resp.read()
+            _refusals = 0
+            return body
         except HTTPError as e:
             last_err = e
-            if e.code == 429 or e.code >= 500:
+            if e.code in (403, 429):
+                refused += 1
+                if refused >= REFUSED_TRIES:
+                    break
+                retry_after = e.headers.get("Retry-After")
+                wait = REFUSED_PAUSE_S[min(_refusals, len(REFUSED_PAUSE_S) - 1)]
+                if retry_after and retry_after.isdigit():
+                    wait = max(wait, float(retry_after))
+                _refusals += 1
+                MIN_INTERVAL = min(max(MIN_INTERVAL, 0.1) * 2, 2.0)
+                print(f"edgar: SEC refused {url} ({e.code}); pausing {wait:.0f} s, then one request every "
+                      f"{MIN_INTERVAL:.2f} s", flush=True)
+                time.sleep(wait)
+                continue
+            if e.code >= 500:
                 retry_after = e.headers.get("Retry-After")
                 wait = float(retry_after) if retry_after and retry_after.isdigit() else backoff
                 time.sleep(wait)
