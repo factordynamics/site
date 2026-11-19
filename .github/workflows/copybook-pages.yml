@@ -126,6 +126,17 @@ jobs:
           [ -x /opt/google/chrome/chrome ] || npx playwright install --with-deps --force chrome
           /opt/google/chrome/chrome --version
       - run: node scripts/smoke.mjs dist
+      # IndexNow, part 1: the pages whose HTML changed since the live deploy (scripts/indexnow.mjs). Never blocks a deploy.
+      - name: IndexNow changed pages
+        continue-on-error: true
+        run: node scripts/indexnow.mjs prep dist "${RUNNER_TEMP}/indexnow-urls.txt"
+      - uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: indexnow-urls
+          path: ${{ runner.temp }}/indexnow-urls.txt
+          retention-days: 1
+          if-no-files-found: ignore
       # Skip the deploy (without failing) until Pages is enabled in the repo settings.
       - id: pages
         env:
@@ -151,3 +162,18 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  # IndexNow, part 2: once the deploy is live, submit the changed pages. A failure here never fails the run.
+  indexnow:
+    needs: deploy
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: copybook/web
+      - uses: actions/download-artifact@v4
+        with:
+          name: indexnow-urls
+          path: ${{ runner.temp }}
+      - run: node copybook/web/scripts/indexnow.mjs submit "${RUNNER_TEMP}/indexnow-urls.txt"
