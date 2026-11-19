@@ -17,7 +17,7 @@ export interface Channels {
   discord?: string;
   slack?: string;
   telegram?: { bot_token: string; chat_id: string };
-  /** schema_version: a pin to the summed share-class moves (SUMMED_PIN, until Feb 24, 2027); absent: the current shape. */
+  /** schema_version: a pin to the summed share-class moves (SUMMED_PIN, until Mar 3, 2027); absent: the current shape. */
   webhook?: { url: string; secret: string; created: string; schema_version?: string };
   feed_token?: string;
   /** Also email alerts while a chat or webhook destination works (default: chat replaces email). */
@@ -216,13 +216,13 @@ export async function updateChannels(env: Env, m: Member, b: Record<string, unkn
       c.webhook = { url, secret: c.webhook?.secret && !b.rotate_secret ? c.webhook.secret : `whsec_${randomToken(24)}`, created: c.webhook?.created ?? new Date().toISOString(), ...(c.webhook?.schema_version ? { schema_version: c.webhook.schema_version } : {}) };
     } else return bad('webhook: a public https URL');
   }
-  // A webhook pinned to the summed share-class moves (the lead, Nov 11): until Feb 24, 2027; null unpins.
+  // A webhook pinned to the summed share-class moves (the lead, Nov 11): until Mar 3, 2027; null unpins.
   if (b.webhook_schema_version !== undefined) {
     const { SUMMED_PIN } = await import('./v1');
     if (!c.webhook) return bad('webhook_schema_version: save a webhook first');
     if (b.webhook_schema_version === null) delete c.webhook.schema_version;
     else if (b.webhook_schema_version === SUMMED_PIN.version && Date.now() < SUMMED_PIN.until) c.webhook.schema_version = SUMMED_PIN.version;
-    else return bad(`webhook_schema_version: ${SUMMED_PIN.version} (until Feb 24, 2027) or null`);
+    else return bad(`webhook_schema_version: ${SUMMED_PIN.version} (until Mar 3, 2027) or null`);
   }
   if (b.keep_email !== undefined) {
     if (typeof b.keep_email !== 'boolean') return bad('keep_email: true or false');
@@ -492,7 +492,7 @@ function hookMoves(m: Moves): Moves {
 }
 
 /**
- * An endpoint pinned to the summed rows (webhook_schema_version 2026-11-09, until Feb 24, 2027): the class lines of one
+ * An endpoint pinned to the summed rows (webhook_schema_version 2026-11-09, until Mar 3, 2027): the class lines of one
  * issuer (tagged issuer_cusip6) as one row, as pinned /v1 rows: cusip null, the issuer's change (mixed when the classes
  * went opposite ways, listed under added or trimmed by its net), dollar sums, shares null, each class in classes[].
  * Bodies without class lines are unchanged.
@@ -588,7 +588,7 @@ const BACKOFF_MIN = [1, 5, 30, 120, 720];
 
 /**
  * A delivery's per-class deprecation notice (the lead, Nov 11): inside the signed body as `deprecation`, since receivers
- * often drop headers, for every endpoint until Nov 25 and pinned ones until Feb 24. Bodies that already carry it (a
+ * often drop headers, for every endpoint until Dec 2 and pinned ones until Mar 3. Bodies that already carry it (a
  * retry) are left as they are.
  */
 export function withNotice(c: Channels, body: string, now: number): string {

@@ -5245,7 +5245,7 @@ describe('copybook api', () => {
         const hd = await hdrs(path, pin);
         echoed.push(hd.get('copybook-schema-version'));
         if (pin && path.includes('/holders')) pinnedHolders = lastBody;
-        expect([hd.get('deprecation'), hd.get('sunset'), /changelog\?id=2026-11-23-per-class-rows>; rel="deprecation"/.test(hd.get('link') ?? '')]).toEqual(['@1795564800', 'Wed, 24 Feb 2027 00:00:00 GMT', true]);
+        expect([hd.get('deprecation'), hd.get('sunset'), /changelog\?id=2026-11-23-per-class-rows>; rel="deprecation"/.test(hd.get('link') ?? '')]).toEqual(['@1796169600', 'Wed, 03 Mar 2027 00:00:00 GMT', true]);
       }
     }
     // A held row passes through a pinned summed response as ingest published it: nothing re-derives a direction or dollars.
@@ -5258,7 +5258,7 @@ describe('copybook api', () => {
     const bad = await handleRequest(new Request('https://api.test/v1/filers', { headers: { authorization: `Bearer ${key}`, 'copybook-schema-version': '1999-01-01' } }), env);
     const sp = await handleRequest(new Request('https://api.test/v1/openapi.json'), env);
     const pv = await handleRequest(new Request('https://api.test/v1/filers', { headers: { authorization: `Bearer ${key}`, 'copybook-schema-version': '2026-11-23' } }), env);
-    expect([pv.status, /preview available from Mon Nov 23, 2026/.test((await pv.json()).error.message)]).toEqual([400, true]);
+    expect([pv.status, /preview available from Wed Nov 25, 2026/.test((await pv.json()).error.message)]).toEqual([400, true]);
     expect([echoed, bad.status, bad.headers.get('copybook-schema-version'), sp.headers.get('copybook-schema-version'), /copybook-schema-version/.test(bad.headers.get('access-control-expose-headers') ?? '')]).toEqual([['2026-11-09', SCHEMA_VERSION, '2026-11-09', SCHEMA_VERSION], 400, SCHEMA_VERSION, SCHEMA_VERSION, true]);
     // Public responses never name a machine or tunnel host (the lead, Nov 11), even when the request came in on gene's
     // Funnel: Link headers, bulk URLs and the spec's servers all use the one public base.
@@ -5268,12 +5268,12 @@ describe('copybook api', () => {
     // From Nov 23 only pinned clients and endpoints are warned, until Feb 22, 2027; then nobody.
     const { perClassNotice } = await import('../src/v1');
     const at = (d: string, pinned: boolean) => !!perClassNotice(pinned, 'https://b', Date.parse(d));
-    expect([at('2026-11-24T23:59:59Z', false), at('2026-11-25T00:00:00Z', false), at('2027-02-23T23:59:59Z', true), at('2027-02-24T00:00:00Z', true)]).toEqual([true, false, true, false]);
+    expect([at('2026-12-01T23:59:59Z', false), at('2026-12-02T00:00:00Z', false), at('2027-03-02T23:59:59Z', true), at('2027-03-03T00:00:00Z', true)]).toEqual([true, false, true, false]);
     // A webhook body carries the same notice inside the signature; a pinned endpoint keeps it after Nov 23.
     const { withNotice } = await import('../src/channels');
     const hook = (sv?: string) => ({ webhook: { url: 'https://h', secret: 's', created: '', ...(sv ? { schema_version: sv } : {}) } });
-    expect(JSON.parse(withNotice(hook(), '{"type":"13f"}', Date.parse('2026-11-12T00:00:00Z'))).deprecation).toEqual({ deprecated_at: '2026-11-25T00:00:00Z', sunset: '2027-02-24T00:00:00Z', link: 'https://copybook-api.factordynamics.workers.dev/v1/changelog?id=2026-11-23-per-class-rows' });
-    expect([withNotice(hook(), '{"type":"13f"}', Date.parse('2026-12-01T00:00:00Z')), 'deprecation' in JSON.parse(withNotice(hook('2026-11-09'), '{"type":"13f"}', Date.parse('2026-12-01T00:00:00Z')))]).toEqual(['{"type":"13f"}', true]);
+    expect(JSON.parse(withNotice(hook(), '{"type":"13f"}', Date.parse('2026-11-12T00:00:00Z'))).deprecation).toEqual({ deprecated_at: '2026-12-02T00:00:00Z', sunset: '2027-03-03T00:00:00Z', link: 'https://copybook-api.factordynamics.workers.dev/v1/changelog?id=2026-11-23-per-class-rows' });
+    expect([withNotice(hook(), '{"type":"13f"}', Date.parse('2026-12-10T00:00:00Z')), 'deprecation' in JSON.parse(withNotice(hook('2026-11-09'), '{"type":"13f"}', Date.parse('2026-12-10T00:00:00Z')))]).toEqual(['{"type":"13f"}', true]);
     expect('classes' in (await v1('/v1/stocks/NVDA/holders')).body.data.holders[0]).toBe(false);
     const nch = (await v1('/v1/changes/2026Q3?ticker=NVDA')).body.data.filter((r: { put_call: string | null }) => !r.put_call);
     // A holder index from before hl/ schema 3 has no held marking: GuardCap's BKNG (646,216 -> 1,304 sh, $121.6M -> $6.7M)
