@@ -9,25 +9,26 @@ export const SPEC_REVISION = '2026-11-11.21';
 /** Versions a client may pin with the Copybook-Schema-Version header (the current one, plus any in a notice window). */
 export const SCHEMA_VERSIONS = [SCHEMA_VERSION];
 /**
- * The summed share-class row shape (the lead, Nov 11): per-class rows become the default on Mon Nov 23, 2026; a client
- * pinning this version keeps summed holders and changes rows (and summed webhook moves) until Mon Feb 22, 2027. The pin
+ * The summed share-class row shape (the lead, Nov 11): per-class rows become the default on Wed Nov 25, 2026 (moved from Nov 23 on Nov 19); a client
+ * pinning this version keeps summed holders and changes rows (and summed webhook moves) until Wed Feb 24, 2027. The pin
  * keeps the row shape only: pinned rows carry per-class dollar sums, classes[], cusip null on multi-class rows and
  * mixed/net_direction. Pinned responses say so with Deprecation and Sunset headers.
  */
-export const SUMMED_PIN = { version: '2026-11-09', sunset: 'Mon, 22 Feb 2027 00:00:00 GMT', until: Date.UTC(2027, 1, 22), changelog: '2026-11-23-per-class-rows' };
+export const SUMMED_PIN = { version: '2026-11-09', sunset: 'Wed, 24 Feb 2027 00:00:00 GMT', until: Date.UTC(2027, 1, 24), changelog: '2026-11-23-per-class-rows' };
 
 /**
  * The per-class change's deprecation notice (the lead, Nov 11), on holders and changes responses and on webhook
- * deliveries: everyone until Nov 23 (unpinned clients are the ones that break then), then only clients pinned to
- * SUMMED_PIN until Feb 22, 2027. Null once it no longer applies. One format: Deprecation @<epoch> (RFC 9745).
+ * deliveries: everyone until Nov 25 (unpinned clients are the ones that break then), then only clients pinned to
+ * SUMMED_PIN until Feb 24, 2027. Null once it no longer applies. One format: Deprecation @<epoch> (RFC 9745).
  */
-export const PER_CLASS = { at: Date.UTC(2026, 10, 23), deprecation: '@1795392000' };
-/** The per-class row shape's version: an opt-in preview from Nov 21 (once ingest's schema-6 files are on gene), the default on Nov 23. */
-export const PER_CLASS_PREVIEW = { version: '2026-11-23', from: Date.UTC(2026, 10, 21) };
+export const PER_CLASS = { at: Date.UTC(2026, 10, 25), deprecation: '@1795564800' };
+/** The per-class row shape's version: an opt-in preview from Nov 23 (once ingest's schema-6 files are on gene), the default on Nov 25. The
+ *  version string and the changelog id keep "2026-11-23": they are identifiers clients may have coded against. */
+export const PER_CLASS_PREVIEW = { version: '2026-11-23', from: Date.UTC(2026, 10, 23) };
 export function perClassNotice(pinned: boolean, base: string, now = Date.now()): { deprecated_at: string; sunset: string; link: string; headers: Record<string, string> } | null {
   if (now >= (pinned ? SUMMED_PIN.until : PER_CLASS.at)) return null;
   const link = `${base}/v1/changelog?id=${SUMMED_PIN.changelog}`;
-  return { deprecated_at: '2026-11-23T00:00:00Z', sunset: '2027-02-22T00:00:00Z', link, headers: { Deprecation: PER_CLASS.deprecation, Sunset: SUMMED_PIN.sunset, Link: `<${link}>; rel="deprecation"` } };
+  return { deprecated_at: '2026-11-25T00:00:00Z', sunset: '2027-02-24T00:00:00Z', link, headers: { Deprecation: PER_CLASS.deprecation, Sunset: SUMMED_PIN.sunset, Link: `<${link}>; rel="deprecation"` } };
 }
 
 /** Changes to /v1, newest first. Served at /v1/changelog and summarised in the spec. */
@@ -60,7 +61,8 @@ export const CHANGELOG: { id: string; date: string; shipped_at?: string; schema_
     breaking: false,
     status: 'announced',
     changes: [
-      'Preview of the per-class rows: from Sat Nov 21, 2026, a client sending `Copybook-Schema-Version: 2026-11-23` gets holders and /changes rows per full CUSIP (the shape that becomes the default on Mon Nov 23), so integrations can be tested before the switch. Until Nov 21 that header returns 400 bad_request saying when the preview opens.',
+      'Preview of the per-class rows: from Mon Nov 23, 2026, a client sending `Copybook-Schema-Version: 2026-11-23` gets holders and /changes rows per full CUSIP (the shape that becomes the default on Wed Nov 25), so integrations can be tested before the switch. Until Nov 23 that header returns 400 bad_request saying when the preview opens.',
+      'Nov 19, 2026: dates moved. The preview opens Mon Nov 23 (was Sat Nov 21) and per-class rows become the default Wed Nov 25 (was Mon Nov 23). The version string `2026-11-23` and the changelog id `2026-11-23-per-class-rows` are unchanged.',
     ],
   },
   {
@@ -70,7 +72,7 @@ export const CHANGELOG: { id: string; date: string; shipped_at?: string; schema_
     breaking: false,
     status: 'shipped',
     changes: [
-      'Every /v1 response (errors, redirects and the spec too) carries `Copybook-Schema-Version`: the schema actually served, the client\'s pin when it sent a valid one, otherwise the default. Log it to know which row shape you got; after Nov 23 a pinned client reads `2026-11-09` here until Feb 22, 2027.',
+      'Every /v1 response (errors, redirects and the spec too) carries `Copybook-Schema-Version`: the schema actually served, the client\'s pin when it sent a valid one, otherwise the default. Log it to know which row shape you got; after Nov 25 a pinned client reads `2026-11-09` here until Feb 24, 2027.',
     ],
   },
   {
@@ -90,12 +92,12 @@ export const CHANGELOG: { id: string; date: string; shipped_at?: string; schema_
     breaking: true,
     status: 'announced',
     changes: [
-      'Breaking, effective Mon Nov 23, 2026: /v1/stocks/{stock}/holders and /v1/changes rows are one per full 9-character CUSIP (one per share class), with count and paging per class. A filer holding BRK.A and BRK.B has two rows.',
+      'Breaking, effective Wed Nov 25, 2026 (moved from Mon Nov 23 on Nov 19): /v1/stocks/{stock}/holders and /v1/changes rows are one per full 9-character CUSIP (one per share class), with count and paging per class. A filer holding BRK.A and BRK.B has two rows.',
       '`?group=issuer` (opt-in) returns one row per filer per issuer, summing only dollar fields (value_usd, prev_value_usd, value_delta_usd, value_change_usd); shares fields are null and per-class shares are in classes[].',
       'Every class ticker resolves to its own CUSIP: /v1/stocks/GOOG/holders and /v1/stocks/BRK.A/holders (404 today) return that class\'s rows. A ticker or CUSIP of a class the issuer index lacks returns 404 with `did_you_mean` listing the issuer\'s classes, never another class\'s data.',
       'Bulk files stay per CUSIP. Webhook and alert `moves` rows are keyed by class too, with classes[] on any summed line.',
-      'Pinning: a client that sends `Copybook-Schema-Version: 2026-11-09` keeps today\'s summed holders and changes rows until Mon Feb 22, 2027 (90 days), and its responses carry `Deprecation: @1795392000` (Nov 23, 2026 00:00Z, RFC 9745), `Sunset: Mon, 22 Feb 2027 00:00:00 GMT` and `Link: <…/v1/changelog?id=2026-11-23-per-class-rows>; rel="deprecation"`. Until Nov 23, unpinned holders and changes responses carry the same three headers, since they are the clients whose rows change that day. The pin keeps the row shape only, never the old mispricing (a summed row priced as one trade, e.g. FMR\'s BRK A+B understated by about $5.2B): pinned rows carry per-class dollar sums, `classes[]`, `cusip` null on multi-class rows, and `mixed`/`net_direction`.',
-      'Webhooks: an endpoint saved with `webhook_schema_version: "2026-11-09"` (PUT /channels; null unpins) keeps summed `moves` rows, under the same rules, until Feb 22, 2027. Deliveries carry the same Deprecation, Sunset and Link headers and, inside the signed body, `deprecation: {deprecated_at, sunset, link}` (receivers often drop headers): every endpoint until Nov 23, pinned endpoints until Feb 22.',
+      'Pinning: a client that sends `Copybook-Schema-Version: 2026-11-09` keeps today\'s summed holders and changes rows until Wed Feb 24, 2027 (90 days), and its responses carry `Deprecation: @1795564800` (Nov 25, 2026 00:00Z, RFC 9745), `Sunset: Wed, 24 Feb 2027 00:00:00 GMT` and `Link: <…/v1/changelog?id=2026-11-23-per-class-rows>; rel="deprecation"`. Until Nov 25, unpinned holders and changes responses carry the same three headers, since they are the clients whose rows change that day. The pin keeps the row shape only, never the old mispricing (a summed row priced as one trade, e.g. FMR\'s BRK A+B understated by about $5.2B): pinned rows carry per-class dollar sums, `classes[]`, `cusip` null on multi-class rows, and `mixed`/`net_direction`.',
+      'Webhooks: an endpoint saved with `webhook_schema_version: "2026-11-09"` (PUT /channels; null unpins) keeps summed `moves` rows, under the same rules, until Feb 24, 2027. Deliveries carry the same Deprecation, Sunset and Link headers and, inside the signed body, `deprecation: {deprecated_at, sunset, link}` (receivers often drop headers): every endpoint until Nov 25, pinned endpoints until Feb 24.',
     ],
   },
   {
@@ -182,11 +184,12 @@ export const CHANGELOG: { id: string; date: string; shipped_at?: string; schema_
     breaking: true,
     status: 'shipped',
     changes: [
-      'Incident (Nov 9 to Nov 11 13:30 UTC): GET /v1/changes/{quarter}?ticker= (or cusip=) for a past quarter, and GET /v1/stocks/{stock}/holders?quarter= for one, listed only filers whose latest 13F is that quarter: everyone who has filed since (FMR\'s 2026Q2 XOM trim among them; XOM\'s 2026Q2 listed 1,305 rows) was left out, so flows walked by quarter were wrong. Both now take only the latest quarter any filer reports (today 2026Q3); another returns 400 quarter_incomplete_by_ticker. For past quarters use GET /v1/bulk/{quarter} or per-filer /v1/changes/{quarter}?filer=. Full past-quarter coverage by ticker, from every filing for that quarter, is due Nov 23, 2026.',
+      'Incident (Nov 9 to Nov 11 13:30 UTC): GET /v1/changes/{quarter}?ticker= (or cusip=) for a past quarter, and GET /v1/stocks/{stock}/holders?quarter= for one, listed only filers whose latest 13F is that quarter: everyone who has filed since (FMR\'s 2026Q2 XOM trim among them; XOM\'s 2026Q2 listed 1,305 rows) was left out, so flows walked by quarter were wrong. Both now take only the latest quarter any filer reports (today 2026Q3); another returns 400 quarter_incomplete_by_ticker. For past quarters use GET /v1/bulk/{quarter} or per-filer /v1/changes/{quarter}?filer=. Full past-quarter coverage by ticker, from every filing for that quarter, is due Mon Nov 30, 2026.',
       'Holders `counts.net` is the shares traded in USD (shares bought or sold x each filing\'s price) over `counts.net_quarter`, the latest quarter (or ?quarter=, the same latest quarter), and equals that quarter\'s /v1/changes?ticker= sum. `counts.net_by_period` sums the same by each filer\'s latest filing period: not quarterly flow for any quarter but the latest.',
       'Holder rows add `suspect_duplicate` {cusip, shares, value} when the same quarter\'s book also lists the security under a reissue\'s other CUSIP (IFP Advisors\' TEVA): one position is kept on the new code, and the stale line is out of every sum. Present only when the holder index carries such a line.',
       'Holders of a reissue merged at read time (TEVA until the data run publishes its merged index): a prior-quarter holder whose filer has since filed a newer 13F, and is in neither CUSIP\'s current rows, is listed apart in `data.pending[]` with `reason: "filed_newer_not_indexed"` and `counts.pending`, out of holders, the counts and net; `counts.exits_pending` stays true meanwhile. `counts.holders` counts share positions only, like `count`; calls and puts are `counts.option_rows`.',
       'Rate limits are per account (Copy Pro: 60 a minute and 20,000 a day across all its API keys; Copy Fund: the same per seat, the owner being one seat), not per key; a 429 says which (`scope`: account or seat) with `retry_after_seconds`. A bulk file download isn\'t metered, only the listing. Limits were briefly per key (each of up to 10 keys had its own); no member was affected.',
+      'Nov 19, 2026: date moved. Full past-quarter coverage by ticker is now due Mon Nov 30, 2026 (was Nov 23). Until a past quarter is covered, by-ticker requests for it keep answering 400 quarter_incomplete_by_ticker; quarters open one at a time as their builds complete.',
     ],
   },
   {
@@ -490,7 +493,7 @@ export const ERRORS = {
   server_error: 'Something went wrong on our side.',
   data_rebuilding: 'The stores this response reads are mid-rebuild (mixed builds); retry after the Retry-After seconds rather than read stale rows.',
   busy: 'The API is busy; retry after the Retry-After seconds.',
-  quarter_incomplete_by_ticker: "Past quarters by ticker aren't complete yet; use /v1/bulk/{quarter} or per-filer /v1/changes. Full coverage is due Nov 23, 2026.",
+  quarter_incomplete_by_ticker: "Past quarters by ticker aren't complete yet; use /v1/bulk/{quarter} or per-filer /v1/changes. Full coverage is due Mon Nov 30, 2026.",
 } as const;
 export type ErrorCode = keyof typeof ERRORS;
 
@@ -575,8 +578,8 @@ async function routeV1(req: Request, env: Env, url: URL, path: string): Promise<
     return v1json({ data: one }, 200, { 'cache-control': 'public, max-age=300' });
   }
   const pin = req.headers.get('copybook-schema-version');
-  // The per-class shape as an opt-in preview (the lead, Nov 11): served once the per-class files are built (Nov 21).
-  if (pin === PER_CLASS_PREVIEW.version) return v1error('bad_request', 400, `Copybook-Schema-Version ${pin} (per-class rows) is a preview available from Sat Nov 21, 2026, and the default from Mon Nov 23. Until then, omit the header for today's rows. See /v1/changelog?id=${SUMMED_PIN.changelog}.`);
+  // The per-class shape as an opt-in preview (the lead, Nov 11): served once the per-class files are built (Nov 23).
+  if (pin === PER_CLASS_PREVIEW.version) return v1error('bad_request', 400, `Copybook-Schema-Version ${pin} (per-class rows) is a preview available from Mon Nov 23, 2026, and the default from Wed Nov 25. Until then, omit the header for today's rows. See /v1/changelog?id=${SUMMED_PIN.changelog}.`);
   if (pin && !SCHEMA_VERSIONS.includes(pin)) return v1error('bad_request', 400, `Unknown Copybook-Schema-Version ${pin}; served versions: ${SCHEMA_VERSIONS.join(', ')}.`);
   // The cron sets a per-run SEC budget on this module; a request after it in the same isolate
   // must not inherit a spent one (filing lookups would fail).
@@ -622,7 +625,7 @@ async function routeV1(req: Request, env: Env, url: URL, path: string): Promise<
       res = new Response(body, res);
     }
     for (const [k, v] of Object.entries(limits)) res.headers.set(k, v);
-    // Holders and changes rows go per class on Nov 23: every client is warned until then, pinned ones until Feb 22.
+    // Holders and changes rows go per class on Nov 25: every client is warned until then, pinned ones until Feb 24.
     if (res.status === 200 && (/^\/v1\/stocks\/[^/]+\/holders$/.test(path) || /^\/v1\/changes\//.test(path))) {
       const n = perClassNotice(pin === SUMMED_PIN.version, PUBLIC_V1_BASE);
       if (n) for (const [k, v] of Object.entries(n.headers)) res.headers.set(k, v);

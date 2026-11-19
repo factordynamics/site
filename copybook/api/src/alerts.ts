@@ -1269,7 +1269,7 @@ export async function perShareMedians(env: Env, cusips: string[], quarter: strin
 }
 
 /**
- * Per-class moves (the lead, Nov 11; from ingest's schema-6 holder index, the Nov 21 data): for a filing with lines on
+ * Per-class moves (the lead, Nov 11; from ingest's schema-6 holder index, once ingest publishes it): for a filing with lines on
  * two or more CUSIPs of one issuer, the issuer's listed classes (held by 3+ filers this quarter) and their tickers.
  * Before schema 6 nothing is listed, so alerts read as they did.
  */
