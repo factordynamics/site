@@ -12,6 +12,8 @@ const PROBE = 'status/probe.json';
 const PROBE_MS = 10_000;
 /** A restart whose gap is under this and that a deploy explains is labelled `deploy` and left out of the unplanned count. */
 const DEPLOY_GAP_S = 60;
+/** Consecutive bad minute checks (failed, or the Worker answering as failover) before /status/ calls gene down. */
+export const GENE_DOWN_CHECKS = 3;
 
 interface ProbeState {
   /** Per UTC hour (YYYY-MM-DDTHH): [ok, checks], 8 days kept. */
@@ -30,6 +32,8 @@ interface ProbeState {
   fail_since?: string | null;
   /** gene's API down (a failed check, or the Worker answering as the failover): its first such check. */
   gene_down_since?: string | null;
+  /** The current run of bad checks for gene (failed, or answered by the Worker): its first check and its length. */
+  gene_bad?: { since: string; n: number } | null;
   restarts: Restart[];
 }
 
@@ -157,8 +161,12 @@ export function recordProbe(s: ProbeState, now: number, p: Probe): ProbeState {
   }
   // gene stays flagged while the Worker serves members in its place (the decisions thread, Nov 19: no guard on gene,
   // so a dead user manager can last days; the probe answering from the backup is not gene being up).
-  if (!p.ok || p.host === 'cloudflare') s.gene_down_since ??= iso(now);
-  else if (p.host === 'gene') s.gene_down_since = null;
+  // Flagged after GENE_DOWN_CHECKS bad minutes in a row, from the first of them: gene's single-minute 503s under disk
+  // stalls (52 on Nov 16-18, never two in a row) never flag it; a real outage shows within about 4 minutes.
+  if (!p.ok || p.host === 'cloudflare') {
+    s.gene_bad = s.gene_bad ? { ...s.gene_bad, n: s.gene_bad.n + 1 } : { since: iso(now), n: 1 };
+    if (s.gene_bad.n >= GENE_DOWN_CHECKS) s.gene_down_since ??= s.gene_bad.since;
+  } else if (p.host === 'gene') s.gene_down_since = s.gene_bad = null;
   s.last = { at: iso(now), ok: p.ok, ms: p.ms, up_since: p.up_since ?? s.last?.up_since ?? null, build: p.build ?? s.last?.build ?? null, host: p.host ?? s.last?.host ?? null };
   return s;
 }

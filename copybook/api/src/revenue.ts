@@ -163,60 +163,39 @@ export async function funnel(env: Env, now: number, days: number) {
 
 const secs = (n: number) => (n < 120 ? `${n} seconds` : `${Math.round(n / 60)} minutes`);
 const esc = (v: string) => v.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
-const FOUNDING: Record<string, string> = { pro: 'Your founding price stays at $39/month or $390/year for as long as you stay subscribed.', fund: 'Your founding price stays at $1,990/year for as long as you stay subscribed.' };
 
 /**
- * The Fund order terms: seats, the founding price lock, renewal, cancellation and /terms/. Every Fund customer's
+ * The Fund order terms: seats, the price, renewal, cancellation and /terms/. Every Fund customer's
  * invoices carry them in the footer (Stripe's customer default), and a net-30 invoice also in its memo.
  */
 export const fundTerms = (env: Env) =>
-  `Order terms: Copy Fund, up to ${SEAT_LIMIT} seats (manage them at ${env.SITE_URL}account/). Founding price $1,990 a year for up to ${SEAT_LIMIT} seats, whatever number are used, locked for as long as this subscription stays active. ` +
+  `Order terms: Copy Fund, up to ${SEAT_LIMIT} seats (manage them at ${env.SITE_URL}account/). Price $1,990 a year for up to ${SEAT_LIMIT} seats, whatever number are used. ` +
   `The service period is shown on the line item. Renews each year at that price until cancelled. Cancel any time from Manage billing; access runs to the end of the paid year, and partial years aren't refunded. If we discontinue the plan during a prepaid period, we refund the unused part pro rata. ` +
   `Invoices are payable within 30 days. Terms in force on the invoice date: ${env.SITE_URL}terms/`;
 
 /** A net-30 Fund invoice's memo (Stripe allows 500 characters; the full order terms are in the footer). */
-export const fundMemo = (env: Env) => `Copy Fund, up to ${SEAT_LIMIT} seats, founding price $1,990 a year, payable within 30 days. Full order terms below and at ${env.SITE_URL}terms/`;
+export const fundMemo = (env: Env) => `Copy Fund, up to ${SEAT_LIMIT} seats, $1,990 a year, payable within 30 days. Full order terms below and at ${env.SITE_URL}terms/`;
 /** Every Copybook invoice's footer ends with this (Stripe Tax is off). */
 export const TAX_LINE = 'Prices exclude applicable taxes. Copybook does not currently collect sales tax.';
-/** Subscriptions started before this keep their price while subscribed: their invoices say so. */
-/** Founding prices for new members through Jan 31, 2027 (decisions thread, roadmap rev 44); new prices from Feb 1. */
-export const FOUNDING_UNTIL = Date.parse('2027-02-01T00:00:00-05:00');
 /**
- * Pro and Fund only (/pricing/ promises Copy no founding price): "Founding price ($390/yr), kept while subscribed",
- * from the price's amount and interval. Null for Copy.
+ * Checkout's after-submit text for Pro and Fund: the tax line. Null for Copy. Pro and Fund have no founding offer (the
+ * lead, Nov 19: their prices aren't set to rise, so a deadline would be false urgency).
  */
-export function foundingLine(plan: string | null, cents: number | null | undefined, interval: string | null | undefined): string | null {
-  if (plan !== 'pro' && plan !== 'fund') return null;
-  const amt = cents ? `$${(cents / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}/${interval === 'year' ? 'yr' : 'mo'}` : null;
-  return `Founding price${amt ? ` (${amt})` : ''}, kept while subscribed`;
-}
-/** Checkout's after-submit text for Pro and Fund: the founding price with its deadline, then the tax line. Null for Copy. */
-export const checkoutNote = (plan: string, cents: number | null | undefined, interval: string | null | undefined) => {
-  const f = foundingLine(plan, cents, interval);
-  if (plan === 'copy') return null;
-  return `${f && Date.now() < FOUNDING_UNTIL ? `${f}; offer ends Jan 31. ` : ''}${TAX_LINE}`;
-};
+export const checkoutNote = (plan: string, _cents?: number | null, _interval?: string | null) => (plan === 'copy' ? null : TAX_LINE);
 const footerFor = (env: Env, plan: string | null) => (plan === 'fund' ? `${fundTerms(env)} ${TAX_LINE}` : TAX_LINE);
 
 /**
  * A Copybook customer's invoice defaults (Stripe's customer settings, on every later invoice): the footer (a Fund
- * customer's order terms, then the tax line), and the custom fields: "Price: Founding price, kept while subscribed"
- * when the subscription (metadata founding=true) started before Feb 1, 2027, and the Company and PO the buyer gave at
- * checkout. The subscription is tagged founding=true here. `sub`: the Stripe subscription; `extra`: checkout's fields.
+ * customer's order terms, then the tax line), and the custom fields: the Company and PO the buyer gave at checkout. `sub`: the Stripe subscription; `extra`: checkout's fields.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function ensureInvoiceTerms(env: Env, sub: any, plan: string | null, extra: { company?: string | null; po?: string | null; ap_email?: string | null } = {}): Promise<{ result: string; footer: string; fields: { name: string; value: string }[] }> {
   const customer = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id;
   if (!customer) return { result: 'no customer', footer: '', fields: [] };
-  // Copy has no founding price: its invoices carry no Price field (an existing one is removed below).
-  const pr = sub.items?.data?.[0]?.price ?? sub.plan;
-  const line = foundingLine(plan, pr?.unit_amount, pr?.recurring?.interval ?? pr?.interval);
-  const founding = !!line && (sub.metadata?.founding === 'true' || Number(sub.created ?? sub.start_date ?? 0) * 1000 < FOUNDING_UNTIL);
-  if (founding && sub.metadata?.founding !== 'true' && sub.id) await stripe(env, 'POST', `subscriptions/${sub.id}`, { 'metadata[founding]': 'true' });
+  // No plan's invoices carry a Price field any more (Pro and Fund have no founding offer); an existing one is removed below.
   const c = await stripe(env, 'GET', `customers/${customer}`);
   const had = (c.invoice_settings?.custom_fields ?? []) as { name: string; value: string }[];
   const want = [
-    ...(founding && line ? [{ name: 'Price', value: line }] : []),
     { name: 'PO', value: extra.po?.trim().slice(0, 140) || had.find((f) => f.name === 'PO')?.value || '' },
     { name: 'AP email', value: extra.ap_email?.trim().slice(0, 140) || had.find((f) => f.name === 'AP email')?.value || '' },
     // Invoiced (net-30) subscriptions say their terms in words, not only by the due date.
@@ -244,11 +223,10 @@ export async function fundInvoice(env: Env, email: string, name?: string, po?: s
   const customer: string = found?.id ?? (await stripe(env, 'POST', 'customers', { email, name, 'invoice_settings[footer]': footerFor(env, 'fund') })).id;
   const price = (await stripe(env, 'GET', 'prices', { 'lookup_keys[]': 'fund_yearly', active: true })).data?.[0];
   if (!price) throw new Error('no active fund_yearly price');
-  const founding = Date.now() < FOUNDING_UNTIL;
   const sub = await stripe(env, 'POST', 'subscriptions', { customer, 'items[0][price]': price.id, collection_method: 'send_invoice', days_until_due: 30, description: fundMemo(env),
     // Card or ACH Direct Debit on the hosted invoice page ("Pay online"): per-payment fees only, no bank details printed.
     'payment_settings[payment_method_types][0]': 'card',
-    'payment_settings[payment_method_types][1]': 'us_bank_account', 'metadata[copybook]': 'fund', ...(founding ? { 'metadata[founding]': 'true' } : {}) });
+    'payment_settings[payment_method_types][1]': 'us_bank_account', 'metadata[copybook]': 'fund' });
   const terms = await ensureInvoiceTerms(env, sub, 'fund', { company: name, po });
   let inv = await stripe(env, 'GET', `invoices/${sub.latest_invoice}`);
   // A draft takes the terms as its memo, and the customer's footer and fields (set after it was drafted); then it goes out now.
@@ -291,7 +269,7 @@ export type InvoiceTrialResult =
  * Copy Fund on a 14-day trial billed by invoice, no card and no approval (the /contact/?topic=fund form): the customer
  * with the company and billing address, a yearly Fund subscription with send_invoice, Net 30 and a 14-day trial; the
  * owner is signed up at once (the welcome email carries the sign-in link) and seats work. Day 14: Stripe issues the
- * invoice (founding price, Net 30, PO and AP email as fields). Unpaid at day 44: access pauses (sweepInvoiceTrials).
+ * invoice (Net 30, PO and AP email as fields). Unpaid at day 44: access pauses (sweepInvoiceTrials).
  * Cancelling before day 14 costs nothing. One per company domain; freemail refused.
  */
 export async function fundInvoiceTrial(env: Env, f: InvoiceTrialForm, now = Date.now()): Promise<InvoiceTrialResult> {
@@ -337,7 +315,6 @@ export async function fundInvoiceTrial(env: Env, f: InvoiceTrialForm, now = Date
       'metadata[source]': 'invoice_trial',
       ...(f.po ? { 'metadata[po]': f.po } : {}),
       ...(f.ap_email ? { 'metadata[ap_email]': f.ap_email } : {}),
-      ...(now < FOUNDING_UNTIL ? { 'metadata[founding]': 'true' } : {}),
       ...(/^copybook-test-/.test(email) ? { 'metadata[test]': 'invoice-trial' } : {}),
     });
     await ensureInvoiceTerms(env, sub, 'fund', { company: f.company, po: f.po ?? null, ap_email: f.ap_email ?? null });
@@ -492,7 +469,7 @@ export function trialEndingMail(env: Env, m: Member, s: MemberStats, funds: numb
   const yearly = m.interval === 'yearly';
   const cta = yearly ? `Keep ${p.name} (${money(p.year)}/year)` : `Keep ${p.name} yearly: ${money(p.year)}/year, ${monthsFree(p)}`;
   const charge = yearly ? `${money(p.year)}/year` : `${money(p.month)}/month`;
-  const founding = FOUNDING[m.plan] ? ` ${FOUNDING[m.plan]}` : '';
+  const founding: string = '';
   const ends = endAt(m.trial_end!);
   const pl = pauseLine(m, keep);
   // A no-card trial (Copy from Nov 11): it ends on its own, so the ask is to add a card, and doing nothing costs nothing.
@@ -703,7 +680,7 @@ export function seasonRecapMail(m: Member, st: MemberStats, sent: number, funds:
     ...(median != null ? [`Median time from EDGAR acceptance to inbox this season: ${secs(median)}`] : []),
   ];
   const cta = `Switch to yearly: ${money(p.year)}/year, ${monthsFree(p)}`;
-  const founding = FOUNDING[m.plan] ?? '';
+  const founding: string = '';
   return {
     to: m.email,
     subject: `Your ${season} filing season on Copybook, and yearly for ${monthsOf(p)}`,
@@ -856,7 +833,7 @@ export async function runRevenue(env: Env, now: number): Promise<Record<string, 
       // Billed by invoice: no card to add and nothing to keep; the notice says when the invoice comes and how to stop it.
       if (m.collection === 'send_invoice') {
         const ends = new Date((m.trial_end ?? 0) * 1000).toISOString().slice(0, 10);
-        mails.push({ to: m.email, subject: `Your Copy Fund invoice comes on ${ends}`, text: `Your Copy Fund trial ends on ${ends}. That day Stripe emails your invoice for ${money(PRICES.fund.year)} (the founding price, a year), payable within 30 days by card, ACH or bank transfer. Access continues meanwhile.
+        mails.push({ to: m.email, subject: `Your Copy Fund invoice comes on ${ends}`, text: `Your Copy Fund trial ends on ${ends}. That day Stripe emails your invoice for ${money(PRICES.fund.year)} (a year), payable within 30 days by card, ACH or bank transfer. Access continues meanwhile.
 
 Not going ahead? Cancel before ${ends} in your account and nothing is owed:
 ${env.SITE_URL}account/
@@ -1063,7 +1040,7 @@ export async function unpauseMember(env: Env, m: Member): Promise<{ status: numb
 const priceLine = (m: Member) => {
   const p = PRICES[m.plan];
   if (!p) return 'Your follows and settings are kept.';
-  return FOUNDING[m.plan] ? `Your follows and founding price are kept. ${FOUNDING[m.plan]}` : `Your follows and price (${m.interval === 'yearly' ? `${money(p.year)} a year` : `${money(p.month)} a month`}) are kept.`;
+  return `Your follows and price (${m.interval === 'yearly' ? `${money(p.year)} a year` : `${money(p.month)} a month`}) are kept.`;
 };
 
 /** The pause receipt: until when, no charges until then, what is kept, and the one-click resume. */

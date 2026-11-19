@@ -970,7 +970,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return json(await previewWeekly(env, String(b.email ?? '').trim().toLowerCase(), Date.now(), b.dry === true, b.postal === false ? false : typeof b.postal === 'string' ? b.postal.slice(0, 200) : undefined), 200, h);
   }
 
-  // Operator: a net-30 Copy Fund order (yearly, founding price); the invoice carries the order terms and is emailed.
+  // Operator: a net-30 Copy Fund order (yearly); the invoice carries the order terms and is emailed.
   if (req.method === 'POST' && path === '/ops/fund-invoice') {
     if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
     const b = await body(req);

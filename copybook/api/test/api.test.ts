@@ -1470,10 +1470,15 @@ describe('copybook api', () => {
     let f = { hours: {}, restarts: [] } as Parameters<typeof recordProbe>[0];
     const on = (host: string, since: string, build: string) => ({ ...up(since, build), host });
     f = recordProbe(f, min(0), on('gene', '2026-11-11T08:40:00Z', 'g1'));
+    // One bad minute (gene's 503 under a disk stall) never flags it; three in a row do, from the first.
+    let b = recordProbe({ hours: {}, restarts: [] } as Parameters<typeof recordProbe>[0], min(0), down);
+    b = recordProbe(b, min(1), on('gene', '2026-11-11T08:40:00Z', 'g1'));
+    expect(b.gene_down_since).toBeNull();
     f = recordProbe(f, min(1), down);
-    expect(f.gene_down_since).toBe(new Date(min(1)).toISOString().replace(/\.\d{3}Z$/, 'Z'));
+    expect(f.gene_down_since ?? null).toBeNull();
     f = recordProbe(f, min(2), down);
     f = recordProbe(f, min(3), on('cloudflare', '2026-11-11T10:02:50Z', 'w1'));
+    expect(f.gene_down_since).toBe(new Date(min(1)).toISOString().replace(/\.\d{3}Z$/, 'Z'));
     f = recordProbe(f, min(4), on('cloudflare', '2026-11-11T10:04:10Z', 'w1'));
     // The Worker answering is not gene being up: gene stays flagged down from its first failed check.
     expect([f.fail_since, (await buildStatus(env, min(4), f)).probe]).toEqual([null, expect.objectContaining({ api_host: 'cloudflare', gene_down_since: new Date(min(1)).toISOString().replace(/\.\d{3}Z$/, 'Z') })]);
@@ -1751,7 +1756,7 @@ describe('copybook api', () => {
     const posted = (p: string) => calls.find((c) => c.method === 'POST' && c.path === p)!.body;
     const footer = posted('customers').get('invoice_settings[footer]')!;
     // The order terms: the seats, the locked founding price, renewal and cancellation, net 30, and /terms/.
-    for (const s of ['Copy Fund, up to 10 seats', 'Founding price $1,990 a year for up to 10 seats, whatever number are used, locked for as long as this subscription stays active', 'Terms in force on the invoice date', 'Renews each year at that price until cancelled', 'Cancel any time from Manage billing', 'If we discontinue the plan during a prepaid period, we refund the unused part pro rata.', 'payable within 30 days', `${SITE}terms/`]) expect(footer).toContain(s);
+    for (const s of ['Copy Fund, up to 10 seats', 'Price $1,990 a year for up to 10 seats, whatever number are used.', 'Terms in force on the invoice date', 'Renews each year at that price until cancelled', 'Cancel any time from Manage billing', 'If we discontinue the plan during a prepaid period, we refund the unused part pro rata.', 'payable within 30 days', `${SITE}terms/`]) expect(footer).toContain(s);
     expect(posted('customers').get('email')).toBe('pm@fund.test');
     expect(Object.fromEntries(['customer', 'items[0][price]', 'collection_method', 'days_until_due', 'metadata[copybook]'].map((k) => [k, posted('subscriptions').get(k)]))).toEqual({ customer: 'cus_fund', 'items[0][price]': 'price_fund_yearly', collection_method: 'send_invoice', days_until_due: '30', 'metadata[copybook]': 'fund' });
     // The memo points to the order terms in the footer (Stripe refuses a memo over 500 characters); the footer adds the tax position.
@@ -1760,8 +1765,9 @@ describe('copybook api', () => {
     expect(footer).toMatch(/payable within 30 days\. Terms in force on the invoice date: \S+ Prices exclude applicable taxes\. Copybook does not currently collect sales tax\.$/);
     expect(posted('invoices/in_fund').get('footer')).toBe(footer);
     // The founding price, the company and the customer's PO print on the invoice (and on the customer's later ones).
-    expect([0, 1, 2].map((i) => [posted('invoices/in_fund').get(`custom_fields[${i}][name]`), posted('invoices/in_fund').get(`custom_fields[${i}][value]`)])).toEqual([['Price', 'Founding price, kept while subscribed'], ['PO', 'PO-7781'], ['Company', 'Example Capital']]);
-    expect(posted('subscriptions').get('metadata[founding]')).toBe('true');
+    expect([0, 1, 2].map((i) => [posted('invoices/in_fund').get(`custom_fields[${i}][name]`), posted('invoices/in_fund').get(`custom_fields[${i}][value]`)])).toEqual([['PO', 'PO-7781'], ['Company', 'Example Capital'], [null, null]]);
+    // Pro and Fund have no founding offer (the lead, Nov 19): no founding tag, no Price field, no "founding" in the terms.
+    expect([posted('subscriptions').get('metadata[founding]'), /founding/i.test(footer)]).toEqual([null, false]);
     expect(calls.map((c) => `${c.method} ${c.path}`).slice(-3)).toEqual(['POST invoices/in_fund', 'POST invoices/in_fund/finalize', 'POST invoices/in_fund/send']);
     vi.stubGlobal('fetch', orig);
   });
@@ -2193,12 +2199,10 @@ describe('copybook api', () => {
     expect((await call(true)).test_members).toBe(0);
   });
 
-  it('founding prices for Pro and Fund stay open through Jan 31, 2027 (ET), and close Feb 1', async () => {
+  it('Pro and Fund checkout carries no founding offer or deadline, only the tax line; Copy none', async () => {
     const { checkoutNote } = await import('../src/revenue');
-    vi.useFakeTimers({ toFake: ['Date'], now: Date.parse('2027-02-01T04:59:00Z') });
-    expect(checkoutNote('pro', 39000, 'year')).toMatch(/^Founding price \(\$390\/yr\), kept while subscribed; offer ends Jan 31\. /);
-    vi.setSystemTime(Date.parse('2027-02-01T05:00:00Z'));
-    expect(checkoutNote('pro', 39000, 'year')).not.toMatch(/Founding/);
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.parse('2027-01-15T12:00:00Z') });
+    expect([checkoutNote('pro', 39000, 'year'), checkoutNote('fund', 199000, 'year'), checkoutNote('copy', 7900, 'year')]).toEqual(['Prices exclude applicable taxes. Copybook does not currently collect sales tax.', 'Prices exclude applicable taxes. Copybook does not currently collect sales tax.', null]);
     vi.useRealTimers();
   });
 
@@ -5850,9 +5854,9 @@ describe('copybook api', () => {
     expect(sent[0].subject).toBe('Your Q3 2026 filing season on Copybook, and yearly for the price of 10 months of monthly'); // the pricing page's words, no dollar figure
     expect(sent[0].text).toContain('Copybook sent you 41 alerts. Our median time from EDGAR acceptance to your inbox this season was 70 seconds.');
     expect(sent[0].text).toContain('Copy Pro monthly: $468 a year. Yearly is $390');
-    // One button to the same portal confirm page as the trial's day 11, with the founding price.
+    // One button to the same portal confirm page as the trial's day 11; Pro has no founding price to mention.
     expect(sent[0].text).toMatch(/Switch to yearly: \$390\/year, the price of 10 months of monthly, price locked \(you see the amount and confirm on the next page\): https:\/\/\S+\/keep\?t=/);
-    expect(sent[0].text).toContain('Your founding price stays at $39/month or $390/year');
+    expect(sent[0].text).not.toMatch(/founding/i);
     expect(sent[0].html).toContain('Switch to yearly: $390/year, the price of 10 months of monthly, price locked</a>');
     sent = [];
     await cron(12, Date.UTC(2026, 10, 19, 15, 12));

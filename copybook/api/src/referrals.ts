@@ -6,7 +6,7 @@
  * with an amount above zero), once per referred customer.
  */
 import { FOOTER, sendMail } from './email';
-import { checkoutNote, FOUNDING_UNTIL } from './revenue';
+import { checkoutNote } from './revenue';
 import { isActive, testAddress, type Env, type Member } from './env';
 import { claim, FOUNDING_PRICE_UNTIL, getMember, memberByEmail } from './members';
 import { stripe } from './stripe';
@@ -194,9 +194,8 @@ export async function createCheckout(env: Env, b: Record<string, unknown>, clien
     // Copy: what the cardless trial means, on the main panel by the button (the trader and retail, Nov 11).
     // A returning Copy member (one trial per person, the lead, Nov 12): no trial, said plainly by the button.
     'custom_text[submit][message]': plan === 'fund' ? FUND_SUBMIT : plan === 'copy' && !gate && trial ? copySubmit(Date.now()) : plan === 'copy' && !gate ? (Date.now() < FOUNDING_PRICE_UNTIL ? COPY_BACK : COPY_BACK_LATER) : 'Copybook is made by Factor Dynamics.',
-    // Pro and Fund: the founding price (amount and deadline) and the tax line. Copy: neither.
+    // Pro and Fund: the tax line. Copy: none.
     ...(checkoutNote(plan, price.unit_amount, price.recurring?.interval) ? { 'custom_text[after_submit][message]': checkoutNote(plan, price.unit_amount, price.recurring?.interval)! } : {}),
-    ...(plan !== 'copy' && Date.now() < FOUNDING_UNTIL ? { 'subscription_data[metadata][founding]': 'true' } : {}),
     // Pro and Fund: what a company's accounts team needs on the invoice.
     ...(plan === 'copy' ? {} : CHECKOUT_BUYER(plan)),
   });
