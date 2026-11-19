@@ -185,8 +185,8 @@ page(
         <table>
           <thead><tr><th>Product</th><th>Free</th><th>Paid</th></tr></thead>
           <tbody>
-            <tr><td><a href="/products/copybook/">Copybook</a></td><td>Browse every 13F</td><td>Copy $9/mo or $79/yr (founding price through Jan 31, 2027)<br />Pro $39/mo or $390/yr<br />Fund $199/mo or $1,990/yr, up to 10 seats</td></tr>
-            <tr><td><a href="/products/holdterm/">Holdterm</a></td><td>Browse the investors</td><td>Alerts $3/mo or $29/yr</td></tr>
+            <tr><td><a href="/products/copybook/">Copybook</a></td><td>Browse every 13F</td><td>Copy $9/mo or $79/yr, founding price through Jan 31, 2027; then $12/mo or $99/yr for new members<br />Pro $39/mo or $390/yr<br />Fund $199/mo or $1,990/yr, up to 10 seats</td></tr>
+            <tr><td><a href="/products/holdterm/">Holdterm</a></td><td>Browse the investors</td><td>Holdterm alerts $3/mo or $29/yr, 7-day free trial</td></tr>
             <tr><td><a href="/products/insiders/">Insiders</a> ${tag('Coming')}</td><td>Not yet available</td><td>Not set</td></tr>
             <tr><td><a href="/products/filings/">Filings</a> ${tag('Coming')}</td><td>Not yet available</td><td>Not set</td></tr>
           </tbody>
@@ -270,7 +270,9 @@ code{font:13px ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}
   .top nav{margin-left:0;width:100%;gap:16px}
   .menu{position:static}
   .top{position:relative}
-  .menu-panel{left:12px;right:12px;width:auto;grid-template-columns:1fr;gap:6px}
+  .menu-panel{left:12px;right:12px;width:auto;grid-template-columns:1fr;gap:6px;box-shadow:0 16px 40px rgb(12 14 19/.25)}
+  /* Open on a phone: dim the page behind the panel so it reads as a menu, not as page content. */
+  .menu[open] summary::before{content:"";position:fixed;inset:0;z-index:9;background:rgb(12 14 19/.45);cursor:default}
   .hero{padding-top:36px}
   .lede{font-size:16.5px}
 }
