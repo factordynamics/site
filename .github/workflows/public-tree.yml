@@ -1,0 +1,16 @@
+name: Public tree check
+
+# The repository is public: fail any push or pull request whose tree holds operator runbooks or host setup.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  no-runbooks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash .github/scripts/no-runbooks.sh

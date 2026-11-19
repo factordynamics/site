@@ -1,7 +1,0 @@
-[Unit]
-Description=Copybook API watchdog and auto-deploy from factordynamics/site main
-
-[Service]
-Type=oneshot
-ExecStart=%h/copybook-api/ops/update.sh
-TimeoutStartSec=600

@@ -1,8 +1,0 @@
-[Unit]
-Description=Copybook h/ push to Cloudflare R2, hourly at :17
-
-[Timer]
-OnCalendar=*-*-* *:17:00
-
-[Install]
-WantedBy=timers.target
