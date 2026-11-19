@@ -78,6 +78,9 @@ const readDist = (...p) => {
 }
 const seasonData = readDist('d', 'season.json')
 const built = seasonData?.generated_at ?? index.generated_at ?? new Date().toISOString()
+// /season/feed.xml: one Atom entry per tracked fund's 13F for the quarter now filing (filled in the investor loop).
+const FEED_Q = seasonData?.quarter ?? index.managers.filter((m) => m.ok && m.quarter).map((m) => m.quarter).sort().at(-1)
+const feed = []
 
 function redirect(file, to) {
   writeFileSync(
@@ -161,7 +164,7 @@ page('why/', 'Why you cancelled · Copybook', 'Tell us why you cancelled Copyboo
         `<p>${link(`season/${sd.quarter.toLowerCase()}/`, `${sq} 13F recap`)} · ${link('flow/', 'Smart money flow')} · ${link('investors/', 'All investors')}</p>`,
       )
     : ''
-  page('season/', title, desc, ld({ '@type': 'Article', headline: title, description: desc, image: season?.url, url: `${SITE}season/`, dateModified: built, publisher: ORG, author: ORG, isBasedOn: EDGAR, mainEntityOfPage: `${SITE}season/` }), season?.url, body)
+  page('season/', title, desc, `\n    <link rel="alternate" type="application/atom+xml" title="Copybook: ${qLabel(FEED_Q)} 13F filings" href="${SITE}season/feed.xml" />` + ld({ '@type': 'Article', headline: title, description: desc, image: season?.url, url: `${SITE}season/`, dateModified: built, publisher: ORG, author: ORG, isBasedOn: EDGAR, mainEntityOfPage: `${SITE}season/` }), season?.url, body)
 }
 page('for-funds/', 'Copybook for investment teams: My book, peer overlap and 13F alerts · Copy Fund', 'See who owns what you own across every 13F filer, compare your book with your peers, and get filings in Slack, checked on EDGAR every minute. Ten seats, invoiced annually.')
 page('for-quants/', 'Copybook API for quants: 13F, Form 4 and 13D/G as JSON · Copy Pro', 'Every 13F filer’s latest holdings as JSON, with the EDGAR accession and acceptance time of every filing; holders by stock, Form 4 and 13D/G events and bulk CSV files. From $39/month.')
@@ -236,6 +239,7 @@ for (const m of index.managers) {
     .slice(0, 3)
     .map((h) => `${h.display_name ?? tc(h.issuer)} ${((h.weight ?? 0) * 100).toFixed(1)}%`)
   const title = investorTitle({ who, quarter: m.quarter, value: total, positions: count })
+  if (m.quarter === FEED_Q && m.accession && m.filing_date) feed.push({ m, name: firm !== who ? `${who} (${firm})` : who, total, count })
   const topRows = (longs ?? [])
     .slice()
     .sort((x, y) => y.value - x.value)
@@ -423,3 +427,37 @@ for (const [slug, to] of Object.entries(X_LINKS)) {
   writeFileSync(join(dist, 'x', slug, 'index.html'), html)
 }
 console.log(`wrote ${n} investor pages`)
+
+// The Atom feed: SEC EDGAR data only, newest acceptance first, each entry linking the fund's page (utm_source=feed).
+{
+  const when = (m) => m.accepted_at ?? `${m.filing_date}T00:00:00Z`
+  feed.sort((a, b) => when(b.m).localeCompare(when(a.m)))
+  const x = (v) => esc(String(v ?? '')).replace(/>/g, '&gt;')
+  const entries = feed.map(({ m, name, total, count }) => {
+    const what = `${qLabel(m.quarter)} 13F${/\/A$/.test(m.form ?? '') ? ' amendment' : ''}`
+    const url = `${SITE}investors/${m.slug}/?utm_source=feed&utm_medium=atom`
+    return `  <entry>
+    <id>tag:${new URL(SITE).host},2026:13f:${x(m.accession)}:${x(m.slug)}</id>
+    <title>${x(`${name} filed its ${what}`)}</title>
+    <updated>${x(when(m))}</updated>
+    <link rel="alternate" type="text/html" href="${x(url)}"/>
+    ${m.sec_url ? `<link rel="related" type="text/html" title="The filing on SEC EDGAR" href="${x(m.sec_url)}"/>` : ''}
+    <summary>${x(`${name}: the ${what}${total ? `, ${usd(total)} across ${num(count)} positions` : ''}, filed ${dayLabel(m.filing_date)} (accession ${m.accession}). From SEC EDGAR.`)}</summary>
+  </entry>`
+  })
+  const xml = `<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <id>${SITE}season/feed.xml</id>
+  <title>${x(`Copybook: ${qLabel(FEED_Q)} 13F filings by the funds we track`)}</title>
+  <subtitle>Each tracked fund's 13F as it is filed with the SEC, from EDGAR.</subtitle>
+  <updated>${x(feed.length ? when(feed[0].m) : built)}</updated>
+  <link rel="self" type="application/atom+xml" href="${SITE}season/feed.xml"/>
+  <link rel="alternate" type="text/html" href="${SITE}season/"/>
+  <author><name>Copybook</name><uri>${SITE}</uri></author>
+${entries.join('\n')}
+</feed>
+`
+  mkdirSync(join(dist, 'season'), { recursive: true })
+  writeFileSync(join(dist, 'season', 'feed.xml'), xml)
+  console.log(`season/feed.xml: ${feed.length} entries`)
+}
