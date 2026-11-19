@@ -30,6 +30,10 @@ export type StockHolder = {
   /** Lines ingest held out of this row (data's held_lines) and the grey line saying so, as filed. */
   held_lines?: HeldLine[]
   held_note?: string | null
+  /** Ingest's merged_misfiled: last quarter was filed under filed_cusip and matched to this stock (counted). */
+  cusip_pair?: string | null
+  filed_cusip?: string | null
+  merge_note?: string | null
   /** A position over several share classes (scripts/stocks.mjs, once ingest's hl/ carries classes[]): one entry per
    *  class with its own trade; a held class has held_reason and no delta_value. */
   classes?: ShareClassLine[]
@@ -340,9 +344,10 @@ const named = <T extends { manager: string }>(x: T) => ({ ...x, manager: display
 const settle = (h: StockHolder): StockHolder => {
   const f = flagOf(h)
   const held_note = heldLinesNote(h.held_lines)
-  if (!f) return { ...named(h), held_note }
+  const merge_note = h.cusip_pair === 'merged_misfiled' ? `Last quarter was filed under ${h.filed_cusip ?? 'another CUSIP'} at common’s price; treated as common` : null
+  if (!f) return { ...named(h), held_note, merge_note }
   const known = h.change === 'new' || h.change === 'exited' || (f !== 'both' && h.change !== ('unknown' as string))
-  return { ...named(h), held_note, flag: f, note: flagNote(h), change: known ? h.change : null, delta_value: 0 }
+  return { ...named(h), held_note, merge_note, flag: f, note: flagNote(h), change: known ? h.change : null, delta_value: 0 }
 }
 export const loadStock = (t: string) =>
   getJSON<Stock>(`${D}stocks/${encodeURIComponent(t)}.json${fresh()}`).then((s) => {

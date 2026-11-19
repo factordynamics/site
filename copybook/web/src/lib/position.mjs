@@ -27,6 +27,9 @@ export function addLine(p, h) {
   if (h.value_basis && h.value_basis !== 'filed') p.value_basis = h.value_basis
   // Lines ingest held out of a counted row (Crosslink CRM 2026Q3: a $4.44 line beside the real one), shown as filed.
   if (h.held_lines?.length) (p.held_lines ??= []).push(...h.held_lines)
+  // Last quarter filed under a sibling note or preferred CUSIP and matched to this one (ingest's merged_misfiled,
+  // Mizuho ORCL): counted, and marked on every surface with the CUSIP it was filed under.
+  if (h.cusip_pair === 'merged_misfiled') p.merged_from ??= h.filed_cusip ?? h.prev_cusip ?? ''
   return p
 }
 
@@ -45,6 +48,7 @@ export const positionFlags = (p) => ({
   ...(p.price_outlier ? { price_outlier: true } : {}),
   ...(p.value_basis ? { value_basis: p.value_basis } : {}),
   ...(p.held_lines ? { held_lines: p.held_lines } : {}),
+  ...(p.merged_from != null ? { cusip_pair: 'merged_misfiled', filed_cusip: p.merged_from || null } : {}),
 })
 
 /** A position over several share classes (BRK.A and BRK.B, GOOGL and GOOG), the way ingest's hl/ rows carry it

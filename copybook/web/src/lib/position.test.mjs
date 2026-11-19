@@ -83,3 +83,12 @@ test('a held class keeps its facts and reason but no dollars; the position count
   const sleeve = classPosition([A, { ticker: null, cusip: '02079K404', shares: 0, prev_shares: 0, value: 43390000, value_delta: 43390000 }], true)
   assert.deepEqual([sleeve.delta_value, sleeve.classes[1].held_reason], [-5657815870, 'zero_shares'])
 })
+
+test('a merged_misfiled line is counted and keeps the CUSIP last quarter was filed under', () => {
+  // Mizuho ORCL 2026Q3: Q2 filed under the note CUSIP 68389X204 at common's price, matched to 68389X105.
+  const p = addLine(newPosition(true), { cusip: '68389X105', shares: 165927, value: 21041266, prev_shares: 132845, prev_value: 16000000, cusip_pair: 'merged_misfiled', filed_cusip: '68389X204', prev_cusip: '68389X105' })
+  assert.equal(positionMove(p).change, 'added')
+  assert.ok(positionMove(p).delta_value > 0)
+  assert.deepEqual(positionFlags(p), { cusip_pair: 'merged_misfiled', filed_cusip: '68389X204' })
+  assert.deepEqual(positionFlags(addLine(newPosition(true), { cusip: '68389X105', shares: 1, value: 1, prev_shares: 1, prev_value: 1 })), {})
+})

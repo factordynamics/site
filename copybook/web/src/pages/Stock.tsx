@@ -514,8 +514,9 @@ export function StockPage() {
                       <Monogram name={h.manager} size={24} />
                       <span className="min-w-0 max-w-[7.75rem] truncate font-medium sm:max-w-[22rem]">{h.manager}</span>
                       <QuarterTag q={h.quarter} fresh={multi && h.quarter === d!.quarters[0]} />
+                      {h.merge_note && <Badge className="shrink-0">merged CUSIP</Badge>}
                     </Link>
-                    {[h.note, h.held_note].filter(Boolean).map((t) => (
+                    {[h.note, h.held_note, h.merge_note].filter(Boolean).map((t) => (
                       <span key={t} className="mt-0.5 block pl-[34px] text-[12px] leading-snug text-ink-3">
                         {t}
                       </span>
@@ -640,8 +641,9 @@ function HolderRow({ h, fresh }: { h: StockHolder; fresh: boolean }) {
           <span className="flex items-center gap-1.5 text-[12px] text-ink-3">
             <span className="truncate">{pct(h.weight)} of portfolio</span>
             <QuarterTag q={h.quarter} fresh={fresh} />
+            {h.merge_note && <Badge className="shrink-0">merged CUSIP</Badge>}
           </span>
-          {[h.note, h.held_note].filter(Boolean).map((t) => (
+          {[h.note, h.held_note, h.merge_note].filter(Boolean).map((t) => (
             <span key={t} className="block text-[12px] leading-snug text-ink-3">
               {t}
             </span>
