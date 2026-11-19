@@ -937,6 +937,60 @@ class DebtPairTest(unittest.TestCase):
         finally:
             build.CONSENSUS.clear()
 
+    def test_misfiled_merge_keeps_its_marker_through_the_cached_book(self):
+        # Mizuho Securities USA (EDGAR): Q1 0001062993-26-002466 holds the commons; Q2/A 0001062993-26-003864 files them
+        # under sibling codes (ORCL 68389X204 ...); Q3 0001062993-26-006147 under the commons again. Each run reads the
+        # previous run's h/{slug}/{q}.json back as the book. The Q2 merge is stored under the common with cusip_as_filed;
+        # before as_filed a re-diff dropped it, so Q3 matched a plain common and lost the marker (live Nov 19: ORCL, SO,
+        # SMCI, AKAM null; WEC and ON, whose Q1 also held the note, kept it).
+        import tempfile
+        from pathlib import Path
+        from ingest import build
+        med = {"68389X105": (147.1, 146.55, 137.3), "86800U302": (22.77, 29.33, 41.07), "842587107": (96.52, 95.71, 82.89),
+               "00971T101": (114.85, 118.21, 106.35), "92939U106": (115.77, 116.77, 100.78),
+               "682189105": (61.92, 94.54, 76.87)}
+        for c, px in med.items():
+            build.CONSENSUS.update({(q, c): v for q, v in zip(("2026Q1", "2026Q2", "2026Q3"), px)})
+        r = lambda c, sh, v, st="SH": {"issuer": c, "title": "COM", "cusip": c, "ticker": None, "value": v, "shares": sh,
+                                       "put_call": None, "shares_type": st, "weight": 0}
+        q1 = [r("00971T101", 8697, 998850), r("682189AU9", 4323000, 4193310, "PRN"), r("682189105", 23820, 1474934),
+              r("68389X105", 102513, 15080687), r("842587107", 66567, 6425047), r("86800U302", 30418, 692618),
+              r("92939UAP1", 32754000, 39261761, "PRN"), r("92939U106", 19676, 2277891)]
+        q2 = [r("68389X204", 132845, 19468435), r("86800UAD6", 44001, 1290549), r("842587DZ7", 88255, 8446886),
+              r("00971TAN1", 11382, 1345466), r("92939UAP1", 25501, 2977752), r("682189AU9", 30682, 2900676)]
+        q3 = [r("68389X105", 141127, 21041266), r("86800U302", 45941, 1712680), r("842587107", 93938, 8262174),
+              r("00971T101", 11728, 1273895), r("92939U106", 26607, 2824865), r("682189105", 31779, 2354506)]
+        book = lambda q, rd, acc, hs: {"quarter": q, "report_date": rd, "accession": acc, "filing_key": acc,
+                                       "format": build.CACHE_FORMAT, "form": "13F-HR", "filing_date": rd,
+                                       "total_value": sum(h["value"] for h in hs), "holdings": hs,
+                                       "filings": [{"accession": acc, "role": "base", "form": "13F-HR",
+                                                    "filing_date": rd, "accepted_at": rd + "T12:00:00Z"}]}
+        keys = ("0001062993-26-006147", "0001062993-26-003864", "0001062993-26-002466")
+        m = {"slug": "mizuho-securities-usa-llc", "manager": "Mizuho Securities USA", "cik": "0000812291", "ok": True,
+             "history": [book("2026Q3", "2026-09-30", keys[0], q3), book("2026Q2", "2026-06-30", keys[1], q2),
+                         book("2026Q1", "2026-03-31", keys[2], q1)]}
+        data, hist = build.DATA, build.HIST
+        try:
+            with tempfile.TemporaryDirectory() as d:
+                build.DATA, build.HIST = Path(d), Path(d) / "h"
+                for _ in range(3):  # three runs, each on the books the run before stored
+                    build.write_history(m | {"holdings": m["history"][0]["holdings"]})
+                    cache = build.cached_quarters()
+                    m["history"] = [build.fix_cached(cache[k]) for k in keys]
+                    rows = {x["cusip"]: x for x in build.manager_json(m | {"holdings": m["history"][0]["holdings"]})
+                            ["holdings"] if x["change"] != "exited"}
+                    self.assertEqual({c: (x.get("cusip_pair"), x.get("prev_cusip")) for c, x in rows.items()},
+                                     {"68389X105": ("merged_misfiled", "68389X204"),
+                                      "86800U302": ("merged_misfiled", "86800UAD6"),
+                                      "842587107": ("merged_misfiled", "842587DZ7"),
+                                      "00971T101": ("merged_misfiled", "00971TAN1"),
+                                      "92939U106": ("merged_misfiled", "92939UAP1"),
+                                      "682189105": ("merged_misfiled", "682189AU9")})
+                    self.assertEqual(rows["68389X105"]["prev_shares"], 132845)
+        finally:
+            build.DATA, build.HIST = data, hist
+            build.CONSENSUS.clear()
+
     def test_note_beside_common_is_not_a_cusip_change(self):
         from ingest import build
         build.CONSENSUS.update({("2026Q2", "92939UAP1"): 1.02, ("2026Q3", "92939U106"): 95.0})
