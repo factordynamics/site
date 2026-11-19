@@ -172,7 +172,7 @@ export function ForFunds() {
         title="Know who owns what you own."
         sub={`Your book next to every 13F filer: who holds your names, how crowded they are, and how the funds you benchmark against are positioned. ${FUND_SEATS} seats, shared lists, one team channel in Slack, and an annual invoice.`}
         cta={cta}
-        note="Founding price $1,990/yr for teams that subscribe before Dec 31, kept for as long as you stay. Invoiced net 30; W-9 available once our entity details are published. Prepaid and protected: pro-rata refund if we ever discontinue the plan. Prices exclude applicable taxes. Copybook does not currently collect sales tax."
+        note="Founding price $1,990/yr, kept for as long as you stay. Invoiced net 30; W-9 available once our entity details are published. Prepaid and protected: pro-rata refund if we ever discontinue the plan. Prices exclude applicable taxes. Copybook does not currently collect sales tax."
       />
 
       <Facts items={[[`${filers}`, '13F filers covered, the latest filing of each'], median != null
@@ -297,7 +297,7 @@ export function ForQuants() {
         title="13F, Form 4 and 13D/G, as clean JSON."
         sub="Every 13F filer’s latest holdings, aggregated by CUSIP, with the EDGAR accession and acceptance time on every filing."
         cta={cta}
-        note={`${trialTerms('pro')} Founding price: subscribe before Dec 31 and keep $39/mo ($390/yr) for as long as you stay.`}
+        note={`${trialTerms('pro')} Founding price: $39/mo ($390/yr), kept for as long as you stay.`}
       />
 
       <Facts items={[[filers, '13F filers in /v1, the latest filing of each'], ['8 quarters', HISTORY_EXACT], ['To the second', 'EDGAR acceptance time on every filing']]} />

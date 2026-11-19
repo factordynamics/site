@@ -32,7 +32,7 @@ const asSentence = (s: string) => s.charAt(0).toUpperCase() + s.slice(1) + (/[.!
 type StatusFile = {
   generated_at?: string
   alerts_13f?: { state: 'ok' | 'amber'; reasons?: string[]; notes?: string[]; pending_moves?: number; oldest_pending_seconds?: number | null; held_rows?: number; reset_queue?: number }
-  probe?: { target?: string; interval_seconds?: number; last_at?: string; last_ok?: boolean; down_since?: string | null; '24h'?: Window; '7d'?: Window; daily?: (Window & { day: string })[] }
+  probe?: { target?: string; interval_seconds?: number; last_at?: string; last_ok?: boolean; down_since?: string | null; api_host?: 'gene' | 'cloudflare'; gene_down_since?: string | null; '24h'?: Window; '7d'?: Window; daily?: (Window & { day: string })[] }
   /** 13F alerts waiting on the API machine's moves fallback; the wait counts from EDGAR acceptance. */
   moves_queue?: { pending: number; oldest_wait_seconds: number | null; last_fallback_send_at?: string | null } | null
   freshness?: { data_built_at?: string; last_13f?: { manager: string; accepted_at: string } | null; backup_takeover?: { at?: string; cloudflare_last_run_at?: string; seconds?: number | null } | null }
@@ -278,7 +278,9 @@ export function Status() {
       </>
     ) : null
 
-  const apiTone: Tone = checking ? 'wait' : h ? 'up' : 'down'
+  // Set from the main server's first failed check until it answers again, even while the backup serves members (d94b7f6).
+  const geneDown = st.data?.probe?.gene_down_since ?? null
+  const apiTone: Tone = checking ? 'wait' : h ? (geneDown ? 'warn' : 'up') : 'down'
   const degraded = (h?.degraded ?? []).map((d) => (typeof d === 'string' ? d : [d.route ?? d.path, d.note ?? d.status].filter(Boolean).join(': ')))
 
   const overall: { tone: Tone; text: string } = checking
@@ -289,6 +291,8 @@ export function Status() {
         ? { tone: 'down', text: 'Member pages and the API are unavailable. Filing alerts still go out.' }
         : pollerTone === 'down' || alertsTone === 'warn'
           ? { tone: 'warn', text: 'Filing alerts are delayed' }
+          : apiTone === 'warn'
+            ? { tone: 'warn', text: 'Main server down; members are on the backup' }
           : degraded.length
             ? { tone: 'warn', text: 'Some API routes are degraded' }
             : lagS != null && dataTone === 'warn'
@@ -323,13 +327,14 @@ export function Status() {
             </div>
           ) : (
             <>
-              <Row name="Member API" tone={apiTone} state={h ? `Up · answered in ${pr!.ms} ms` : 'Not answering'}>
+              <Row name="Member API" tone={apiTone} state={h ? `${geneDown ? 'Up on the backup' : 'Up'} · answered in ${pr!.ms} ms` : 'Not answering'}>
                 {/* No host or tunnel names here: /status/ is linked from replies. API users find the address on /api/. */}
-                A self-hosted machine{h?.api_up_since ? `, running since ${utc(h.api_up_since)}` : ''}. API users: the documented address is on{' '}
+                A self-hosted machine{h?.api_up_since && !geneDown ? `, running since ${utc(h.api_up_since)}` : ''}. API users: the documented address is on{' '}
                 <Link to="/api/" className="font-medium text-accent hover:text-accent-2">
                   /api/
                 </Link>
                 .
+                {geneDown ? ` Our main server has been down since ${utc(geneDown)}; members are served by the backup.` : ''}
                 {st.data?.probe?.down_since ? ` Cloudflare’s minute check has failed since ${utc(st.data.probe.down_since)}.` : ''}
               </Row>
               <Row

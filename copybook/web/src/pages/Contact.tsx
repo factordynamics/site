@@ -126,7 +126,7 @@ export function Contact() {
             <>
               <p className="mt-4 text-[17px] leading-relaxed text-ink-2">Copy Fund is everything in Pro for up to {FUND_SEATS} seats at a flat price: each seat signs in on its own, and the team shares one book, watchlist and peer list. The API, signed webhooks and Slack alerts are included.</p>
               <ul className="mt-6 space-y-2.5 text-[15px] text-ink-2">
-                {['Founding price $1,990/yr for teams that subscribe before Dec 31, kept for as long as you stay subscribed', 'Invoiced yearly, net 30', 'W-9 available once our entity details are published', 'Your uploaded book stays private to your team', 'Prices exclude applicable taxes. Copybook does not currently collect sales tax.'].map((x) => (
+                {['Founding price $1,990/yr, kept for as long as you stay subscribed', 'Invoiced yearly, net 30', 'W-9 available once our entity details are published', 'Your uploaded book stays private to your team', 'Prices exclude applicable taxes. Copybook does not currently collect sales tax.'].map((x) => (
                   <li key={x} className="flex gap-2.5">
                     <Check className="mt-1 shrink-0 text-accent" /> {x}
                   </li>
