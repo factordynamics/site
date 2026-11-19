@@ -5,7 +5,7 @@
 #  - Publishes the base to https://pub-c691ec38c5cd4db6acb8e6bfef337500.r2.dev/api.json, which the Cloudflare Worker reads
 #    to find gene (src/index.ts movedBase). Neither front end reads it or names a tunnel: both call the Worker's stable
 #    name (Copybook c5ed8ee, Holdterm 2026-11-16), so nothing here commits to main any more.
-#  - Emails CONTACT_EMAIL when the tunnel URL changes, when the tunnel is down for 2+ minutes, and when it recovers.
+#  - Emails CONTACT_EMAIL when anything listens on port 22 (a rule; Funnel tcp 8443 forwards there), when the tunnel URL changes, when the tunnel is down for 2+ minutes, and when it recovers.
 set -uo pipefail
 ROOT=$HOME/copybook-api
 FUNNEL=https://gene.tail70ba3.ts.net/copybook
@@ -22,8 +22,19 @@ alert() { # subject, text
   local body
   body=$(python3 -I -c 'import json,sys;print(json.dumps({"from":"Copybook <copybook@factordynamics.com>","to":["hello@factordynamics.com"],"subject":sys.argv[1],"text":sys.argv[2]}))' "$1" "$2")
   curl -sf -m 20 -X POST https://api.resend.com/emails -H "Authorization: Bearer $RESEND_API_KEY" -H 'content-type: application/json' -d "$body" -o /dev/null \
-    && log "alert sent: $1" || log "alert FAILED: $1"
+    && log "alert sent: $1" || { log "alert FAILED: $1"; return 1; }   # nonzero, so a once-only alert retries
 }
+
+# Rule (decisions thread, Nov 19): nothing may ever listen on gene's port 22. Funnel's tcp://gene.tail70ba3.ts.net:8443
+# forwards there, so a listener would be reachable from the internet. Alerts once per occurrence, and again when clear.
+P22=$ROOT/state.port22-alerted
+l22=$(ss -Hltn "sport = :22" 2>/dev/null | awk '{print $4}' | tr '\n' ' ')
+if [ -n "$l22" ]; then
+  log "port 22 has a listener: $l22"
+  [ -e "$P22" ] || { alert "gene: something listens on port 22" "Rule: nothing may ever listen on gene's port 22. Listening now: $l22. Tailscale Funnel forwards tcp://gene.tail70ba3.ts.net:8443 to localhost:22, so it is reachable from the internet. Stop that listener (root), or turn the forward off: sudo tailscale funnel --tcp=8443 off. See ~/copybook-api/ops/ROOT-STEPS.md." && touch "$P22"; }
+elif [ -e "$P22" ]; then
+  rm -f "$P22"; log "port 22 clear again"; alert "gene: port 22 clear again" "Nothing listens on gene's port 22 any more."
+fi
 
 url=$(journalctl --user -u copybook-tunnel -n 400 --no-pager -o cat | grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' | tail -1)
 now=$(date +%s)
