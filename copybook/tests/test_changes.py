@@ -1080,3 +1080,35 @@ class RefetchDiffTest(unittest.TestCase):
         self.assertEqual(([n for _, n, _ in changed], len(held)), (["mizuho"], 1))
         self.assertEqual(gate.refetch_diff([("mizuho", live, traded | {"filing_key": "A|C"}),
                                             ("mizuho", live, traded | {"format": 5})]), ([], []))
+
+
+class CuratedLagTest(unittest.TestCase):
+    def q(self, acc, reason="unreadable"):
+        return {"slug": "robert-olstein", "behind": "2026Q1", "quarter": "2026Q2", "report_date": "2026-06-30",
+                "reason": reason, "accession": acc, "error": "TimeoutError: timed out"}
+
+    def test_one_unreadable_filing_warns_and_counts_its_runs(self):
+        from ingest.gate import lag_check
+        blocking, warned, streaks = lag_check([self.q("0000894189-26-021028")], {})
+        self.assertEqual((blocking, len(warned), streaks), ([], 1, {"0000894189-26-021028": 1}))
+        self.assertIn("TimeoutError", warned[0])
+        # The second run in a row still warns; a filing read fine since drops out of the streaks.
+        blocking, warned, streaks = lag_check([self.q("0000894189-26-021028")], {"0000894189-26-021028": 1, "x": 2})
+        self.assertEqual((blocking, len(warned), streaks), ([], 1, {"0000894189-26-021028": 2}))
+
+    def test_the_third_unreadable_run_in_a_row_blocks(self):
+        from ingest.gate import lag_check
+        blocking, warned, _ = lag_check([self.q("0000894189-26-021028")], {"0000894189-26-021028": 2})
+        self.assertEqual((len(blocking), warned), (1, []))
+
+    def test_more_than_three_unreadable_in_one_run_block(self):
+        from ingest.gate import lag_check
+        self.assertEqual(len(lag_check([self.q(f"a-{i}") for i in range(3)], {})[0]), 0)
+        blocking, warned, _ = lag_check([self.q(f"a-{i}") for i in range(4)], {})
+        self.assertEqual((len(blocking), warned), (4, []))
+
+    def test_a_filing_never_loaded_for_another_reason_still_blocks(self):
+        from ingest.gate import lag_check
+        blocking, warned, _ = lag_check([self.q("b-1", reason="missing"), self.q("b-2")], {})
+        self.assertEqual((len(blocking), len(warned)), (1, 1))
+        self.assertIn("missing", blocking[0])

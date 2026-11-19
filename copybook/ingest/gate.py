@@ -483,6 +483,30 @@ def refetch_diff(pairs: list[tuple[str, dict, dict]], refetched_only: bool = Tru
     return sorted(changed, reverse=True), held
 
 
+# curated_lag (lead, Nov 19): a tracked fund's newer 13F-HR that was fetched but came back unreadable warns and is
+# retried next run; it blocks once the same accession is unreadable in UNREADABLE_RUNS runs in a row, or when more than
+# UNREADABLE_MAX are unreadable in one run. Any other reason a newer filing wasn't loaded still blocks.
+UNREADABLE_RUNS, UNREADABLE_MAX = 3, 3
+
+
+def lag_check(lag: list[dict], streaks: dict[str, int]) -> tuple[list[str], list[str], dict[str, int]]:
+    """lag: [{slug, quarter, behind, reason, accession, error}] for newer quarters not loaded; streaks: accession ->
+    consecutive published runs it was unreadable (live unreadable_streaks.json). Returns (blocking, warned, streaks
+    for this run)."""
+    text = lambda q: f"{q['slug']} {q['behind']} < {q['quarter']} ({q['reason']} {q.get('accession') or ''})"
+    bad = [q for q in lag if q["reason"] == "unreadable" and q.get("accession")]
+    now = {q["accession"]: (streaks.get(q["accession"]) or 0) + 1 for q in bad}
+    blocking = [text(q) for q in lag if q not in bad]
+    if len(bad) > UNREADABLE_MAX:
+        blocking += [text(q) + f" [{len(bad)} unreadable this run, over {UNREADABLE_MAX}]" for q in bad]
+        return blocking, [], now
+    blocking += [text(q) + f" [unreadable {now[q['accession']]} runs in a row]" for q in bad
+                 if now[q["accession"]] >= UNREADABLE_RUNS]
+    warned = [text(q) + f" [unreadable {now[q['accession']]} of {UNREADABLE_RUNS}; {q.get('error') or 'no error'}]"
+              for q in bad if now[q["accession"]] < UNREADABLE_RUNS]
+    return blocking, warned, now
+
+
 def main() -> int:
     data = Path(sys.argv[1])
     rev = sys.argv[2] if len(sys.argv) > 2 else "HEAD"
@@ -527,10 +551,18 @@ def main() -> int:
     if broken:
         print(f"::error::index.json breaks the API contract (alert routing): {'; '.join(broken[:20])}; not publishing.")
         failed = True
-    lagging = [f"{m['slug']} {m.get('quarter')} < {q['quarter']} ({q['reason']} {q.get('accession') or ''})"
-               for m in index.get("managers") or [] for q in m.get("skipped_quarters") or []
-               if q["report_date"] > (m.get("report_date") or "") and q["reason"] not in ("empty", "notice")]
-    gate("curated_lag", "Tracked funds current", "A tracked fund has a newer 13F-HR on EDGAR that this build did not load.", NO_PUBLISH, lagging, lagging[:10])
+    lag = [{"slug": m["slug"], "behind": m.get("quarter"), **q} for m in index.get("managers") or []
+           for q in m.get("skipped_quarters") or []
+           if q["report_date"] > (m.get("report_date") or "") and q["reason"] not in ("empty", "notice")]
+    lagging, warned, streaks = lag_check(lag, (live("unreadable_streaks.json") or {}).get("streaks") or {})
+    (data / "unreadable_streaks.json").write_text(json.dumps({"streaks": streaks}, separators=(",", ":")) + "\n")
+    if warned:
+        print(f"::warning::curated_lag: unreadable this run, retried next run: {'; '.join(warned[:20])}", flush=True)
+        summary = os.environ.get("GITHUB_STEP_SUMMARY")
+        if summary:
+            with open(summary, "a") as f:
+                f.write(f"### Unreadable tracked-fund filings, warned ({len(warned)})\n\n" + "".join(f"- {w}\n" for w in warned) + "\n")
+    gate("curated_lag", "Tracked funds current", "A tracked fund has a newer 13F-HR on EDGAR that this build did not load (an unreadable one blocks after 3 runs in a row, or when more than 3 are unreadable in one run).", NO_PUBLISH, lagging, lagging[:10])
     if lagging:
         print(f"::error::Curated funds behind a newer 13F-HR on EDGAR that was not loaded: {'; '.join(lagging[:20])}; "
               f"not publishing.")

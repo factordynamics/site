@@ -1593,7 +1593,10 @@ def ingest() -> dict:
                     history.append(loaded | {"status": "filed"})
                 except Exception as inner:
                     last_error = str(inner)
-                    skipped.append(gap | {"reason": "unreadable"})
+                    # The error, so gate.py's run summary says why EDGAR's read failed (timeout, 5xx, truncated body).
+                    print(f"  unreadable {slug} {gap['quarter']} {gap['accession']}: {type(inner).__name__}: {inner}"[:300],
+                          flush=True)
+                    skipped.append(gap | {"reason": "unreadable", "error": f"{type(inner).__name__}: {inner}"[:200]})
                     continue
             via, gaps, extra = notice_periods(cik, metas, notices, cache)
             for i, q in enumerate(history):  # quarters both filers filed: the fund's book is the sum
