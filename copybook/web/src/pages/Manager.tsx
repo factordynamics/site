@@ -73,7 +73,7 @@ export function ManagerPage() {
   // (it needs a prior quarter to compare with).
   const card = f && ((acc && !f.filer && f.prev_quarter ? acc : undefined) ?? cards.data?.get(f.slug) ?? (acc && cardSet.data?.has(acc) ? acc : undefined))
 
-  // Every line left out of the totals and moves: flagged share, option and exited rows, and lines ingest held out of a
+  // Every line left out of buys, sells and moves (its value stays in the portfolio total): flagged share, option and exited rows, and lines ingest held out of a
   // counted row. One list and one count drive the "N lines … not counted" button, the table's heading and its filter
   // (PM, Nov 11: the button said 11 while the list showed 9 on Mizuho).
   const notCounted = useMemo(() => {
@@ -344,7 +344,7 @@ export function ManagerPage() {
             <p className="text-[13px] text-ink-3">
               {held ? (
                 <>
-                  {notCountedN.toLocaleString('en-US')} {notCountedN === 1 ? 'line' : 'lines'} left out of the totals and moves, as filed, each with its reason ·{' '}
+                  {notCountedN.toLocaleString('en-US')} {notCountedN === 1 ? 'line' : 'lines'} left out of buys, sells and moves; their value still counts in the portfolio total. As filed, each with its reason ·{' '}
                   <button type="button" onClick={() => setHeld(false)} className="font-medium text-accent hover:text-accent-2">
                     Show all holdings
                   </button>
