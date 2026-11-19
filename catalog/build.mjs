@@ -185,7 +185,7 @@ page(
         <table>
           <thead><tr><th>Product</th><th>Free</th><th>Paid</th></tr></thead>
           <tbody>
-            <tr><td><a href="/products/copybook/">Copybook</a></td><td>Browse every 13F</td><td>Copy $9/mo or $79/yr, founding price through Jan 31, 2027; then $12/mo or $99/yr for new members<br />Pro $39/mo or $390/yr<br />Fund $199/mo or $1,990/yr, up to 10 seats</td></tr>
+            <tr><td><a href="/products/copybook/">Copybook</a></td><td>Browse every 13F</td><td><ul class="plans"><li><b>Copy</b> $9/mo or $79/yr, founding price through Jan 31, 2027; then $12/mo or $99/yr for new members</li><li><b>Pro</b> $39/mo or $390/yr</li><li><b>Fund</b> $199/mo or $1,990/yr, up to 10 seats</li></ul></td></tr>
             <tr><td><a href="/products/holdterm/">Holdterm</a></td><td>Browse the investors</td><td>Holdterm alerts $3/mo or $29/yr, 7-day free trial</td></tr>
             <tr><td><a href="/products/insiders/">Insiders</a> ${tag('Coming')}</td><td>Not yet available</td><td>Not set</td></tr>
             <tr><td><a href="/products/filings/">Filings</a> ${tag('Coming')}</td><td>Not yet available</td><td>Not set</td></tr>
@@ -258,6 +258,7 @@ h3{font-size:16px;margin:0 0 4px}
 .why{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px;margin:48px 0 0;padding:24px 0;border-top:1px solid var(--line)}
 .why p{margin:0;color:var(--ink-2);font-size:15px}
 .plain{padding-left:20px;color:var(--ink-2)}.plain li{margin:6px 0}
+.plans{list-style:none;margin:0;padding:0}.plans li+li{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}
 .table{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:14px}
 table{border-collapse:collapse;width:100%;font-size:15px}
 th,td{text-align:left;vertical-align:top;padding:12px 14px;border-bottom:1px solid var(--line)}
@@ -272,7 +273,7 @@ code{font:13px ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}
   .top{position:relative}
   .menu-panel{left:12px;right:12px;width:auto;grid-template-columns:1fr;gap:6px;box-shadow:0 16px 40px rgb(12 14 19/.25)}
   /* Open on a phone: dim the page behind the panel so it reads as a menu, not as page content. */
-  .menu[open] summary::before{content:"";position:fixed;inset:0;z-index:9;background:rgb(12 14 19/.45);cursor:default}
+  .menu[open] summary::before{content:"";position:fixed;inset:0;z-index:9;background:rgb(12 14 19/.5);cursor:default}
   .hero{padding-top:36px}
   .lede{font-size:16.5px}
 }
