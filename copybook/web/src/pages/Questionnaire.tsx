@@ -6,7 +6,7 @@ import { HOSTING, OUTAGES, SUBPROCESSORS, VENDOR } from '../lib/hosting'
 
 // /security/questionnaire/: the questions a fund's vendor review asks, answered from the same lines as
 // /security/ and /for-funds/ (lib/hosting), so a fact changes in one place. Printable as a PDF.
-const AS_OF = 'November 11, 2026'
+const AS_OF = 'November 19, 2026'
 const a = (to: string, label: string) => (
   <Link to={to} className="font-medium text-accent hover:text-accent-2">
     {label}
@@ -47,7 +47,7 @@ const SECTIONS: [string, [string, ReactNode][]][] = [
     'Access',
     [
       ['Who can access customer data today?', HOSTING.accessParts.find(([h]) => h === 'Today')?.[1]],
-      ['What changes on Nov 17, 2026?', HOSTING.accessParts.find(([h]) => h === 'From Nov 17')?.[1]],
+      ['What is planned but not done?', HOSTING.accessParts.find(([h]) => h === 'Planned, not done')?.[1]],
       ['Known limits', HOSTING.accessParts.find(([h]) => h === 'Limits')?.[1]],
       ['What else runs on the machine?', HOSTING.shared],
       ['Use of AI and model providers', HOSTING.accessParts.find(([h]) => h === 'AI providers')?.[1]],
@@ -62,11 +62,11 @@ const SECTIONS: [string, [string, ReactNode][]][] = [
       ['Encryption in transit and at rest', HOSTING.encryption],
       ['Access logging', HOSTING.logging],
       ['Controls in place today', ul(VENDOR.today)],
-      ['Controls from Nov 17, 2026', ul(VENDOR.nov17)],
+      ['Planned controls, not in place yet', ul(VENDOR.planned)],
       ['Change management', 'Code changes are made and deployed by the maintenance agents without per-deploy founder review. Every API deploy is logged on the status page with its build, and every website build shows its commit in the page footer.'],
       ['Penetration testing', 'None performed.'],
       // Not claimed until the founder confirms it (PM, Nov 11).
-      ['MFA on admin accounts (GitHub, Cloudflare, Stripe, Amp)', 'Being confirmed by the founder; answer by Nov 17.'],
+      ['MFA on admin accounts (GitHub, Cloudflare, Stripe, Amp)', 'Not confirmed.'],
     ],
   ],
   [

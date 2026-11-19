@@ -98,13 +98,13 @@ function VendorSummary() {
         <h3 id="vendor-summary" className="text-[17px] font-semibold tracking-[-0.01em]">
           Vendor summary
         </h3>
-        <p className="text-[12.5px] text-ink-3">As of Nov 11, 2026</p>
+        <p className="text-[12.5px] text-ink-3">As of Nov 19, 2026</p>
       </div>
       <dl className="mt-4 divide-y divide-line">
         {row('What we hold', VENDOR.holds)}
         {row('Public anyway', VENDOR.publicBook)}
         {row('Controls today', list(VENDOR.today))}
-        {row('From Nov 17, 2026', list(VENDOR.nov17))}
+        {row('Planned, not done', list(VENDOR.planned))}
         {row('What we don’t have', <><span className="font-medium text-ink">{VENDOR.noCert}</span> {VENDOR.training}</>)}
         {row('If the founder is unreachable', VENDOR.founder)}
         {row('Legal entity', 'Details to be published.')}
