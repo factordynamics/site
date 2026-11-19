@@ -28,6 +28,8 @@ interface ProbeState {
   api_mail?: Kinds | null;
   /** The first failed check of the current outage. */
   fail_since?: string | null;
+  /** gene's API down (a failed check, or the Worker answering as the failover): its first such check. */
+  gene_down_since?: string | null;
   restarts: Restart[];
 }
 
@@ -153,6 +155,10 @@ export function recordProbe(s: ProbeState, now: number, p: Probe): ProbeState {
     }
     s.fail_since = null;
   }
+  // gene stays flagged while the Worker serves members in its place (the decisions thread, Nov 19: no guard on gene,
+  // so a dead user manager can last days; the probe answering from the backup is not gene being up).
+  if (!p.ok || p.host === 'cloudflare') s.gene_down_since ??= iso(now);
+  else if (p.host === 'gene') s.gene_down_since = null;
   s.last = { at: iso(now), ok: p.ok, ms: p.ms, up_since: p.up_since ?? s.last?.up_since ?? null, build: p.build ?? s.last?.build ?? null, host: p.host ?? s.last?.host ?? null };
   return s;
 }
@@ -252,6 +258,10 @@ export async function buildStatus(env: Env, now: number, s: ProbeState) {
       last_ok: s.last?.ok ?? null,
       last_ms: s.last?.ms ?? null,
       down_since: s.fail_since ?? null,
+      // Who answered the last check (gene, or cloudflare: the Worker serving members as the failover), and since when
+      // gene's own API has been down (null while it answers).
+      api_host: s.last?.host ?? null,
+      gene_down_since: s.gene_down_since ?? null,
       '24h': uptime(s, now, 24),
       '7d': uptime(s, now, 168),
       daily,

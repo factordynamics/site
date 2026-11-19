@@ -179,7 +179,8 @@ export const fundMemo = (env: Env) => `Copy Fund, up to ${SEAT_LIMIT} seats, fou
 /** Every Copybook invoice's footer ends with this (Stripe Tax is off). */
 export const TAX_LINE = 'Prices exclude applicable taxes. Copybook does not currently collect sales tax.';
 /** Subscriptions started before this keep their price while subscribed: their invoices say so. */
-export const FOUNDING_UNTIL = Date.parse('2026-12-31T00:00:00-05:00');
+/** Founding prices for new members through Jan 31, 2027 (decisions thread, roadmap rev 44); new prices from Feb 1. */
+export const FOUNDING_UNTIL = Date.parse('2027-02-01T00:00:00-05:00');
 /**
  * Pro and Fund only (/pricing/ promises Copy no founding price): "Founding price ($390/yr), kept while subscribed",
  * from the price's amount and interval. Null for Copy.
@@ -193,14 +194,14 @@ export function foundingLine(plan: string | null, cents: number | null | undefin
 export const checkoutNote = (plan: string, cents: number | null | undefined, interval: string | null | undefined) => {
   const f = foundingLine(plan, cents, interval);
   if (plan === 'copy') return null;
-  return `${f && Date.now() < FOUNDING_UNTIL ? `${f}; offer ends Dec 31. ` : ''}${TAX_LINE}`;
+  return `${f && Date.now() < FOUNDING_UNTIL ? `${f}; offer ends Jan 31. ` : ''}${TAX_LINE}`;
 };
 const footerFor = (env: Env, plan: string | null) => (plan === 'fund' ? `${fundTerms(env)} ${TAX_LINE}` : TAX_LINE);
 
 /**
  * A Copybook customer's invoice defaults (Stripe's customer settings, on every later invoice): the footer (a Fund
  * customer's order terms, then the tax line), and the custom fields: "Price: Founding price, kept while subscribed"
- * when the subscription (metadata founding=true) started before Dec 31, and the Company and PO the buyer gave at
+ * when the subscription (metadata founding=true) started before Feb 1, 2027, and the Company and PO the buyer gave at
  * checkout. The subscription is tagged founding=true here. `sub`: the Stripe subscription; `extra`: checkout's fields.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

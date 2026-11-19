@@ -80,7 +80,7 @@ export const CHANGELOG: { id: string; date: string; shipped_at?: string; schema_
     breaking: false,
     status: 'shipped',
     changes: [
-      'The documented /v1 base (the spec\'s servers URL) is https://copybook-api.factordynamics.workers.dev, and every absolute URL a /v1 response or webhook carries (Link headers, /v1/bulk URLs, changelog links) uses it, whichever host the request came in on. Requests to the earlier base keep working. It moves to api.factordynamics.com when that host goes live, with a changelog entry.',
+      'The documented /v1 base (the spec\'s servers URL) is https://copybook-api.factordynamics.workers.dev, and every absolute URL a /v1 response or webhook carries (Link headers, /v1/bulk URLs, changelog links) uses it, whichever host the request came in on. Requests to the earlier base keep working.',
     ],
   },
   {

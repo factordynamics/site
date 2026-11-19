@@ -1471,10 +1471,14 @@ describe('copybook api', () => {
     const on = (host: string, since: string, build: string) => ({ ...up(since, build), host });
     f = recordProbe(f, min(0), on('gene', '2026-11-11T08:40:00Z', 'g1'));
     f = recordProbe(f, min(1), down);
+    expect(f.gene_down_since).toBe(new Date(min(1)).toISOString().replace(/\.\d{3}Z$/, 'Z'));
     f = recordProbe(f, min(2), down);
     f = recordProbe(f, min(3), on('cloudflare', '2026-11-11T10:02:50Z', 'w1'));
     f = recordProbe(f, min(4), on('cloudflare', '2026-11-11T10:04:10Z', 'w1'));
+    // The Worker answering is not gene being up: gene stays flagged down from its first failed check.
+    expect([f.fail_since, (await buildStatus(env, min(4), f)).probe]).toEqual([null, expect.objectContaining({ api_host: 'cloudflare', gene_down_since: new Date(min(1)).toISOString().replace(/\.\d{3}Z$/, 'Z') })]);
     f = recordProbe(f, min(5), on('gene', '2026-11-11T10:03:30Z', 'g1'));
+    expect(f.gene_down_since).toBeNull();
     expect(f.restarts).toEqual([{ at: '2026-11-11T10:03:30Z', prev_up_since: '2026-11-11T08:40:00Z', down_seconds: 120, kind: 'unplanned', build: 'g1', prev_build: 'g1' }]);
     expect(f.failures?.map((x) => x.at)).toEqual([new Date(min(2)).toISOString().replace(/\.\d{3}Z$/, 'Z'), new Date(min(1)).toISOString().replace(/\.\d{3}Z$/, 'Z')]);
     expect(s.restarts.map((r) => [r.at, r.kind, r.down_seconds])).toEqual([
@@ -2187,6 +2191,15 @@ describe('copybook api', () => {
     await call(false);
     expect([await env.DB.get('cus:cus_et1'), await env.DB.get('email:copybook-test-et@fldubai.com'), !!(await env.DB.get('cus:cus_er1')), !!(await env.DB.get('cus:probe-latency'))]).toEqual([null, null, true, true]);
     expect((await call(true)).test_members).toBe(0);
+  });
+
+  it('founding prices for Pro and Fund stay open through Jan 31, 2027 (ET), and close Feb 1', async () => {
+    const { checkoutNote } = await import('../src/revenue');
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.parse('2027-02-01T04:59:00Z') });
+    expect(checkoutNote('pro', 39000, 'year')).toMatch(/^Founding price \(\$390\/yr\), kept while subscribed; offer ends Jan 31\. /);
+    vi.setSystemTime(Date.parse('2027-02-01T05:00:00Z'));
+    expect(checkoutNote('pro', 39000, 'year')).not.toMatch(/Founding/);
+    vi.useRealTimers();
   });
 
   it('latency rows from before the moves tag are re-timed once from the day stores', async () => {
