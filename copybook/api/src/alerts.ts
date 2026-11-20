@@ -2899,7 +2899,9 @@ export async function runEventPoll(env: Env, now: number): Promise<Record<string
   }
   if (!candidates.length || !rawHandled) return { status: 'none', ...(errors.length ? { errors } : {}) };
   const handled = JSON.parse(rawHandled) as string[];
-  const todo = candidates.filter(([acc]) => !handled.includes(acc)).slice(0, EVENTS_PER_MINUTE);
+  // Oldest first, so a burst drains in order and no filing waits behind newer ones (Nov 16: T. Rowe's 92 13G/As).
+  const waiting = candidates.filter(([acc]) => !handled.includes(acc)).sort(([, a], [, b]) => Date.parse(a[0].accepted) - Date.parse(b[0].accepted));
+  const todo = waiting.slice(0, EVENTS_PER_MINUTE);
   if (!todo.length) return { status: 'none', ...(errors.length ? { errors } : {}) };
 
   const fresh: AlertEvent[] = [];
@@ -3012,6 +3014,16 @@ export async function runEventPoll(env: Env, now: number): Promise<Record<string
     if (eventAlertable(ev, now) || ev.details_pending) fresh.push(ev);
   }
   await env.DB.put('events:handled', JSON.stringify(handled.slice(-1000)));
+  // What this minute saw but couldn't take (the per-minute cap, or SEC budget spent on 13Fs) waits in missed:queue,
+  // which every poll reads: in a burst the feed's 2 pages move on within minutes, and without this a filing came back
+  // only when the missed-filing detector found it 10 to 40 minutes later (Nov 16 p90 about 38 min).
+  const left = waiting.filter(([acc]) => !handled.includes(acc));
+  if (left.length) {
+    const queue = await missedQueue(env);
+    const inQueue = new Set(queue.map((e) => e.accession));
+    const add = left.filter(([acc]) => !inQueue.has(acc)).flatMap(([, es]) => es.map((e) => ({ ...e, detected_at: (e as Partial<Missed>).detected_at ?? detectedAt })));
+    if (add.length) await env.DB.put('missed:queue', JSON.stringify([...queue, ...add].slice(-300)));
+  }
   if (pending.length) await env.DB.put('events:pending', JSON.stringify([...(JSON.parse((await env.DB.get('events:pending')) ?? '[]') as string[]), ...pending].slice(-200)));
   const sent = await deliver(env, [], fresh, now);
   const live = fresh.filter((e) => !isLate(e, now) && !e.cluster);

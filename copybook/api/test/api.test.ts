@@ -4776,6 +4776,30 @@ describe('copybook api', () => {
     expect(sent).toHaveLength(0);
   });
 
+  it('event burst: what a minute sees past its cap waits in the queue, oldest first, even once the feed has moved on', async () => {
+    index = { managers: [{ ok: true, slug: 'warren-buffett', cik: '0001067983', manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', featured: true, form: '13F-HR', accession: 'q2', report_date: '2026-06-30', filing_date: '2026-08-14', quarter: '2026Q2' }] };
+    await cron(17);
+    const t = new Date();
+    t.setUTCHours(t.getUTCHours() === 3 ? 4 : t.getUTCHours(), 1, 0, 0);
+    const at = (min: number) => cron(0, t.getTime() + (min - 1) * 60_000);
+    const iso = (sec: number) => new Date(t.getTime() - sec * 1000).toISOString();
+    const entry = (acc: string, when: string) => `<entry><title>SCHEDULE 13G/A - BERKSHIRE (0001067983) (Filed by)</title><updated>${when}</updated><category scheme="https://www.sec.gov/" label="form type" term="SCHEDULE 13G/A"/><id>urn:tag:sec.gov,2008:accession-number=${acc}</id></entry>`;
+    await at(1); // seeds the polls
+    // 20 of a curated filer's 13G/As in one minute, newest first as EDGAR lists them (acc 0 is the oldest).
+    const acc = (i: number) => `0001067983-26-9${String(i).padStart(5, '0')}`;
+    secFiles['feed:SCHEDULE 13'] = `<feed>${Array.from({ length: 20 }, (_, i) => entry(acc(19 - i), iso(60 - (19 - i)))).join('')}</feed>`;
+    await at(2);
+    const handled = async () => JSON.parse((await env.DB.get('events:handled'))!) as string[];
+    const first = (await handled()).filter((a) => a.startsWith('0001067983-26-9'));
+    expect(first).toEqual(Array.from({ length: 8 }, (_, i) => acc(i)));
+    // The next minutes' feed has moved on: none of the burst is listed any more.
+    secFiles['feed:SCHEDULE 13'] = '<feed></feed>';
+    await at(3);
+    await at(4);
+    expect((await handled()).filter((a) => a.startsWith('0001067983-26-9')).sort()).toEqual(Array.from({ length: 20 }, (_, i) => acc(i)));
+    expect(JSON.parse((await env.DB.get('missed:count')) ?? '0')).toBe(0);
+  });
+
   it('minute event poll: Form 4 per class from a curated filer, any filer\'s 13D/A on an owned stock with the change, unread filings alerted at once and completed later', async () => {
     const today = new Date().toISOString().slice(0, 10);
     index = { managers: [{ ok: true, slug: 'warren-buffett', cik: '0001067983', manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', featured: true, form: '13F-HR', accession: 'q2', report_date: '2026-06-30', filing_date: '2026-08-14', quarter: '2026Q2' }, { ok: true, slug: 'carl-icahn', cik: '0000921669', manager: 'Carl Icahn', name: 'Icahn Carl C', featured: true, form: '13F-HR', accession: 'q2i', report_date: '2026-06-30', filing_date: '2026-08-14', quarter: '2026Q2' }] };
