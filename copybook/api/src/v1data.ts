@@ -889,20 +889,12 @@ function countsOf(rows: any[]) {
  */
 /** Ingest's `funds` in hl/index.json: CUSIP6s whose lines are separate funds (VanEck 92189F), each fund's own CUSIP and ticker. */
 let FUNDS: { at: number; funds: Record<string, { cusip: string; ticker: string | null }[]>; tickers: Record<string, string> } | null = null;
-/**
- * Codes ingest's funds listed (Nov 20) that SEC's Official 13(f) List (2026Q3) reads as one company: share classes
- * (Alphabet CAP STK CL A/C, Berkshire CL A/CL B NEW, Fox CL A/CL B COM) or common with its options, warrants, rights or
- * preferred (AMZN, BA, WFC, OXY). One filer's title reading as a fund listed the whole code. Served as before: the
- * summed row with classes[], as pinned clients get it, until per-class serving or ingest's rule excludes them.
- */
-const NOT_FUNDS = new Set(['011532', '023135', '025537', '025816', '02079K', '035710', '040413', '053015', '084670', '097023', '19247L', '23834J', '35137L', '38964R', '389930', '674599', '683712', '68989M', '75134P', '76655K', '83601L', '896438', '949746', '98421M', 'M8216R']);
 async function hlIndex(env: Env): Promise<NonNullable<typeof FUNDS>> {
   if (!FUNDS || Date.now() - FUNDS.at > 600_000) {
     const d = (await fetch(`${env.DATA_URL}hl/index.json`, { cf: { cacheTtl: 600 } } as RequestInit)
       .then((r) => (r.ok ? r.json() : null))
       .catch(() => null)) as { funds?: Record<string, { cusip: string; ticker: string | null }[]>; tickers?: Record<string, string> } | null;
-    const funds = d?.funds ? Object.fromEntries(Object.entries(d.funds).filter(([code]) => !NOT_FUNDS.has(code))) : null;
-    FUNDS = { at: Date.now(), funds: funds ?? FUNDS?.funds ?? {}, tickers: d?.tickers ?? FUNDS?.tickers ?? {} };
+    FUNDS = { at: Date.now(), funds: d?.funds ?? FUNDS?.funds ?? {}, tickers: d?.tickers ?? FUNDS?.tickers ?? {} };
   }
   return FUNDS;
 }
@@ -925,10 +917,6 @@ export function fundRows(raw: any[], cusip: string): any[] {
     return [{ ...rest, cusip: want, ticker: e.ticker ?? r.ticker ?? null, put_call: e.put_call ?? null, prev_cusip: e.prev_cusip ?? null, shares: e.shares, prev_shares: e.prev_shares, value: e.value, prev_value: e.prev_value, change: e.change, value_delta: e.value_delta, value_delta_basis: e.value_delta_basis, unreliable: e.unreliable, price_outlier: e.price_outlier, weight: typeof r.weight === 'number' && r.value ? (r.weight * Number(e.value)) / Number(r.value) : r.weight }];
   });
 }
-
-// Single foreign companies (ADS, registered or ordinary shares beside their options: TSM 874039, BABA 01609W, SONY
-// 835699, ASML N07059) that ingest's funds listed from its Nov 20 16:00Z run: one company each, kept on the summed row.
-for (const c of '00215W 01609W 023111 03938L 04016X 042068 05501U 055622 059460 07725L 090040 09073Q 09075V 194693 204409 20441B 26853E 29446M 33611D 36165L 36168Q 37733W 43289P 450047 45257L 45258D 456788 45857P 47737L 47759T 48138M 50202M 52490G 53229C 53620U 583435 59564R 636274 64110W 653656 654503 654902 66987V 67010L 71654V 72651A 732908 74638P 780259 78392B 80105N 81141R 817323 835699 861012 86366E 874039 874080 87936R 88034P 88429K 892331 89677Q 89686D 89977P 90138A 91531W 91822M 91912E 92837L 92857W 973921 98370X 98372W 98390R 98422D 98423X 984245 985915 988740 98945L 98980A D18190 G16252 G39387 G5214E H17182 H5919C H8817H M74240 N07059'.split(' ')) NOT_FUNDS.add(c);
 
 export async function holdersOf(env: Env, code: string, timing: string[] = [], ticker: string | null = null): Promise<{ issuer: string; tickers: string[]; display_name: string | null; period: string | null; prev_period: string | null; counts: Record<string, unknown> | null; counts_current?: Record<string, unknown> | null; rows: HolderRow[]; pending?: (HolderRow & { reason: 'filed_newer_not_indexed' })[]; truncated: boolean; stamp?: Stamp; source: 'hl' | 's' | 'public' } | null> {
   let t = Date.now();
