@@ -11,7 +11,7 @@ const WORKER = 'https://copybook-api.factordynamics.workers.dev'
 type State = { kind: 'idle' | 'sending' | 'error' } | { kind: 'done'; email: string; paying: boolean } | { kind: 'expired' }
 
 export function Unsubscribe() {
-  useTitle('Unsubscribe · Copybook')
+  useTitle('Unsubscribe · Factor Dynamics')
   const [params] = useSearchParams()
   const t = params.get('t') ?? ''
   const [s, setS] = useState<State>({ kind: 'idle' })

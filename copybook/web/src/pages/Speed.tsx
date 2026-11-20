@@ -40,7 +40,7 @@ const BUCKETS: [string, number][] = [
 const time = (t: string) => new Date(t).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', timeZone: 'America/New_York' })
 
 export function Speed() {
-  useTitle('Alert speed: EDGAR to inbox, every alert logged · Copybook')
+  useTitle('Alert speed: EDGAR to inbox, every alert logged · Factor Dynamics')
   const tick = useTick(60_000, true)
   const lat = useAsync(loadLatency, [tick])
   // A failed minute's read keeps the last good log on screen; with none, the page says the load failed and never

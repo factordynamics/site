@@ -47,7 +47,7 @@ for (let i = 0; i < recent.length; i += 16) {
     writeFileSync(join(out, 'd', 'f', `${c.accession}.json`), JSON.stringify(c))
     const png = new Resvg(cardSvg(c), { font: { fontFiles, loadSystemFonts: false, defaultFontFamily: 'Geist' }, fitTo: { mode: 'width', value: 1200 } }).render().asPng()
     writeFileSync(join(out, 'og', 'f', `${c.accession}.png`), png)
-    const title = `${possessive(c.manager)} ${qLabel(c.quarter)} 13F: top moves · Copybook`
+    const title = `${possessive(c.manager)} ${qLabel(c.quarter)} 13F: top moves · Factor Dynamics`
     const top = moves.slice(0, 3).map((m) => `${m.change === 'new' ? 'new' : m.change} ${m.ticker || m.name} ${m.value_delta >= 0 ? '+' : '−'}${money(m.value_delta)}`)
     const desc = `${c.manager} filed a ${qLabel(c.quarter)} 13F on ${dLabel(c.filing_date)}: ${top.join(', ')}. Bought ${money(c.bought_usd)}, sold ${money(c.sold_usd)}, from the SEC filing.`
     // A hash of the image bytes, so X and Slack refetch the card when a rebuild changes its numbers.
@@ -207,7 +207,7 @@ ${right}
     JSON.stringify({
       path: `season/${r.quarter.toLowerCase()}/${byPct ? 'pct/' : ''}`,
       url: `${SITE}og/season-${slug}.png?v=${v}`,
-      title: byPct ? `${q} 13F recap: the superinvestors' biggest bets by % of book · Copybook` : recapTitle({ quarter: r.quarter, filed: r.superinvestors.filed, total: r.superinvestors.total, names: filedNames, final: r.final }),
+      title: byPct ? `${q} 13F recap: the superinvestors' biggest bets by % of book · Factor Dynamics` : recapTitle({ quarter: r.quarter, filed: r.superinvestors.filed, total: r.superinvestors.total, names: filedNames, final: r.final }),
       desc: `${r.superinvestors.filed} of ${r.superinvestors.total} superinvestors ${r.final ? 'filed' : 'have filed'} ${q} 13Fs${few ? ` so far: ${fewWho}` : ''}.${ranked} New positions, full exits, the biggest moves and who filed late, from SEC EDGAR.`,
     }),
   )

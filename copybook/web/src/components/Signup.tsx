@@ -35,16 +35,16 @@ export function Signup({ source, checkout, className = '' }: { source: string; c
             <Link to="/weekly/" className="font-medium text-accent hover:text-accent-2">
               See a sample email
             </Link>
-            . Or start Copy for each 13F as it’s filed.
+            . Or start Plus for each 13F as it’s filed.
           </p>
-          {/* `checkout`: straight to Copy monthly's Checkout through POST /checkout (/season/), skipping /pricing/. */}
+          {/* `checkout`: straight to Plus monthly's Checkout through POST /checkout (/season/), skipping /pricing/. */}
           <Button {...(checkout ? { onClick: copyCheckout('monthly', source) } : { to: pricingTo() })} variant="outline" className="mt-4">
             Start {TRIAL_DAYS}-day free trial <Arrow />
           </Button>
           <p className="mt-1.5 text-[12.5px] text-ink-3">{TRIAL_LINE}</p>
         </div>
         {onFriday ? (
-          <p className="shrink-0 text-[13.5px] text-ink-2 md:w-[380px] md:pt-1">You’re on the Friday email. Copy adds an email for each filing from the funds you follow, checked on EDGAR every minute.</p>
+          <p className="shrink-0 text-[13.5px] text-ink-2 md:w-[380px] md:pt-1">You’re on the Friday email. Plus adds an email for each filing from the funds you follow, checked on EDGAR every minute.</p>
         ) : state.s === 'done' || state.s === 'member' ? (
           <div role="status" className="shrink-0 md:w-[380px] md:pt-1">
             <p className="flex items-center gap-2 text-[14.5px] font-medium">
@@ -143,7 +143,7 @@ export function Signup({ source, checkout, className = '' }: { source: string; c
 export function CopyFeature({ what, className = '' }: { what?: string; className?: string }) {
   return (
     <span role="status" className={`inline-flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-ink-2 ${className}`}>
-      <span>{what ? `${what} is a Copy feature` : 'This is a Copy feature'}</span>
+      <span>{what ? `${what} is a Plus feature` : 'This is a Plus feature'}</span>
       <span aria-hidden="true">·</span>
       <Link to={pricingTo()} className="inline-flex items-center gap-1 font-medium text-accent hover:text-accent-2">
         Start {TRIAL_DAYS}-day free trial <Arrow className="size-3" />

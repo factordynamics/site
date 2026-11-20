@@ -13,7 +13,7 @@ import { Button, Check } from './ui'
 // saved the follow (`following: true`). A free follow puts that investor's moves in the Friday email, not a
 // per-filing email; that is Copy, which the trial link offers. `extra` sits beside the Follow free button
 // (a trial button) and `secondary` makes Follow free the quieter button; `quietLabel` keeps the field's label for screen readers only, where the box already says it.
-export const CAP_MSG = 'Free accounts follow up to 10 investors. Remove one, or start Copy for unlimited follows.'
+export const CAP_MSG = 'Free accounts follow up to 10 investors. Remove one, or start Plus for unlimited follows.'
 
 // Account mail Resend refused (payments sends it after the 00:00 UTC reset).
 const queuedLine = (at?: string) => `Your sign-in link arrives after ${at ? localTime(at) : '00:00 UTC (7 pm ET)'}.`
@@ -90,7 +90,7 @@ export function FollowSignup({ people, others = [], collapsed = false, cta, kind
         <p className="mt-2 text-[13.5px] leading-relaxed text-ink-2">
           Want each 13F as it’s filed?{' '}
           <Link to={pricingTo()} onClick={() => track('trial_click')} className="font-medium text-accent hover:text-accent-2">
-            Try Copy free for {TRIAL_DAYS} days
+            Try Plus free for {TRIAL_DAYS} days
           </Link>{' '}
           (no card needed).
         </p>

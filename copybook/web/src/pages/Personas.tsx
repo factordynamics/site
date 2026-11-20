@@ -146,7 +146,7 @@ function Band({ title, sub, cta }: { title: string; sub: string; cta: ReactNode 
 }
 
 export function ForFunds() {
-  useTitle('Copybook for investment teams · Copy Fund')
+  useTitle('Copybook for investment teams · Fund')
   const cov = useAsync(loadCoverage, [])
   const filers = cov.data?.filers ? cov.data.filers.toLocaleString('en-US') : '8,900+'
   // The speed claim shows the live median once real alerts have gone out, and links to the log.
@@ -168,7 +168,7 @@ export function ForFunds() {
   return (
     <div className="container-x pt-12 md:pt-16">
       <Hero
-        kicker="Copy Fund · for investment teams"
+        kicker="Fund · for investment teams"
         title="Know who owns what you own."
         sub={`Your book next to every 13F filer: who holds your names, how crowded they are, and how the funds you benchmark against are positioned. ${FUND_SEATS} seats, shared lists, one team channel in Slack, and an annual invoice.`}
         cta={cta}
@@ -276,7 +276,7 @@ export function ForFunds() {
 }
 
 export function ForQuants() {
-  useTitle('Copybook API for quants · Copy Pro')
+  useTitle('Copybook API for quants · Pro')
   const cov = useAsync(loadCoverage, [])
   const filers = cov.data?.filers ? cov.data.filers.toLocaleString('en-US') : '8,900+'
   const sample = useAsync(() => fetch(`${BASE}api/sample-holdings.json`).then((r) => r.text()), [])
@@ -293,7 +293,7 @@ export function ForQuants() {
   return (
     <div className="container-x pt-12 md:pt-16">
       <Hero
-        kicker="Copy Pro · the Copybook API"
+        kicker="Pro · the Copybook API"
         title="13F, Form 4 and 13D/G, as clean JSON."
         sub="Every 13F filer’s latest holdings, aggregated by CUSIP, with the EDGAR accession and acceptance time on every filing."
         cta={cta}

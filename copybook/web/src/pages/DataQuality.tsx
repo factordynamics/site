@@ -63,7 +63,7 @@ const when = (t?: string) =>
 const n = (x: number) => x.toLocaleString('en-US')
 
 export function DataQuality() {
-  useTitle('Data quality: the gates every publish passes · Copybook')
+  useTitle('Data quality: the gates every publish passes · Factor Dynamics')
   const q = useAsync(() => opt<Quality>('quality.json'), [])
   const builds = useAsync(() => opt<{ quarters?: string[]; stores?: Record<string, Build> }>('meta/builds.json').catch(() => null), [])
   const gates = useAsync(() => opt<{ generated?: string; gates?: Gate[] }>('gates.json').catch(() => null), [])

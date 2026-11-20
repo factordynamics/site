@@ -148,7 +148,7 @@ export function CopySetup({ welcome }: { welcome?: boolean }) {
     <section className="mt-10 rounded-[18px] bg-card p-5 shadow-[var(--shadow-card)] md:p-8" aria-labelledby="copy-setup-title">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-[13px] font-medium text-accent">Set up Copy · {left ? `${steps.length - left} of ${steps.length} done` : 'all set'}</p>
+          <p className="text-[13px] font-medium text-accent">Set up Plus · {left ? `${steps.length - left} of ${steps.length} done` : 'all set'}</p>
           <h2 id="copy-setup-title" className="mt-2 text-[24px] font-semibold tracking-[-0.03em] md:text-[26px]">
             {left ? 'Two minutes to your first alert.' : 'You’re set. Your next alert is on its way.'}
           </h2>

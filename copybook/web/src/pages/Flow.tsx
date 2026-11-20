@@ -40,7 +40,7 @@ export function Flow() {
   }
   const setScope = (v: Scope) => set('funds', v === 'featured' ? null : v)
   const setTab = (v: Tab) => set('tab', v === 'bought' ? null : v)
-  useTitle('Smart money flow · Copybook')
+  useTitle('Smart money flow · Factor Dynamics')
   const periods: FlowPeriod[] = f.data?.periods ?? []
   const filedOf = (p: FlowPeriod) => (scope === 'featured' ? p.featured_filed : p.funds_filed)
   const totalOf = (p: FlowPeriod) => (scope === 'featured' ? p.featured_total : p.funds_total)
@@ -152,7 +152,7 @@ export function Flow() {
           {d && !paid && rows.length > FREE_ROWS && (
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line bg-accent-soft px-5 py-4 md:px-6">
               <p className="flex items-center gap-2 text-[13.5px] text-accent-2">
-                <Lock /> {Math.min(rows.length, 40) - FREE_ROWS} more names, plus every fund behind each move, with Copy
+                <Lock /> {Math.min(rows.length, 40) - FREE_ROWS} more names, plus every fund behind each move, with Plus
               </p>
               <Link to="/pricing/" className="inline-flex h-8 items-center rounded-full bg-accent px-3.5 text-[13px] font-medium text-white hover:bg-accent-2">
                 Start 14-day free trial

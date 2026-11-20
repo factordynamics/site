@@ -20,7 +20,7 @@ const ADDS: Record<'pro' | 'fund', [string, string][]> = {
   fund: [
     [`${FUND_SEATS} seats`, 'Your team shares one book, one set of follows and one team channel, where each alert posts once.'],
     ['Seat admin', 'Add and remove seats from your account page, sign a departing colleague out everywhere at once and delete their API keys; Remove the seat to end access.'],
-    ['Everything in Copy Pro', 'Full My book across every 13F filer, peers, 13F linking, CSV and the API.'],
+    ['Everything in Pro', 'Full My book across every 13F filer, peers, 13F linking, CSV and the API.'],
     ['Annual invoice', 'Net 30, if your fund pays that way. W-9 available once our entity details are published.'],
   ],
 }
@@ -30,7 +30,7 @@ const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'n
 export function Upgrade() {
   const [params] = useSearchParams()
   const target: 'pro' | 'fund' = params.get('plan') === 'fund' ? 'fund' : 'pro'
-  useTitle(`Upgrade to ${PLAN_NAME[target]} · Copybook`)
+  useTitle(`Upgrade to ${PLAN_NAME[target]} · Factor Dynamics`)
   const member = useMemberState()
   // Copy is the entry plan: there's nothing to switch to, so its trial starts on the pricing page.
   if (params.get('plan') === 'copy') return <Navigate to="/pricing/#copy" replace />
@@ -57,12 +57,12 @@ function Body({ member, target }: { member: Member | null; target: 'pro' | 'fund
     target === 'fund' ? (
       <Paths
         left={['Pay by invoice', 'Annual invoice, net 30. No account needed; we set up the plan when you reply.', <Button to="/contact/?topic=fund" className="mt-3 w-full">Request an invoice (net 30)</Button>]}
-        right={['Pay by card', 'Sign in with the email on your Copy plan to switch it to Fund, prorated.', <Button to="/account/" variant="outline" className="mt-3 w-full">Sign in to switch</Button>]}
+        right={['Pay by card', 'Sign in with the email on your Plus plan to switch it to Fund, prorated.', <Button to="/account/" variant="outline" className="mt-3 w-full">Sign in to switch</Button>]}
       />
     ) : (
       <Paths
-        left={['New to Copybook', `Start Copy Pro free for ${TRIAL_DAYS} days.`, <Button to="/pricing/" className="mt-3 w-full">Start {TRIAL_DAYS}-day free trial</Button>]}
-        right={['Already on Copy', 'Sign in with the email on your plan to switch it to Pro, prorated.', <Button to="/account/" variant="outline" className="mt-3 w-full">Sign in to switch</Button>]}
+        left={['New to Copybook', `Start Pro free for ${TRIAL_DAYS} days.`, <Button to="/pricing/" className="mt-3 w-full">Start {TRIAL_DAYS}-day free trial</Button>]}
+        right={['Already on Plus', 'Sign in with the email on your plan to switch it to Pro, prorated.', <Button to="/account/" variant="outline" className="mt-3 w-full">Sign in to switch</Button>]}
       />
     )
   if (!member)
@@ -75,7 +75,7 @@ function Body({ member, target }: { member: Member | null; target: 'pro' | 'fund
   if (member.seat)
     return (
       <Note>
-        Your seat is part of your team’s Copy Fund plan. {member.owner ? (
+        Your seat is part of your team’s Fund plan. {member.owner ? (
           <>
             Ask{' '}
             <a href={`mailto:${member.owner}?subject=${encodeURIComponent('Copybook plan change')}`} className="font-medium text-accent hover:text-accent-2">
@@ -95,7 +95,7 @@ function Body({ member, target }: { member: Member | null; target: 'pro' | 'fund
         {target === 'fund' ? (
           <Paths
             left={['Pay by invoice', 'Annual invoice, net 30. We set up the plan when you reply.', <Button to="/contact/?topic=fund" className="mt-3 w-full">Request an invoice (net 30)</Button>]}
-            right={['Pay by card', `Start Copy Fund free for ${TRIAL_DAYS} days.`, <Button to="/pricing/" variant="outline" className="mt-3 w-full">Start {TRIAL_DAYS}-day free trial</Button>]}
+            right={['Pay by card', `Start Fund free for ${TRIAL_DAYS} days.`, <Button to="/pricing/" variant="outline" className="mt-3 w-full">Start {TRIAL_DAYS}-day free trial</Button>]}
           />
         ) : (
           <div className="mt-6">

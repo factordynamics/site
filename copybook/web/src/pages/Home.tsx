@@ -114,7 +114,7 @@ function SeasonLead() {
           <Skeleton className="h-[1.2em] w-4/5" />
         ) : (
           <>
-            Copy emails each superinvestor’s 13F, with what they bought and sold. {fast ? 'Median alert under 2 minutes after the SEC publishes the filing. ' : ''}Every alert is timed on the{' '}
+            Plus emails each superinvestor’s 13F, with what they bought and sold. {fast ? 'Median alert under 2 minutes after the SEC publishes the filing. ' : ''}Every alert is timed on the{' '}
             <Link to="/speed/" className="font-medium text-ink underline decoration-line-2 underline-offset-4 hover:decoration-ink">
               speed page
             </Link>
@@ -135,7 +135,7 @@ function SeasonLead() {
           collapsed
           trial={[
             'Want each 13F as it’s filed?',
-            fast ? 'Median alert under 2 minutes after the SEC publishes the filing.' : 'Copy emails you each one with its moves, checked on EDGAR every minute.',
+            fast ? 'Median alert under 2 minutes after the SEC publishes the filing.' : 'Plus emails you each one with its moves, checked on EDGAR every minute.',
             filer && `Next filer: ${filer.name}, ${filer.day}.`,
           ]
             .filter(Boolean)
@@ -461,7 +461,7 @@ function HowSection() {
     },
     {
       t: 'Know what changed',
-      d: 'New buys, exits and size changes quarter over quarter, with an email the moment a fund you follow files. Included with Copy.',
+      d: 'New buys, exits and size changes quarter over quarter, with an email the moment a fund you follow files. Included with Plus.',
       v: <ChangeArt />,
     },
   ]
@@ -537,7 +537,7 @@ function FundLine() {
     <p className="mt-1.5 text-[12.5px] text-ink-3">
       Buying for a fund team?{' '}
       <Link to="/for-funds/" className="font-medium text-ink-2 underline decoration-line-2 underline-offset-4 hover:text-ink hover:decoration-ink">
-        See Copy Fund
+        See Fund
       </Link>
     </p>
   )
@@ -554,7 +554,7 @@ function CTABand() {
               Be first to see <span className="font-serif font-normal italic text-[#9fb0ff]">every new filing.</span>
             </h2>
             <p className="mt-4 max-w-lg text-[16px] leading-relaxed text-white/70">
-              Copy adds quarter-over-quarter changes, up to 8 quarters of 13F history with CSV export, and an email each time a fund you follow files, checked on EDGAR every minute.
+              Plus adds quarter-over-quarter changes, up to 8 quarters of 13F history with CSV export, and an email each time a fund you follow files, checked on EDGAR every minute.
             </p>
           </div>
           <div className="flex flex-col items-start gap-3 md:items-end">

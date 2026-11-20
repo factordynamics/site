@@ -115,7 +115,7 @@ function Table({ title, rows }: { title: string; rows: Row[] }) {
 }
 
 export function Weekly() {
-  useTitle('The free Friday email: this week’s so far · Copybook')
+  useTitle('The free Friday email: this week’s so far · Factor Dynamics')
   useTrackVisit()
   const w = useAsync(loadWeeks, [])
   const [pick, setPick] = useState<'next' | 'last' | null>(null)

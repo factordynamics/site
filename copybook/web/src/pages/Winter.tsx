@@ -41,7 +41,7 @@ const th = 'py-2 pr-3 font-medium'
 const link = 'font-medium text-accent hover:text-accent-2'
 
 export function Winter() {
-  useTitle('Last winter between 13F seasons: the filings · Copybook')
+  useTitle('Last winter between 13F seasons: the filings · Factor Dynamics')
   const w = useAsync(() => getJSON<Winter>(`${BASE}d/winter-2025-26.json`), [])
   const g = w.data?.schedule_13dg
   const b = w.data?.insider_buys
@@ -53,14 +53,14 @@ export function Winter() {
     <div className="container-x max-w-3xl pt-10 md:pt-14">
       <nav className="text-[13px] text-ink-3" aria-label="Breadcrumb">
         <Link to="/pricing/" className="hover:text-ink">
-          Copy
+          Plus
         </Link>
         <span className="mx-2">/</span>
         <span className="text-ink-2">Last winter</span>
       </nav>
       <h1 className="mt-6 text-[34px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-[40px]">Last winter, between 13F seasons</h1>
       <p className="mt-3 text-[16px] leading-relaxed text-ink-2">
-        From Dec 1, 2025 to Jan 31, 2026, with no 13Fs due, the superinvestors we follow made {g ? g.count : '…'} Schedule 13D/G filings ({g ? `${g.initial} new stakes, ${g.count - g.initial} amendments` : '…'}), and directors and officers made {b ? b.count : '…'} open-market buys of $100K or more in the 100 stocks those investors hold most by value. Copy emails you each one as it’s filed. Every row links to SEC EDGAR.
+        From Dec 1, 2025 to Jan 31, 2026, with no 13Fs due, the superinvestors we follow made {g ? g.count : '…'} Schedule 13D/G filings ({g ? `${g.initial} new stakes, ${g.count - g.initial} amendments` : '…'}), and directors and officers made {b ? b.count : '…'} open-market buys of $100K or more in the 100 stocks those investors hold most by value. Plus emails you each one as it’s filed. Every row links to SEC EDGAR.
       </p>
 
       <div id="filings-13dg" className="scroll-mt-24">

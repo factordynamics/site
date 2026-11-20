@@ -31,7 +31,7 @@ export function FridayBox({ title, people, others, collapsed = false, kind = 'in
       <div className="mt-4 border-t border-accent/20 pt-4">
         <p className="text-[14px] text-ink-2">{trial}</p>
         {/* One solid button per box: the free email's. The trial stays outline (retail, Nov 11). */}
-        {/* `checkout`: straight to Copy monthly's Checkout through POST /checkout (/season/), skipping /pricing/. */}
+        {/* `checkout`: straight to Plus monthly's Checkout through POST /checkout (/season/), skipping /pricing/. */}
         <Button {...(checkout ? { onClick: copyCheckout('monthly', 'season') } : { to: pricingTo(), onClick: () => track('trial_click') })} variant="outline" className="mt-2.5 shrink-0">
           Start {TRIAL_DAYS}-day free trial
         </Button>

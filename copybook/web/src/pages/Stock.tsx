@@ -72,7 +72,7 @@ export function StockPage() {
   const [n, setN] = useState(25)
   const d = s.data
   // The same live-number title the build writes into the page (scripts/postbuild.mjs).
-  useTitle(d ? (d.title_counts?.filers ? stockTitle({ ticker: d.ticker, superinvestors: d.holders.filter((h) => h.featured).length, hedge: d.title_counts.hedge, filers: d.title_counts.filers, quarter: d.title_counts.quarter }) : `${d.ticker} ${d.name}: who owns it · Copybook`) : undefined)
+  useTitle(d ? (d.title_counts?.filers ? stockTitle({ ticker: d.ticker, superinvestors: d.holders.filter((h) => h.featured).length, hedge: d.title_counts.hedge, filers: d.title_counts.filers, quarter: d.title_counts.quarter }) : `${d.ticker} ${d.name}: who owns it · Factor Dynamics`) : undefined)
 
   // GOOG -> GOOGL, lowercase -> uppercase: send other share classes to the issuer's page.
   useEffect(() => {
@@ -294,10 +294,10 @@ export function StockPage() {
           people={[{ slug: d.ticker, name: d.ticker }]}
           trial={
             nextHolder
-              ? `Largest ${d.ticker} holder still to file: ${shortName(nextHolder.h.manager)}, ${shortDay(nextHolder.x.expected_date!)} ${aboutET(nextHolder.x.time_et)}. Copy alerts you then; the free email lands ${shortDay(fridayAfter(nextHolder.x.expected_date!).day)}.`
+              ? `Largest ${d.ticker} holder still to file: ${shortName(nextHolder.h.manager)}, ${shortDay(nextHolder.x.expected_date!)} ${aboutET(nextHolder.x.time_et)}. Plus alerts you then; the free email lands ${shortDay(fridayAfter(nextHolder.x.expected_date!).day)}.`
               : supHolders.length
-                ? `Copy: an alert when ${supHolders.length === 1 ? 'it files' : 'one of them files'} a 13F, Form 4 or 13D that moves ${d.ticker}, checked on EDGAR every minute.`
-                : `Want the moves in ${d.ticker} as they’re filed? Copy emails each 13F as it’s filed, checked on EDGAR every minute.`}
+                ? `Plus: an alert when ${supHolders.length === 1 ? 'it files' : 'one of them files'} a 13F, Form 4 or 13D that moves ${d.ticker}, checked on EDGAR every minute.`
+                : `Want the moves in ${d.ticker} as they’re filed? Plus emails each 13F as it’s filed, checked on EDGAR every minute.`}
         />
       )}
 
@@ -392,7 +392,7 @@ export function StockPage() {
             <p className="mt-3 flex items-center gap-2 text-[13px] text-accent-2">
               <Lock /> {sinceRows.length - 2} more {sinceRows.length - 2 === 1 ? 'holding' : 'holdings'} filed on {d?.ticker} since the 13Fs.{' '}
               <Link to={pricingTo()} className="font-medium underline underline-offset-2">
-                See them with Copy
+                See them with Plus
               </Link>
             </p>
           )}

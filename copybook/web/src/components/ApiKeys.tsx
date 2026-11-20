@@ -86,7 +86,7 @@ export function ApiKeys({ member, focus = false }: { member: Member; focus?: boo
 
       {!pro ? (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-accent-soft px-4 py-3">
-          <p className="text-[13.5px] text-accent-2">API access is part of Copy Pro. Upgrading is prorated from your current plan.</p>
+          <p className="text-[13.5px] text-accent-2">API access is part of Pro. Upgrading is prorated from your current plan.</p>
           <Button size="sm" to="/upgrade/?plan=pro">
             Upgrade to Pro
           </Button>

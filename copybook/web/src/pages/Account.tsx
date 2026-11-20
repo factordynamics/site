@@ -33,7 +33,7 @@ type State = { kind: 'loading' } | { kind: 'in'; member: Member; welcome: boolea
 export function Account() {
   const [params] = useSearchParams()
   const nav = useNavigate()
-  useTitle('Account · Copybook')
+  useTitle('Account · Factor Dynamics')
   const [state, setState] = useState<State>(() => (api ? { kind: 'loading' } : { kind: 'off' }))
 
   useEffect(() => {
@@ -93,7 +93,7 @@ export function Account() {
         if (apiDown()) return setState({ kind: 'down' })
         if (e instanceof ApiError && e.code === 'trial_used') {
           nav('/account/', { replace: true })
-          return setState({ kind: 'used', error: e.detail ?? `You’ve already used your free trial. Subscribe to keep Copy: $${prices.monthly}/mo or $${prices.yearly}/yr (founding price).` })
+          return setState({ kind: 'used', error: e.detail ?? `You’ve already used your free trial. Subscribe to keep Plus: $${prices.monthly}/mo or $${prices.yearly}/yr (founding price).` })
         }
         setState({ kind: 'out', error: sid ? 'We couldn’t confirm that checkout. If you were charged, sign in to Stripe billing below or refresh in a minute.' : login ? (e instanceof ApiError && e.code === 'link_used' ? 'That sign-in link was already used. Enter your email for a new one.' : 'That sign-in link has expired. Enter your email for a new one.') : undefined })
       }
@@ -185,7 +185,7 @@ function SignedIn({ member, welcome, back = false, upgraded, kept, resumed = fal
               <Check />
             </span>
             <h1 className="mt-5 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em]">
-              {member.plan === upgraded ? `You’re on Copy ${upgraded === 'fund' ? 'Fund' : 'Pro'}.` : 'Confirming your upgrade.'}
+              {member.plan === upgraded ? `You’re on ${upgraded === 'fund' ? 'Fund' : 'Pro'}.` : 'Confirming your upgrade.'}
             </h1>
             <p className="mt-3 text-[17px] text-ink-2">
               {member.plan === upgraded
@@ -217,7 +217,7 @@ function SignedIn({ member, welcome, back = false, upgraded, kept, resumed = fal
             <span className="inline-flex size-11 items-center justify-center rounded-full bg-up text-white">
               <Check />
             </span>
-            <h1 className="mt-5 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em]">Welcome to Copy.</h1>
+            <h1 className="mt-5 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em]">Welcome to Plus.</h1>
             <p className="mt-3 text-[17px] text-ink-2">
               {trial ? `Your free trial runs until ${endLabel}. Check your inbox for your welcome email.` : 'Your payment went through. Stripe is emailing your receipt.'}
             </p>
@@ -232,7 +232,7 @@ function SignedIn({ member, welcome, back = false, upgraded, kept, resumed = fal
 
       {new URLSearchParams(location.search).get('card') === 'added' && member.has_payment_method !== false && (
         <p role="status" className="mt-6 flex items-center gap-2 rounded-xl bg-[#e3f1e8] px-4 py-3 text-[14px] text-[#126b3c]">
-          <Check className="size-4 shrink-0" /> Card added. Copy continues after your trial{endLabel ? ` on ${endLabel}` : ''}.
+          <Check className="size-4 shrink-0" /> Card added. Plus continues after your trial{endLabel ? ` on ${endLabel}` : ''}.
         </p>
       )}
 
@@ -244,7 +244,7 @@ function SignedIn({ member, welcome, back = false, upgraded, kept, resumed = fal
         </p>
       )}
 
-      {/* Step 0 for a provisional session: Copy's setup list carries it; other plans get it here. */}
+      {/* Step 0 for a provisional session: Plus's setup list carries it; other plans get it here. */}
       {pendingEmail(member) && !(member.active && member.plan === 'copy' && !member.seat) && <ConfirmEmail email={pendingEmail(member)!} className="mt-6" />}
 
       {member.active && <FailingBanner initial={member.channels_failing} onAccount />}
@@ -274,7 +274,7 @@ function SignedIn({ member, welcome, back = false, upgraded, kept, resumed = fal
           <p className="mt-1 text-[14px] text-ink-2">
             {/* A cardless trial has no interval yet: the add-card choice below picks it (retail, Nov 11). */}
             {cardless ? (
-              `Copy trial${day && !cancelling ? ` · ends ${day}` : ''}`
+              `Plus trial${day && !cancelling ? ` · ends ${day}` : ''}`
             ) : (
               <>
                 {PLAN_NAME[member.plan] ?? 'Copy'}
@@ -295,7 +295,7 @@ function SignedIn({ member, welcome, back = false, upgraded, kept, resumed = fal
           {cardless && !cancelling && <NoCard founding={member.founding_price === true} end={endLabel} day={day} />}
           {member.seat ? (
             <p className="mt-4 rounded-xl bg-accent-soft px-3.5 py-2.5 text-[14px] text-accent-2">
-              Part of {member.owner ? `${member.owner}’s` : 'your team’s'} Copy Fund plan. Billing and seats are managed by the plan owner.
+              Part of {member.owner ? `${member.owner}’s` : 'your team’s'} Fund plan. Billing and seats are managed by the plan owner.
             </p>
           ) : (
             <>
@@ -508,7 +508,7 @@ function Referral({ r }: { r: NonNullable<Member['referral']> }) {
           <h2 id="referral-title" className="text-[15px] font-semibold">
             Give a month, get a month
           </h2>
-          <p className="mt-1 text-[14px] text-ink-2">Anyone who starts Copy from your link gets their first month free. When they pay for the first time, a month of your plan is credited to your bill, and we email you.</p>
+          <p className="mt-1 text-[14px] text-ink-2">Anyone who starts Plus from your link gets their first month free. When they pay for the first time, a month of your plan is credited to your bill, and we email you.</p>
         </div>
         <dl className="flex gap-6 text-[13px]">
           {(
@@ -585,7 +585,7 @@ function Free({ member, onOut }: { member: Member; onOut: () => void }) {
       <FreeNames className="mt-10" />
       <section className="mt-5 rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
         <div className="flex items-center justify-between">
-          <h2 className="text-[15px] font-semibold">What Copy adds</h2>
+          <h2 className="text-[15px] font-semibold">What Plus adds</h2>
         </div>
         <ul className="mt-4 space-y-2.5 text-[14px] text-ink-2">
           {['An email for each 13F, Form 4 and 13D, checked on EDGAR every minute, with the moves inside', 'Follow investors and the stocks you own or watch, and see who holds them in My book', 'Up to 8 quarters of history for the funds we track closely, with CSV export'].map((t) => (
@@ -598,7 +598,7 @@ function Free({ member, onOut }: { member: Member; onOut: () => void }) {
           <Button to="/pricing/">
             Start {TRIAL_DAYS}-day free trial <Arrow />
           </Button>
-          <span className="text-[13px] text-ink-3">Copy is free for {TRIAL_DAYS} days, then ${plans.copy.yearly}/year or ${plans.copy.monthly}/month.</span>
+          <span className="text-[13px] text-ink-3">Plus is free for {TRIAL_DAYS} days, then ${plans.copy.yearly}/year or ${plans.copy.monthly}/month.</span>
         </div>
       </section>
       <p className="mt-6 text-[13px] text-ink-3">To stop the Friday email, use the unsubscribe link at the bottom of any issue.</p>
@@ -630,8 +630,8 @@ function TrialUsed({ error }: { error: string }) {
   return (
     <>
       <header>
-        <p className="text-[13px] font-medium text-accent">Copy</p>
-        <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em]">Subscribe to keep Copy.</h1>
+        <p className="text-[13px] font-medium text-accent">Plus</p>
+        <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em]">Subscribe to keep Plus.</h1>
       </header>
       <p role="status" className="mt-6 rounded-xl bg-[#f6ead2] px-4 py-3 text-[14px] text-[#7a5410]">
         {error}
@@ -750,7 +750,7 @@ export function SignedOut({ error, eyebrow = 'Account' }: { error?: string; eyeb
         .
       </p>
       <p className="mt-2 text-[14px] text-ink-2">
-        Don’t have Copy yet?{' '}
+        Don’t have Plus yet?{' '}
         <Button to="/pricing/" variant="ghost" size="sm">
           See plans <Arrow />
         </Button>
@@ -764,7 +764,7 @@ function NotOpen() {
     <>
       <header>
         <p className="text-[13px] font-medium text-accent">Account</p>
-        <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em]">Copy opens with the Q3 filings.</h1>
+        <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em]">Plus opens with the Q3 filings.</h1>
         <p className="mt-3 text-[17px] text-ink-2">Quarter-over-quarter changes, up to 8 quarters of 13F history and CSV export, and filing-day alerts. Meanwhile, the free Friday email has the week’s top moves.</p>
       </header>
       <Signup source="account" className="mt-8" />
@@ -1108,7 +1108,7 @@ function NoCard({ end, day, founding }: { end?: string; day?: string; founding: 
           })
         }}
       >
-        {busy ? 'Opening…' : `Add a card to keep Copy${day ? ` after ${day}` : ''}`}
+        {busy ? 'Opening…' : `Add a card to keep Plus${day ? ` after ${day}` : ''}`}
       </Button>
       {err && (
         <p role="alert" className="mt-2 text-[12.5px] text-down">

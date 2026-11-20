@@ -11,7 +11,7 @@ type Sort = 'value' | 'name' | 'positions' | 'recent'
 
 export function Investors() {
   const idx = useAsync(loadIndex, [])
-  useTitle('Investors · Copybook')
+  useTitle('Investors · Factor Dynamics')
   const [q, setQ] = useState('')
   const [tab, setTab] = useState<'featured' | 'all'>('featured')
   const [sort, setSort] = useState<Sort>('value')

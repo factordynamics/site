@@ -541,7 +541,7 @@ export function SinceLast13F({ slug, quarter, filedOn, holdings }: { slug: strin
       {!paid && positions.length > FREE_EVENTS && (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-accent-soft px-4 py-3">
           <p className="flex items-center gap-2 text-[13.5px] text-accent-2">
-            <Lock /> {positions.length - FREE_EVENTS} more {positions.length - FREE_EVENTS === 1 ? 'position' : 'positions'} changed since the 13F, with Copy
+            <Lock /> {positions.length - FREE_EVENTS} more {positions.length - FREE_EVENTS === 1 ? 'position' : 'positions'} changed since the 13F, with Plus
           </p>
           <Link to={pricingTo()} className="inline-flex h-8 items-center rounded-full bg-accent px-3.5 text-[13px] font-medium text-white hover:bg-accent-2">
             Start 14-day free trial

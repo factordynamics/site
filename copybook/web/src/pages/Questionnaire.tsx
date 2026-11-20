@@ -24,7 +24,7 @@ const SECTIONS: [string, [string, ReactNode][]][] = [
   [
     'Company and service',
     [
-      ['What is the service?', 'Copybook shows SEC 13F, Form 4 and Schedule 13D/G filings as they’re filed, with email, chat and webhook alerts, and a member API. Copy Fund adds your own book next to every 13F, for a team.'],
+      ['What is the service?', 'Copybook shows SEC 13F, Form 4 and Schedule 13D/G filings as they’re filed, with email, chat and webhook alerts, and a member API. Fund adds your own book next to every 13F, for a team.'],
       ['Who runs it?', 'Factor Dynamics. Copybook is run by its founder with AI coding agents that maintain and deploy it. There is no security team or on-call rotation.'],
       ['Security contact', <>hello@factordynamics.com, or the {a('/contact/', 'contact form')}. We acknowledge security reports quickly; please report before disclosing.</>],
       ['Certifications and audits', VENDOR.noCert],
@@ -40,7 +40,7 @@ const SECTIONS: [string, [string, ReactNode][]][] = [
       ['Is customer data shared or used in aggregates?', 'No. An uploaded or linked book is private to your team, never shared with other members, and never used in aggregates, rankings or any public figure.'],
       ['Where is data stored?', `${HOSTING.api} ${HOSTING.files}`],
       ['Data replicated to a second location', HOSTING.sync],
-      ['Retention and deletion', <>Account data is kept while you have an account. {HOSTING.deletion} Remove names, keys and seats yourself at any time, or ask us to delete everything. On Copy Fund, an uploaded book is deleted on request and we confirm it in writing. See the {a('/terms/#copy-fund', 'Copy Fund terms')}.</>],
+      ['Retention and deletion', <>Account data is kept while you have an account. {HOSTING.deletion} Remove names, keys and seats yourself at any time, or ask us to delete everything. On Fund, an uploaded book is deleted on request and we confirm it in writing. See the {a('/terms/#copy-fund', 'Fund terms')}.</>],
     ],
   ],
   [
@@ -52,7 +52,7 @@ const SECTIONS: [string, [string, ReactNode][]][] = [
       ['What else runs on the machine?', HOSTING.shared],
       ['Use of AI and model providers', HOSTING.accessParts.find(([h]) => h === 'AI providers')?.[1]],
       ['Customer sign-in', 'One-time links sent by email; there are no passwords. Sessions are signed, expiring tokens we don’t store.'],
-      ['Team seats', `Copy Fund covers up to ${FUND_SEATS} seats at a flat price. Your team’s admin adds and removes seats from the account page; adding or removing one doesn’t change what you pay.`],
+      ['Team seats', `Fund covers up to ${FUND_SEATS} seats at a flat price. Your team’s admin adds and removes seats from the account page; adding or removing one doesn’t change what you pay.`],
       ['API keys', 'Stored only as SHA-256 hashes and shown once, when created. A revoked key stops working within 3 seconds on whichever server is answering, the backup included, and stays revoked when we switch back.'],
     ],
   ],
@@ -93,7 +93,7 @@ const SECTIONS: [string, [string, ReactNode][]][] = [
 const slug = (h: string) => h.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 
 export function Questionnaire() {
-  useTitle('Security questionnaire · Copybook')
+  useTitle('Security questionnaire · Factor Dynamics')
   return (
     <div className="container-x pt-12 md:pt-16">
       <header className="max-w-2xl">
