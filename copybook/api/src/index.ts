@@ -596,6 +596,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const page = (clean(b.page, 100) ?? '/').split('?')[0];
     const src = clean(b.utm_source, 60) ?? 'direct';
     const post = `${src}|${clean(b.utm_content, 60) ?? '-'}`;
+    const engine = searchEngine(clean(b.ref_host, 100));
     // Load tests and our own checks (utm_source=opscheck) count apart, so no funnel figure (pages, sources, hours)
     // ever includes them; they still do the same reads and writes as a real visit.
     // Marketing's headless renders (user agent copybook-mkt-render, from Nov 18 21:35Z) are ours too.
@@ -623,6 +624,8 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     if (pp in byPostPage || Object.keys(byPostPage).length < 1000) byPostPage[pp] = (byPostPage[pp] ?? 0) + 1;
     const byPostClient = (d[kind].utm_client ??= {});
     byPostClient[`${uk}#${cls}`] = (byPostClient[`${uk}#${cls}`] ?? 0) + 1;
+    // By search engine, browser-class only: from the referrer's host the page sends (ref_host), never its path.
+    if (engine && cls === 'browser') (d[kind].search ??= {})[engine] = (d[kind].search[engine] ?? 0) + 1;
     };
     // By UTC hour too (kind x utm_source|utm_content), kept 30 days, so a read-out can tell before a post from after it.
     // Its post key is the day's bounded one, so a post past the day's cap counts as "other" here too.
@@ -809,6 +812,10 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const track_by_client: Record<string, Record<string, number>> = {};
     for (const d of Object.values(track) as Record<string, { client?: Record<string, number>; utm_client?: Record<string, number> }>[])
       for (const [kind, x] of Object.entries(d)) for (const [k, n] of Object.entries({ ...(x.client ?? {}), ...(x.utm_client ?? {}) })) (track_by_client[kind] ??= {})[k] = (track_by_client[kind][k] ?? 0) + n;
+    // By search engine (browser-class visits whose referrer is a search engine), totalled over the window.
+    const track_by_search: Record<string, Record<string, number>> = {};
+    for (const d of Object.values(track) as Record<string, { search?: Record<string, number> }>[])
+      for (const [kind, x] of Object.entries(d)) for (const [k, n] of Object.entries(x.search ?? {})) (track_by_search[kind] ??= {})[k] = (track_by_search[kind][k] ?? 0) + n;
     const track_by_utm_page: Record<string, Record<string, number>> = {};
     for (const d of Object.values(track) as Record<string, { utm_page?: Record<string, number> }>[])
       for (const [kind, x] of Object.entries(d)) for (const [k, n] of Object.entries(x.utm_page ?? {})) (track_by_utm_page[kind] ??= {})[k] = (track_by_utm_page[kind][k] ?? 0) + n;
@@ -825,12 +832,15 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     // Link session is "pricing" when it came from our pages (they always set client_reference_id), else "external"
     // (a bare buy.stripe.com link opened elsewhere: a crawler, an unfurler or a shared link), kept apart.
     const checkouts_by_client: Record<string, Record<string, Record<string, number>>> = {};
+    const other_app: Record<string, number> = {};
     try {
       const { stripe } = await import('./stripe');
       let after: string | undefined;
       for (let page = 0; page < 5; page++) {
         const r = await stripe(env, 'GET', 'checkout/sessions', { 'created[gte]': Math.floor(Date.now() / 1000) - days * 86400, limit: 100, ...(after ? { starting_after: after } : {}) });
         for (const cs of (r.data ?? []) as { id: string; status: string; payment_link?: string | null; client_reference_id?: string | null; metadata?: Record<string, string>; customer_details?: { email?: string } | null }[]) {
+          // Another app's sessions on the same Stripe account (metadata.app, such as creo) are not Copybook's.
+          if (cs.metadata?.app && cs.metadata.app !== 'copybook') { other_app[cs.metadata.app] = (other_app[cs.metadata.app] ?? 0) + 1; continue; }
           const email = cs.customer_details?.email ?? '';
           const test = cs.metadata?.test === 'true' || /^test/i.test(cs.client_reference_id ?? '') || testAddress(email) || /^copybook-gate-/.test(email);
           const utm = cs.metadata?.utm_source ? `${cs.metadata.utm_source}|${cs.metadata.utm_content ?? '-'}` : (cs.client_reference_id ?? 'direct');
@@ -846,7 +856,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     } catch (e) {
       checkouts.error = { [String(e).slice(0, 120)]: { n: 1 } };
     }
-    return json({ ok: true, funnel: await funnel(env, Date.now(), days), track, track_by_utm, track_by_client, track_by_utm_page, track_hourly, checkouts, checkouts_by_client }, 200, h);
+    return json({ ok: true, funnel: await funnel(env, Date.now(), days), track, track_by_utm, track_by_client, track_by_utm_page, track_by_search, track_hourly, checkouts, checkouts_by_client, checkouts_other_app: other_app }, 200, h);
   }
 
   // Operator: one member's access log (for telling a member whether any session read their book), or an entry for a
@@ -2217,6 +2227,14 @@ const BOT_UA = /bot\b|bot\/|crawl|spider|slurp|facebookexternalhit|facebookcatal
  * HTTP library by User-Agent, or a prefetch: Purpose or Sec-Purpose prefetch), "browser" (a page's own fetch: the
  * browser-only Sec-Fetch-* headers), else "unknown". The raw User-Agent is never stored.
  */
+/** A referrer host's search engine (google, bing, duckduckgo, ...), else null. */
+export function searchEngine(host: string | null): string | null {
+  if (!host) return null;
+  const h = host.toLowerCase();
+  for (const [re, name] of [[/(^|\.)google\.[a-z.]+$/, 'google'], [/(^|\.)bing\.com$/, 'bing'], [/(^|\.)duckduckgo\.com$/, 'duckduckgo'], [/(^|\.)yahoo\.[a-z.]+$/, 'yahoo'], [/(^|\.)yandex\.[a-z.]+$/, 'yandex'], [/(^|\.)baidu\.com$/, 'baidu'], [/(^|\.)ecosia\.org$/, 'ecosia'], [/^search\.brave\.com$/, 'brave'], [/(^|\.)kagi\.com$/, 'kagi'], [/(^|\.)startpage\.com$/, 'startpage'], [/(^|\.)qwant\.com$/, 'qwant'], [/(^|\.)naver\.com$/, 'naver']] as const) if (re.test(h)) return name;
+  return null;
+}
+
 export function clientClass(req: Request): 'bot' | 'browser' | 'unknown' {
   const ua = req.headers.get('user-agent') ?? '';
   const purpose = `${req.headers.get('purpose') ?? ''} ${req.headers.get('sec-purpose') ?? ''} ${req.headers.get('x-moz') ?? ''}`;

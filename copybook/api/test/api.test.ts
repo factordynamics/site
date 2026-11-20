@@ -2669,6 +2669,11 @@ describe('copybook api', () => {
     const hourly = (await (await handleRequest(new Request('https://api.test/ops/funnel?days=1', { headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), env)).json()).track_hourly;
     const hr = new Date().toISOString();
     expect(hourly[hr.slice(0, 10)][hr.slice(11, 13)]).toMatchObject({ visit: { 'x|seed-season': 2 }, signup_focus: { 'x|seed-season': 1 }, signup_submit: { 'x|seed-season': 1 } });
+    // Search referrers, browser-class only: Google and Bing count, a bot from Google and a non-engine referrer don't.
+    const vis = (ref_host: string, headers: Record<string, string>) => handleRequest(new Request('https://api.test/track', { method: 'POST', body: JSON.stringify({ kind: 'visit', page: '/stocks/smh/', ref_host }), headers: { origin: 'https://refcell.github.io', 'cf-connecting-ip': '9.9.9.6', ...headers } }), env);
+    const br = { 'user-agent': chrome, 'sec-fetch-mode': 'cors', 'sec-fetch-site': 'cross-site' };
+    for (const [host, hd] of [['www.google.co.uk', br], ['www.bing.com', br], ['www.google.com', { 'user-agent': 'Googlebot/2.1' }], ['news.ycombinator.com', br], ['notgoogle.example', br]] as const) await vis(host, hd);
+    expect((await (await handleRequest(new Request('https://api.test/ops/funnel?days=1', { headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), env)).json()).track_by_search).toEqual({ visit: { google: 1, bing: 1 } });
 
     // A trial that runs out cancelled: one short note offering monthly, whose link opens a monthly Checkout.
     sent = [];
