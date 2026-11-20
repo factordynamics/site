@@ -1,0 +1,19 @@
+# Weekly dependency updates, one grouped pull request per directory for minor and patch
+# releases. Dependabot alerts and security updates are on in the repository settings, so a
+# vulnerable dependency gets its own pull request without waiting for the weekly run.
+# Merging a pull request under copybook/web/ or holdterm/ deploys that site.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directories: ["/", "/holdterm", "/copybook/web", "/copybook/api"]
+    schedule: {interval: "weekly", day: "monday"}
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule: {interval: "weekly", day: "monday"}
+    groups:
+      actions:
+        patterns: ["*"]
