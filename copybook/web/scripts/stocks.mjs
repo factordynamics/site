@@ -206,10 +206,11 @@ const hlTickers = hlIndex?.tickers ?? {}
 // Issuer codes whose lines are separate funds (ingest's hl/index.json `funds`: VanEck ETF Trust 92189F is SMH, GDX, MOAT…),
 // never one company's share classes. hl/ and hlr/ sum every fund under the code into one row per filer, so a fund's
 // page publishes no every-filer rows or counts from them (lead, Nov 20) until ingest keys them by CUSIP9.
-// A code whose tickers we group as one company's share classes stays out even when ingest lists it (live Nov 20: GOOG/GOOGL
-// 02079K, BRK.A/B 084670, FOXA/FOX 35137L): their summed issuer view is the documented shape until per-class lands.
-const classCodes = new Set([...stocks.values()].filter((s) => s.classes.size > 1).flatMap((s) => [...s.classes.keys()].map((t) => hlTickers[t])))
-const FUNDS = new Set(Object.keys(hlIndex?.funds ?? {}).filter((c) => !classCodes.has(c)))
+// Codes ingest's funds listed (Nov 20) that SEC's Official 13(f) List (2026Q3) reads as one company: share classes
+// (Alphabet, Berkshire, Fox, Ramaco, Alamos, Dave, Riskified) and companies with options, warrants or preferreds under
+// one code (AMZN, WFC…). The same 25 as the API's NOT_FUNDS (3a0b2d9); drop both once ingest's rule excludes them.
+const NOT_FUNDS = new Set(['011532', '023135', '025537', '025816', '02079K', '035710', '040413', '053015', '084670', '097023', '19247L', '23834J', '35137L', '38964R', '389930', '674599', '683712', '68989M', '75134P', '76655K', '83601L', '896438', '949746', '98421M', 'M8216R'])
+const FUNDS = new Set(Object.keys(hlIndex?.funds ?? {}).filter((c) => !NOT_FUNDS.has(c)))
 const fundCode = (tickers) => tickers.map((t) => hlTickers[t]).find((c) => c && FUNDS.has(c)) ?? null
 for (const s of stocks.values()) {
   if (!s.classes.size) continue // no public ticker: private, bonds, unmapped
