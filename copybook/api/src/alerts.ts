@@ -2562,12 +2562,15 @@ async function typesGuard(env: Env): Promise<void> {
   await sendMail(env, [{ to: env.CONTACT_EMAIL ?? 'hello@factordynamics.com', subject: 'Copybook: ingest held a filer-type change (published types kept)', text: `The data run of ${g.checked_at} didn't publish its filer types: ${g.reason ?? 'the counts moved too far'}. Members still get alerts routed by the previous types.\n\n${moved}\n\nTo accept the move, dispatch a full run with accept_types.\n` }], { tier: 'account' });
 }
 
-/** index.json past GitHub Pages' 10-minute edge cache (max-age=600): a new URL each minute, so a publish is seen in a minute. */
+/**
+ * index.json, a new URL each minute. GitHub Pages' CDN ignores the query (Nov 20: `?t=` still a cache HIT, age 575 s), so
+ * this doesn't bypass its max-age=600; a deploy clears that cache (the 04:23:05Z publish read by 04:25Z).
+ */
 const indexUrl = (env: Env, now: number) => `${env.DATA_URL}index.json?t=${Math.floor(now / 60_000)}`;
 
 /**
  * Whether ingest has published an index.json the backstop hasn't read (its ETag moved): checked every minute, one
- * conditional request, so /status/'s freshness (curated_stale_since) sets and clears within a minute of a publish
+ * conditional request, so /status/'s freshness (curated_stale_since) sets and clears within minutes of a publish
  * rather than at the hourly backstop.
  */
 export async function indexChanged(env: Env, now: number): Promise<boolean> {
