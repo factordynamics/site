@@ -56,11 +56,11 @@ const PAGES: Record<'terms' | 'privacy' | 'security', { title: string; lead: str
     sections: [
       ['The data', 'Copybook shows information from public SEC EDGAR filings (Forms 13F-HR, 13F-NT, 4 and Schedules 13D and 13G), as filed, with the processing described on our methodology page. Filings can be late, amended or wrong, and our processing can be wrong too. Everything is provided as is, with no warranty of accuracy, completeness or timeliness.'],
       ['Not investment advice', 'Nothing on Copybook is a recommendation to buy or sell a security. A 13F leaves out short positions, most non-US holdings, cash and more, and is filed up to 45 days after the quarter ends. Make your own decisions.'],
-      ['Accounts and plans', 'Paid plans renew automatically until you cancel from Manage billing. A Copy trial started without a card ends on its own at day 14 and nothing is charged; if you add a card, it continues as a paid plan. A Copy Pro or Copy Fund trial converts to a paid plan at its end unless you cancel before then; a Copy Fund trial billed by invoice is invoiced on day 14, net 30. After a paid period starts, you keep access until it ends; we don’t refund partial periods unless the law requires it. If we discontinue a paid plan during a prepaid period, we refund the unused part pro rata.'],
+      ['Accounts and plans', 'Paid plans renew automatically until you cancel from Manage billing. A Plus trial started without a card ends on its own at day 14 and nothing is charged; if you add a card, it continues as a paid plan. A Pro or Fund trial converts to a paid plan at its end unless you cancel before then; a Fund trial billed by invoice is invoiced on day 14, net 30. After a paid period starts, you keep access until it ends; we don’t refund partial periods unless the law requires it. If we discontinue a paid plan during a prepaid period, we refund the unused part pro rata.'],
       [
-        'Copy Fund',
+        'Fund',
         <>
-          <p>If your team subscribes to Copy Fund, these commitments are part of these terms:</p>
+          <p>If your team subscribes to the Fund plan, these commitments are part of these terms:</p>
           <ul className="mt-2.5 list-disc space-y-1.5 pl-5">
             <li>Price: $1,990 a year for up to {FUND_SEATS} seats, whatever number are used. A subscription that started at a founding price keeps it for as long as it continues without a break.</li>
             <li>Seats: up to {FUND_SEATS} seats at one flat price. Adding or removing a seat doesn’t change what you pay.</li>
@@ -90,7 +90,7 @@ const PAGES: Record<'terms' | 'privacy' | 'security', { title: string; lead: str
         <ul key="s" className="list-disc space-y-1.5 pl-5">
           <li>Your email address, to sign you in and send the alerts you ask for.</li>
           <li>Your book: the tickers you own or watch, and the funds you follow.</li>
-          <li>The peers you pick and, on Copy Fund, who is on your team.</li>
+          <li>The peers you pick and, on the Fund plan, who is on your team.</li>
           <li>The contents of any 13F filing or broker CSV you import into My book.</li>
           <li>Your alert and channel settings, including Slack and Discord webhook URLs (which work as credentials) and the signing secrets for webhooks we send you.</li>
           <li>Your Stripe customer ID and plan status. Card details go straight to Stripe; we never see or store them.</li>
@@ -141,8 +141,8 @@ const PAGES: Record<'terms' | 'privacy' | 'security', { title: string; lead: str
       ['Backups', HOSTING.backups],
       ['Access logging', HOSTING.logging],
       ['Availability', <>{HOSTING.availability} Live status and incidents are on the <Link to="/status/" className="font-medium text-accent hover:text-accent-2">status page</Link>.</>],
-      ['Sign-in', 'Sign-in is by emailed one-time links; there are no passwords to leak. A sign-in link you ask for works once, within 15 minutes; links in the welcome email and Copy Fund seat invites work once, within 7 days; the hand-off right after checkout lasts 2 minutes. Sessions last 30 days from sign-in and aren’t extended by use; Sign out everywhere on your account page ends every session at once, including one copied from another browser; signing out in one browser ends only that browser’s session. API keys stay valid until you delete them. A Copy Fund owner can also sign a seat out everywhere. Session tokens are never put in URLs. CSV downloads use single-use links that expire in 60 seconds.'],
-      ['Your book is private', <>A list of holdings you upload or enter is private to you, or to your team on Copy Fund. It is never shared, except as described under <Link to="/security/#who-can-see-member-data" className="font-medium text-accent hover:text-accent-2">Who can see member data</Link>; it is never shown to other members, and never used in aggregates, rankings or anything we publish.</>],
+      ['Sign-in', 'Sign-in is by emailed one-time links; there are no passwords to leak. A sign-in link you ask for works once, within 15 minutes; links in the welcome email and Fund seat invites work once, within 7 days; the hand-off right after checkout lasts 2 minutes. Sessions last 30 days from sign-in and aren’t extended by use; Sign out everywhere on your account page ends every session at once, including one copied from another browser; signing out in one browser ends only that browser’s session. API keys stay valid until you delete them. A Fund owner can also sign a seat out everywhere. Session tokens are never put in URLs. CSV downloads use single-use links that expire in 60 seconds.'],
+      ['Your book is private', <>A list of holdings you upload or enter is private to you, or to your team on the Fund plan. It is never shared, except as described under <Link to="/security/#who-can-see-member-data" className="font-medium text-accent hover:text-accent-2">Who can see member data</Link>; it is never shown to other members, and never used in aggregates, rankings or anything we publish.</>],
       ['API keys', 'A key’s secret is shown once, when you create it. Revoke a key from your account page and it stops working within 3 seconds on whichever of our servers is answering, our backup included, and stays revoked when we switch back.'],
       ['How credentials are stored', 'API keys are stored only as SHA-256 hashes and shown once; sign-in links and sessions are signed, expiring tokens we don’t store; private feed links are stored so your account page can show them, and you can rotate one anytime.'],
       ['Deleting data', <>Remove follows, owned stocks and keys yourself on your account page at any time, or ask us to delete everything through the {contact}. {HOSTING.deletion}</>],
@@ -156,7 +156,7 @@ const PAGES: Record<'terms' | 'privacy' | 'security', { title: string; lead: str
 
 export function Legal({ page }: { page: keyof typeof PAGES }) {
   const p = PAGES[page]
-  useTitle(`${p.title} · Copybook`)
+  useTitle(`${p.title} · Factor Dynamics`)
   return (
     <div className="container-x pt-12 md:pt-16">
       <header className="max-w-2xl">

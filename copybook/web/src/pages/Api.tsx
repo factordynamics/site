@@ -47,7 +47,7 @@ function parseInfo(d = '') {
   for (const m of notes.matchAll(TERM)) if (!seen.has(m[1]) && !errors.some(([c]) => c === m[1])) seen.set(m[1], m[2])
   for (const [k, v] of Object.entries(GLOSSARY_FIX)) if (v === null) seen.delete(k); else seen.set(k, v)
   const glossary = [...seen].filter(([, v]) => v !== 'additive')
-  const sentences = intro.split(/(?<=\.)\s+/).filter((s) => s && !/^Copy Pro only/.test(s))
+  const sentences = intro.split(/(?<=\.)\s+/).filter((s) => s && !/^Pro only/.test(s))
   return { sentences, errors, glossary }
 }
 
@@ -170,7 +170,7 @@ assert h.hexdigest() == link["sha256"]`,
 const METHOD_TONE: Record<string, 'up' | 'accent' | 'down' | 'neutral'> = { get: 'up', post: 'accent', delete: 'down' }
 
 export function ApiDocs() {
-  useTitle('API · Copybook')
+  useTitle('API · Factor Dynamics')
   const cov = useAsync(loadCoverage, [])
   const spec = useAsync(() => fetch(SPEC).then((r) => (r.ok ? (r.json() as Promise<Spec>) : Promise.reject(new Error(String(r.status))))), [])
   const log = useAsync(loadChangelog, [])
@@ -203,7 +203,7 @@ export function ApiDocs() {
     <div className="container-x pt-12 md:pt-16">
       <ApiStatus className="mb-6 max-w-3xl" />
       <header className="max-w-2xl">
-        <p className="text-[13px] font-medium text-accent">Copybook API · Copy Pro and Copy Fund</p>
+        <p className="text-[13px] font-medium text-accent">Copybook API · Pro and Fund</p>
         <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-h1">13F, Form 4 and 13D/G data, as JSON.</h1>
         <p className="mt-4 text-[17px] leading-relaxed text-ink-2">The same SEC EDGAR data behind every Copybook page, for your own models and tools. Create a key on your account page and send it as a Bearer token.</p>
         <div className="mt-6 flex flex-wrap gap-3">
@@ -434,7 +434,7 @@ export function ApiDocs() {
       </div>
 
       <p className="mt-10 text-[14px] text-ink-3">
-        The API is included with <Link to="/pricing/" className="font-medium text-accent hover:text-accent-2">Copy Pro and Copy Fund</Link>. How the data is built is on the{' '}
+        The API is included with <Link to="/pricing/" className="font-medium text-accent hover:text-accent-2">Pro and Fund</Link>. How the data is built is on the{' '}
         <Link to="/methodology/" className="font-medium text-accent hover:text-accent-2">
           methodology page
         </Link>

@@ -45,7 +45,7 @@ export function Onboarding({ onDone, shared }: { onDone?: (member?: Member) => v
 
   return (
     <section className="rounded-[18px] bg-card p-6 shadow-[var(--shadow-card)] md:p-8" aria-labelledby="onb-title">
-      <p className="text-[13px] font-medium text-accent">Set up Copy · 1 minute</p>
+      <p className="text-[13px] font-medium text-accent">Set up Plus · 1 minute</p>
       <h2 id="onb-title" className="mt-2 text-[26px] font-semibold tracking-[-0.03em]">
         Whom do you want to follow?
       </h2>

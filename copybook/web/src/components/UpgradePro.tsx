@@ -11,7 +11,7 @@ export function UpgradePro({ member, className = '' }: { member: Member; classNa
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="max-w-2xl">
           <h2 id="pro-title" className="text-[15px] font-semibold">
-            Copy and Copy Pro
+            Plus and Pro
           </h2>
           <p className="mt-1 text-[14px] text-ink-2">
             Pro is ${yearly ? `${plans.pro.yearly}/yr` : `${plans.pro.monthly}/mo`} on your {yearly ? 'yearly' : 'monthly'} billing. Upgrading is prorated for the rest of this period, and you see the amount before you confirm.
@@ -23,7 +23,7 @@ export function UpgradePro({ member, className = '' }: { member: Member; classNa
       </div>
       <div className="mt-5 grid gap-4 md:grid-cols-2">
         <div className="rounded-xl bg-paper p-4">
-          <p className="text-[12.5px] font-medium text-ink-3">In your Copy plan</p>
+          <p className="text-[12.5px] font-medium text-ink-3">In your Plus plan</p>
           <p className="mt-2 flex gap-2.5 text-[13.5px]">
             <Check className="mt-0.5 shrink-0 text-accent" />
             <span>
@@ -33,7 +33,7 @@ export function UpgradePro({ member, className = '' }: { member: Member; classNa
           </p>
         </div>
         <div className="rounded-xl bg-accent-soft/60 p-4">
-          <p className="text-[12.5px] font-medium text-accent-2">Copy Pro adds</p>
+          <p className="text-[12.5px] font-medium text-accent-2">Pro adds</p>
           <ul className="mt-2 space-y-2 text-[13.5px]">
             {(
               [

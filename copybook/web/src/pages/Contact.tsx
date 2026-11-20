@@ -7,7 +7,7 @@ import { useTitle } from '../lib/data'
 // Posts to {api}/fund-request: Fund access requests, support questions and data deletion requests.
 type Topic = 'fund' | 'support' | 'delete'
 const TOPICS: [Topic, string][] = [
-  ['fund', 'Copy Fund access'],
+  ['fund', 'Fund access'],
   ['support', 'A question or problem'],
   ['delete', 'Delete my data'],
 ]
@@ -20,7 +20,7 @@ type Started = { trial_end: string; invoice_on: string; due_on: string; sign_in_
 const day = (iso: string) => new Date(iso.length === 10 ? `${iso}T12:00:00Z` : iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: iso.length === 10 ? 'UTC' : undefined })
 
 export function Contact() {
-  useTitle('Contact · Copybook')
+  useTitle('Contact · Factor Dynamics')
   const [params] = useSearchParams()
   const [topic, setTopic] = useState<Topic>((TOPICS.find(([k]) => k === params.get('topic'))?.[0] as Topic) ?? 'fund')
   const [form, setForm] = useState({ name: '', email: '', fund: '', seats: String(FUND_SEATS), invoice: true, message: '', website: '', line1: '', line2: '', city: '', state: '', postal_code: '', country: 'US', po: '', ap_email: '' })
@@ -92,7 +92,7 @@ export function Contact() {
         ) : throwaway ? (
           'Use your work email: an invoice trial goes to a company address.'
         ) : j?.code === 'trial_used' ? (
-          'Your company has already had a Copy Fund trial. We have your request and will email you to set up an invoice.'
+          'Your company has already had a Fund trial. We have your request and will email you to set up an invoice.'
         ) : j?.code === 'already_member' ? (
           <>
             This address already has a Copybook subscription.{' '}
@@ -124,7 +124,7 @@ export function Contact() {
           <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-h1">{fund ? 'Copybook for your fund.' : 'Get in touch.'}</h1>
           {fund ? (
             <>
-              <p className="mt-4 text-[17px] leading-relaxed text-ink-2">Copy Fund is everything in Pro for up to {FUND_SEATS} seats at a flat price: each seat signs in on its own, and the team shares one book, watchlist and peer list. The API, signed webhooks and Slack alerts are included.</p>
+              <p className="mt-4 text-[17px] leading-relaxed text-ink-2">Fund is everything in Pro for up to {FUND_SEATS} seats at a flat price: each seat signs in on its own, and the team shares one book, watchlist and peer list. The API, signed webhooks and Slack alerts are included.</p>
               <ul className="mt-6 space-y-2.5 text-[15px] text-ink-2">
                 {['$1,990/yr for up to 10 seats', 'Invoiced yearly, net 30', 'W-9 available once our entity details are published', 'Your uploaded book stays private to your team', 'Prices exclude applicable taxes. Copybook does not currently collect sales tax.'].map((x) => (
                   <li key={x} className="flex gap-2.5">

@@ -12,13 +12,13 @@ export const qLabel = (q) => (q ? q.replace(/^(\d{4})Q(\d)$/, 'Q$2 $1') : 'lates
  *  first; the quarter replaces "latest 13Fs" once most filers have filed it (scripts/stocks.mjs). */
 export function stockTitle({ ticker, superinvestors, hedge, filers, quarter }) {
   const parts = [superinvestors ? `${num(superinvestors)} superinvestor${superinvestors === 1 ? '' : 's'}` : null, hedge ? `${num(hedge)} hedge fund${hedge === 1 ? '' : 's'}` : null, filers ? `${num(filers)} 13F filers` : null].filter(Boolean)
-  return parts.length ? `Who owns ${ticker}? ${parts.join(', ')} · ${quarter ? qLabel(quarter) : 'latest 13Fs'}` : `Who owns ${ticker}? · Copybook`
+  return parts.length ? `Who owns ${ticker}? ${parts.join(', ')} · ${quarter ? qLabel(quarter) : 'latest 13Fs'}` : `Who owns ${ticker}? · Factor Dynamics`
 }
 
 /** "Warren Buffett 13F portfolio, Q2 2026: $299.3B in 29 positions" (share positions, as the page counts them). */
 export function investorTitle({ who, quarter, value, positions }) {
   who = SEO_NAME[who] ?? who
-  return value ? `${who} 13F portfolio, ${qLabel(quarter)}: ${usd(value)} in ${num(positions)} positions` : `${who} portfolio · Copybook`
+  return value ? `${who} 13F portfolio, ${qLabel(quarter)}: ${usd(value)} in ${num(positions)} positions` : `${who} portfolio · Factor Dynamics`
 }
 
 /** "Q3 2026 13F filing season: 2 of 40 superinvestors filed · live tracker". */
@@ -31,7 +31,7 @@ export function seasonTitle({ quarter, filed, total }) {
 export function recapTitle({ quarter, filed, total, names = [], final = false }) {
   const Q = qLabel(quarter)
   const who = recapFilers({ filed, names, final })
-  return who ? `${Q} so far: what ${who} bought and sold · ${filed} of ${total} superinvestors filed` : `${Q} 13F recap: what the superinvestors bought and sold · Copybook`
+  return who ? `${Q} so far: what ${who} bought and sold · ${filed} of ${total} superinvestors filed` : `${Q} 13F recap: what the superinvestors bought and sold · Factor Dynamics`
 }
 
 /** "Richard Pzena and Tweedy Browne" while fewer than 10 superinvestors have filed, else null. */

@@ -9,12 +9,12 @@ import { timeLabel } from '../components/Paused'
 // nothing, so a mail scanner that follows links can't end a pause; the button posts the token to the API,
 // which resumes the plan and sends the browser to /account/?resumed=1, signed in.
 export function Resume() {
-  useTitle('Keep your plan · Copybook')
+  useTitle('Keep your plan · Factor Dynamics')
   const [params] = useSearchParams()
   const t = params.get('t') ?? ''
   // Signed in on this browser: word the page for what the link undoes. Otherwise it stays generic.
   const m = useMember()
-  const plan = PLAN_NAME[m?.plan ?? ''] ?? 'Copy'
+  const plan = PLAN_NAME[m?.plan ?? ''] ?? 'Plus'
   const pausedNow = Boolean(m?.paused_until && m.paused_until * 1000 > Date.now())
   const billFrom = (m?.status === 'trialing' ? m.trial_end : m?.period_end) ?? null
   const title = m?.cancel_at_period_end ? `Keep your ${plan} plan.` : pausedNow ? `Resume your ${plan} plan.` : 'Keep your plan.'

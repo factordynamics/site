@@ -433,7 +433,7 @@ function Webhook({ c, onSave, note }: { c: Channels; onSave: (b: Put) => Promise
     >
       {!c.webhook_available ? (
         <p className="text-[13.5px] text-ink-2">
-          Signed webhooks are part of Copy Pro and Copy Fund.{' '}
+          Signed webhooks are part of Pro and Fund.{' '}
           <Link to="/upgrade/?plan=pro" className="font-medium text-accent hover:text-accent-2">
             Upgrade to Pro
           </Link>

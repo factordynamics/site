@@ -73,12 +73,12 @@ export function FilingCard() {
       .map((h) => ({ h, delta: (h as { value_delta?: number }).value_delta ?? (h.shares ? (h.shares - (h.prev_shares ?? 0)) * (h.value / h.shares) : -(h.prev_value ?? 0)) }))
       .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
   }, [book.data, d, tag])
-  useTitle(d ? `${possessive(d.manager)} ${quarterLabel(d.quarter)} 13F: top moves · Copybook` : undefined)
+  useTitle(d ? `${possessive(d.manager)} ${quarterLabel(d.quarter)} 13F: top moves · Factor Dynamics` : undefined)
   // A just-filed card is served by 404.html with the site's generic tags. Link crawlers don't run
   // scripts, so this helps only readers and search engines; the build writes the real tags and image.
   useEffect(() => {
     if (!d || !c.data?.live) return
-    const title = `${possessive(d.manager)} ${quarterLabel(d.quarter)} 13F: top moves · Copybook`
+    const title = `${possessive(d.manager)} ${quarterLabel(d.quarter)} 13F: top moves · Factor Dynamics`
     const desc = `${d.manager} filed a ${quarterLabel(d.quarter)} 13F on ${dateLabel(d.filing_date)}: bought ${money(d.bought_usd)}, sold ${money(d.sold_usd)}, from the SEC filing.`
     const set = (sel: string, v: string) => document.head.querySelector(sel)?.setAttribute('content', v)
     for (const sel of ['meta[property="og:title"]', 'meta[name="twitter:title"]']) set(sel, title)
@@ -228,11 +228,11 @@ export function FilingCard() {
           {d && (
             <Panel title={getToken() ? `Get ${possessive(d.manager)} next 13F by email` : `Get ${possessive(d.manager)} moves in Friday’s free email`}>
               {getToken() ? (
-                <p className="text-[14px] leading-relaxed text-ink-2">Follow with Copy and the next filing lands in your inbox, checked on EDGAR every minute, with every new, added, trimmed and exited position inside.</p>
+                <p className="text-[14px] leading-relaxed text-ink-2">Follow with Plus and the next filing lands in your inbox, checked on EDGAR every minute, with every new, added, trimmed and exited position inside.</p>
               ) : (
                 <>
                   <FollowSignup people={[{ slug: d.slug, name: d.manager }]} />
-                  <p className="mt-4 border-t border-line pt-4 text-[13.5px] leading-relaxed text-ink-2">Want each 13F by email as it’s filed? That’s Copy. We check EDGAR every minute.</p>
+                  <p className="mt-4 border-t border-line pt-4 text-[13.5px] leading-relaxed text-ink-2">Want each 13F by email as it’s filed? That’s Plus. We check EDGAR every minute.</p>
                   <Button to={pricingTo()} onClick={() => track('trial_click')} className="mt-3">
                     Start 14-day free trial <Arrow />
                   </Button>

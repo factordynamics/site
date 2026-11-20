@@ -3,7 +3,7 @@ import { SearchBox } from '../components/Search'
 import { Button } from '../components/ui'
 
 export function NotFound() {
-  useTitle('Page not found · Copybook')
+  useTitle('Page not found · Factor Dynamics')
   return (
     <div className="container-x max-w-xl pt-24 text-center">
       <p className="font-mono text-[13px] text-ink-3">404</p>

@@ -78,7 +78,7 @@ export function FundSetup({ member, welcome }: { member: Member; welcome?: boole
     <section className="mt-10 rounded-[18px] bg-card p-6 shadow-[var(--shadow-card)] md:p-8" aria-labelledby="fund-setup-title">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-[13px] font-medium text-accent">Set up Copy Fund · {left ? `${steps.length - left} of ${steps.length} done` : 'all set'}</p>
+          <p className="text-[13px] font-medium text-accent">Set up Fund · {left ? `${steps.length - left} of ${steps.length} done` : 'all set'}</p>
           <h2 id="fund-setup-title" className="mt-2 text-[26px] font-semibold tracking-[-0.03em]">
             {owner ? 'Get your team running.' : 'Your team’s setup.'}
           </h2>

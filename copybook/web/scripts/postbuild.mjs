@@ -96,24 +96,24 @@ page(
   ld({ '@graph': [ORG, { '@type': 'WebSite', name: 'Copybook', url: SITE, description: 'Superinvestor and hedge fund portfolios from SEC 13F filings.', publisher: { '@type': 'Organization', name: 'Copybook' } }] }),
 )
 const tc = displayName
-page('investors/', 'Investors · Copybook', 'Latest 13F portfolios of legendary value investors, hedge-fund founders, activists and the largest institutions.')
-page('pricing/', 'Pricing · Copybook', 'The latest quarter is free. Copy adds quarter-over-quarter changes, the last 8 quarters of history, filing alerts and CSV export.')
-page('account/', 'Account · Copybook', 'Manage your Copy subscription.')
+page('investors/', 'Investors · Factor Dynamics', 'Latest 13F portfolios of legendary value investors, hedge-fund founders, activists and the largest institutions.')
+page('pricing/', 'Pricing · Factor Dynamics', 'The latest quarter is free. Plus adds quarter-over-quarter changes, the last 8 quarters of history, filing alerts and CSV export.')
+page('account/', 'Account · Factor Dynamics', 'Manage your Plus subscription.')
 {
   // /speed/'s share card (scripts/cards.mjs): the season's median and p90, or the waiting state.
   let sp = null
   try {
     sp = JSON.parse(readFileSync(join(dist, 'og', 'speed.json'), 'utf8'))
   } catch {}
-  page('speed/', 'Alert speed: EDGAR to inbox, every alert timed · Copybook', 'How fast Copybook alerts arrive: the median and 90th percentile from SEC EDGAR acceptance to delivery for 13F, Form 4 and 13D/G filings, and every live alert this season.', '', sp?.url)
+  page('speed/', 'Alert speed: EDGAR to inbox, every alert timed · Factor Dynamics', 'How fast Copybook alerts arrive: the median and 90th percentile from SEC EDGAR acceptance to delivery for 13F, Form 4 and 13D/G filings, and every live alert this season.', '', sp?.url)
 }
-page('upgrade/', 'Upgrade · Copybook', 'Switch your Copy plan to Copy Pro or Copy Fund, prorated, on the same billing interval.')
-page('resume/', 'Keep your plan · Copybook', 'Resume a paused or cancelled Copybook plan.', '\n    <meta name="robots" content="noindex" />')
-page('unsubscribe/', 'Unsubscribe · Copybook', 'Unsubscribe from Copybook’s weekly email and tips.', '\n    <meta name="robots" content="noindex" />')
-page('data-quality/', 'Data quality: the gates every publish passes · Copybook', 'The publish gates every Copybook data run passes, the 13F lines held as unreliable by reason, and the build each part of the data comes from.')
-page('status/', 'Status · Copybook', 'Live status of Copybook’s member API, EDGAR poller and filing pages, and the incident log.')
-page('weekly/', 'The free Friday email: last week’s edition · Copybook', 'Every Friday: the week’s biggest superinvestor buys and sells from SEC filings. Free. Here is last week’s edition.')
-page('why/', 'Why you cancelled · Copybook', 'Tell us why you cancelled Copybook.', '\n    <meta name="robots" content="noindex" />')
+page('upgrade/', 'Upgrade · Factor Dynamics', 'Switch your Plus plan to Pro or Fund, prorated, on the same billing interval.')
+page('resume/', 'Keep your plan · Factor Dynamics', 'Resume a paused or cancelled Copybook plan.', '\n    <meta name="robots" content="noindex" />')
+page('unsubscribe/', 'Unsubscribe · Factor Dynamics', 'Unsubscribe from Copybook’s weekly email and tips.', '\n    <meta name="robots" content="noindex" />')
+page('data-quality/', 'Data quality: the gates every publish passes · Factor Dynamics', 'The publish gates every Copybook data run passes, the 13F lines held as unreliable by reason, and the build each part of the data comes from.')
+page('status/', 'Status · Factor Dynamics', 'Live status of Copybook’s member API, EDGAR poller and filing pages, and the incident log.')
+page('weekly/', 'The free Friday email: last week’s edition · Factor Dynamics', 'Every Friday: the week’s biggest superinvestor buys and sells from SEC filings. Free. Here is last week’s edition.')
+page('why/', 'Why you cancelled · Factor Dynamics', 'Tell us why you cancelled Copybook.', '\n    <meta name="robots" content="noindex" />')
 {
   // The season tracker's share card (scripts/cards.mjs), with its cache-busting URL.
   let season = null
@@ -130,7 +130,7 @@ page('why/', 'Why you cancelled · Copybook', 'Tell us why you cancelled Copyboo
       const rows = (list, f) => (list ?? []).slice(0, 10).map((x) => [link(`stocks/${x.ticker}/`, x.ticker), ht(x.name), f(x)])
       const body = rec
         ? pre(
-            r.title.replace(/ · Copybook$/, ''),
+            r.title.replace(/ · Factor Dynamics$/, ''),
             r.desc,
             `<h2>Most bought</h2>`,
             table(['Stock', 'Company', pctView ? 'Top buy, % of book' : 'Net bought'], rows(pctView ? rec.most_bought_pct : rec.most_bought, (x) => (pctView ? ht(x.pct != null ? pct1(x.pct) : '') : usd(Math.abs(x.net_value))))),
@@ -139,7 +139,7 @@ page('why/', 'Why you cancelled · Copybook', 'Tell us why you cancelled Copyboo
             `<p>${link('season/', 'Live season tracker')} · ${link('flow/', 'Smart money flow')} · ${link('investors/', 'All investors')}</p>`,
           )
         : ''
-      page(r.path, r.title, r.desc, ld({ '@type': 'Article', headline: r.title.replace(/ · Copybook$/, ''), description: r.desc, image: r.url, url: `${SITE}${r.path}`, dateModified: built, publisher: ORG, author: ORG, isBasedOn: EDGAR, mainEntityOfPage: `${SITE}${r.path}` }), r.url, body)
+      page(r.path, r.title, r.desc, ld({ '@type': 'Article', headline: r.title.replace(/ · Factor Dynamics$/, ''), description: r.desc, image: r.url, url: `${SITE}${r.path}`, dateModified: built, publisher: ORG, author: ORG, isBasedOn: EDGAR, mainEntityOfPage: `${SITE}${r.path}` }), r.url, body)
     }
   } catch {}
   // The season tracker's title names the quarter now filing, for search during filing week.
@@ -148,7 +148,7 @@ page('why/', 'Why you cancelled · Copybook', 'Tell us why you cancelled Copyboo
   // The tracker's title and description carry this build's counts (rebuilt every 20 minutes in filing week).
   const sd = seasonData
   const sq = sd ? qLabel(sd.quarter) : q
-  const title = sd ? seasonTitle({ quarter: sd.quarter, filed: sd.featured.filed, total: sd.featured.total }) : `${q} 13F filing season tracker: who has filed and what they bought · Copybook`
+  const title = sd ? seasonTitle({ quarter: sd.quarter, filed: sd.featured.filed, total: sd.featured.total }) : `${q} 13F filing season tracker: who has filed and what they bought · Factor Dynamics`
   const desc = sd
     ? `Live through the ${dayLabel(sd.deadline)} deadline: ${num(sd.filers.filed)} of the ${num(sd.filers.total)} 13F filers active last quarter and ${sd.featured.filed} of ${sd.featured.total} superinvestors have filed ${sq} 13Fs. Who filed, who is next, and the most bought and sold stocks so far, from SEC EDGAR.`
     : `Live through the 13F deadline: how many superinvestors and filers have filed ${q} 13Fs, the latest filings, and the most bought and sold stocks so far. From SEC EDGAR.`
@@ -166,18 +166,18 @@ page('why/', 'Why you cancelled · Copybook', 'Tell us why you cancelled Copyboo
     : ''
   page('season/', title, desc, `\n    <link rel="alternate" type="application/atom+xml" title="Copybook: ${qLabel(FEED_Q)} 13F filings" href="${SITE}season/feed.xml" />` + ld({ '@type': 'Article', headline: title, description: desc, image: season?.url, url: `${SITE}season/`, dateModified: built, publisher: ORG, author: ORG, isBasedOn: EDGAR, mainEntityOfPage: `${SITE}season/` }), season?.url, body)
 }
-page('for-funds/', 'Copybook for investment teams: My book, peer overlap and 13F alerts · Copy Fund', 'See who owns what you own across every 13F filer, compare your book with your peers, and get filings in Slack, checked on EDGAR every minute. Ten seats, invoiced annually.')
-page('for-quants/', 'Copybook API for quants: 13F, Form 4 and 13D/G as JSON · Copy Pro', 'Every 13F filer’s latest holdings as JSON, with the EDGAR accession and acceptance time of every filing; holders by stock, Form 4 and 13D/G events and bulk CSV files. From $39/month.')
-page('my-book/', 'My book · Copybook', 'Your stocks through the eyes of every 13F filer: who holds them, who bought and sold this season, and every Form 4 and 13D.')
-page('methodology/', 'Methodology · Copybook', 'How Copybook reads SEC 13F, Form 4 and Schedule 13D/G filings: amendments, unit fixes, options, tickers, refresh cadence, and a changelog of every data correction.')
-page('winter-2025-26/', 'Last winter between 13F seasons: the filings · Copybook', 'The 19 Schedule 13D/G filings by superinvestors and 14 insider buys of $100K or more in their top stocks, Dec 1, 2025 to Jan 31, 2026, each linked to SEC EDGAR.')
-page('api/', 'API · Copybook', 'The Copybook API: 13F, Form 4 and Schedule 13D/G data from SEC EDGAR as JSON, for Copy Pro and Copy Fund.')
-page('contact/', 'Contact · Copybook', 'Request Copy Fund access for your team, ask a question, or ask us to delete your data.')
-page('terms/', 'Terms of use · Copybook', 'The terms for using Copybook, its paid plans and its API.')
-page('privacy/', 'Privacy · Copybook', 'What Copybook stores about you, why, and how to have it deleted. We never sell your data.')
-page('security/', 'Security · Copybook', 'Where Copybook keeps data and how it is protected.')
-page('security/questionnaire/', 'Security questionnaire · Copybook', 'A vendor security questionnaire for Copybook, filled in: data held, access, encryption, backups, failover, subprocessors and what we don’t have.')
-page('about/', 'About · Copybook', 'Portfolios, as filed. How Copybook reads SEC 13F filings, and what it won’t do.')
+page('for-funds/', 'Copybook for investment teams: My book, peer overlap and 13F alerts · Fund', 'See who owns what you own across every 13F filer, compare your book with your peers, and get filings in Slack, checked on EDGAR every minute. Ten seats, invoiced annually.')
+page('for-quants/', 'Copybook API for quants: 13F, Form 4 and 13D/G as JSON · Pro', 'Every 13F filer’s latest holdings as JSON, with the EDGAR accession and acceptance time of every filing; holders by stock, Form 4 and 13D/G events and bulk CSV files. From $39/month.')
+page('my-book/', 'My book · Factor Dynamics', 'Your stocks through the eyes of every 13F filer: who holds them, who bought and sold this season, and every Form 4 and 13D.')
+page('methodology/', 'Methodology · Factor Dynamics', 'How Copybook reads SEC 13F, Form 4 and Schedule 13D/G filings: amendments, unit fixes, options, tickers, refresh cadence, and a changelog of every data correction.')
+page('winter-2025-26/', 'Last winter between 13F seasons: the filings · Factor Dynamics', 'The 19 Schedule 13D/G filings by superinvestors and 14 insider buys of $100K or more in their top stocks, Dec 1, 2025 to Jan 31, 2026, each linked to SEC EDGAR.')
+page('api/', 'API · Factor Dynamics', 'The Copybook API: 13F, Form 4 and Schedule 13D/G data from SEC EDGAR as JSON, for Pro and Fund.')
+page('contact/', 'Contact · Factor Dynamics', 'Request Fund access for your team, ask a question, or ask us to delete your data.')
+page('terms/', 'Terms of use · Factor Dynamics', 'The terms for using Copybook, its paid plans and its API.')
+page('privacy/', 'Privacy · Factor Dynamics', 'What Copybook stores about you, why, and how to have it deleted. We never sell your data.')
+page('security/', 'Security · Factor Dynamics', 'Where Copybook keeps data and how it is protected.')
+page('security/questionnaire/', 'Security questionnaire · Factor Dynamics', 'A vendor security questionnaire for Copybook, filled in: data held, access, encryption, backups, failover, subprocessors and what we don’t have.')
+page('about/', 'About · Factor Dynamics', 'Portfolios, as filed. How Copybook reads SEC 13F filings, and what it won’t do.')
 let n = 0
 mkdirSync(join(dist, 'managers'), { recursive: true })
 // Each tracked fund's book (from the data host), for the position counts in titles.
@@ -221,7 +221,7 @@ const books = new Map()
       })
     : null
   if (image) cardsDrawn++
-  page('consensus/', 'Consensus · Copybook', 'Where great investors agree: one combined book from the latest 13F filings of the superinvestors we follow.', '', image, '', top.length ? `Most held by superinvestors: ${top.map(({ h, n }) => `${h.ticker || shortCo(h.issuer)} (${n})`).join(', ')}.` : null)
+  page('consensus/', 'Consensus · Factor Dynamics', 'Where great investors agree: one combined book from the latest 13F filings of the superinvestors we follow.', '', image, '', top.length ? `Most held by superinvestors: ${top.map(({ h, n }) => `${h.ticker || shortCo(h.issuer)} (${n})`).join(', ')}.` : null)
 }
 for (const m of index.managers) {
   if (!m.ok) continue
@@ -271,7 +271,7 @@ for (const m of index.managers) {
     pre(`${who}’s 13F portfolio`, desc, `<h2>Top holdings, ${qLabel(m.quarter)}</h2>`, table(['Stock', 'Company', 'Value', 'Weight', 'Change'], topRows), `<p>${link(`investors/${m.slug}/history/`, `${who}’s 13F history`)} · ${link('season/', 'This 13F season')} · ${link('investors/', 'All investors')}</p>`),
     card && `${who}: ${cardAlt}`
   )
-  page(`investors/${m.slug}/history/`, `${who} 13F history · Copybook`, `${who}: eight quarters of 13F holdings, buys and sells across quarters, with CSV export.`)
+  page(`investors/${m.slug}/history/`, `${who} 13F history · Factor Dynamics`, `${who}: eight quarters of 13F holdings, buys and sells across quarters, with CSV export.`)
   redirect(`managers/${m.slug}.html`, `investors/${m.slug}/`)
   n++
 }
@@ -298,7 +298,7 @@ try {
     const q = f.quarter ? `Q${f.quarter.slice(5)} ${f.quarter.slice(0, 4)}` : 'latest'
     page(
       `investors/${f.slug}/`,
-      `${who} 13F holdings · Copybook`,
+      `${who} 13F holdings · Factor Dynamics`,
       `${who}: ${q} 13F portfolio, ${f.position_count?.toLocaleString('en-US') ?? ''} positions${f.total_value ? ` worth ${usd(f.total_value)}` : ''}, with top holdings and sector mix, straight from the SEC filing.`,
       `\n    <meta name="cb-filer" content="${f.slug}:${f.cik}" />` +
         ld({ '@type': 'Dataset', name: `${who} 13F holdings, ${q}`, description: `${who}: ${q} 13F portfolio from SEC EDGAR.`, url: `${SITE}investors/${f.slug}/`, creator: ORG, isBasedOn: EDGAR.url, dateModified: f.filing_date ?? built, about: { '@type': 'Organization', name: who }, isAccessibleForFree: true }),
@@ -309,7 +309,7 @@ try {
   console.warn(`filer pages skipped: ${e.message}`)
 }
 console.log(`wrote ${fn} filer pages`)
-page('flow/', 'Smart money flow · Copybook', 'What the best investors bought and sold this 13F season: most bought, most sold, and new positions opened by two or more funds.')
+page('flow/', 'Smart money flow · Factor Dynamics', 'What the best investors bought and sold this 13F season: most bought, most sold, and new positions opened by two or more funds.')
 const holderRow = (x) => [link(`investors/${x.slug}/`, displayName(x.manager)), ht(qLabel(x.quarter)), ht(num(x.shares)), usd(x.value), ht(CHANGE[x.change] ?? '')]
 // "Warren Buffett bought $26.9M (Form 4, Nov 3, 2026)", newest first, linked to the filing.
 const sinceLines = (since) =>
@@ -338,7 +338,7 @@ try {
     const sf = readDist('d', 'stocks', `${s.t}.json`)
     const sup = sf?.holders?.filter((x) => x.featured).length ?? 0
     const tc2 = sf?.title_counts
-    const title = tc2?.filers ? stockTitle({ ticker: s.t, superinvestors: sup, hedge: tc2.hedge, filers: tc2.filers, quarter: tc2.quarter }) : `${s.t} ${s.n}: who owns it · Copybook`
+    const title = tc2?.filers ? stockTitle({ ticker: s.t, superinvestors: sup, hedge: tc2.hedge, filers: tc2.filers, quarter: tc2.quarter }) : `${s.t} ${s.n}: who owns it · Factor Dynamics`
     // No superinvestor has filed this season's quarter and none has Form 4 or 13D/G news: lead with who files next.
     const supH = (sf?.holders ?? []).filter((x) => x.featured).sort((a, b) => b.value - a.value)
     const due = seasonData && supH.length && !supH.some((x) => x.quarter === seasonData.quarter) && !(sf?.since ?? []).length ? dueLead({ quarter: seasonData.quarter, deadline: seasonData.deadline, names: supH.map((x) => x.manager) }) : null

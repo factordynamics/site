@@ -2,7 +2,7 @@ import { useTitle } from '../lib/data'
 import { Button } from '../components/ui'
 
 export function About() {
-  useTitle('About · Copybook')
+  useTitle('About · Factor Dynamics')
   return (
     <div className="container-x pt-12 md:pt-16">
       <header className="max-w-3xl">

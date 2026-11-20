@@ -59,7 +59,7 @@ export function FreeNames({ className = '' }: { className?: string }) {
   const add = async () => {
     const cells = [...new Set(text.split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean))]
     if (!cells.length) return
-    if (full) return setMsg({ t: `Free accounts can save up to ${LIMIT} names. Copy has no limit.`, trial: true })
+    if (full) return setMsg({ t: `Free accounts can save up to ${LIMIT} names. Plus has no limit.`, trial: true })
     setBusy(true)
     setMsg(null)
     const added: string[] = []
@@ -77,7 +77,7 @@ export function FreeNames({ className = '' }: { className?: string }) {
           await setFollow('owned', t, true)
           added.push(t)
         } catch (e) {
-          if (e instanceof ApiError && e.code === 'free_limit') limit = e.detail ?? `Free accounts can save up to ${LIMIT} names. Copy has no limit.`
+          if (e instanceof ApiError && e.code === 'free_limit') limit = e.detail ?? `Free accounts can save up to ${LIMIT} names. Plus has no limit.`
           else failed = true
         }
       }
@@ -145,7 +145,7 @@ export function FreeNames({ className = '' }: { className?: string }) {
           id="free-name"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder={full ? 'Copy keeps unlimited names' : 'Add tickers, e.g. AAPL, MSFT'}
+          placeholder={full ? 'Plus keeps unlimited names' : 'Add tickers, e.g. AAPL, MSFT'}
           className="h-11 w-full min-w-0 rounded-full bg-paper px-4 font-mono sm:h-10 sm:flex-1 text-[14px] shadow-[0_0_0_1px_var(--color-line-2)] outline-none placeholder:font-sans placeholder:text-ink-3 focus:shadow-[0_0_0_2px_var(--color-accent)]"
         />
         <Button type="submit" variant="outline" disabled={busy}>
@@ -167,11 +167,11 @@ export function FreeNames({ className = '' }: { className?: string }) {
         <span className="min-w-0 flex-1">
           {fn?.hook ? (
             <>
-              <span className="font-medium text-ink">{fn.hook}, with Copy</span>
+              <span className="font-medium text-ink">{fn.hook}, with Plus</span>
               {fn.more ? ` · +${fn.more} more in your names` : ''}
             </>
           ) : (
-            'Every fund holding your names, their weights, insider trades and an alert when anyone moves: Copy'
+            'Every fund holding your names, their weights, insider trades and an alert when anyone moves: Plus'
           )}
         </span>
         <span className="inline-flex shrink-0 items-center gap-1 font-medium text-accent">

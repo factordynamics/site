@@ -76,7 +76,7 @@ export function FollowButton({ kind, id, name, size = 'sm', className = '', stac
           onClick={() =>
             setFollow('owned', id, !owned).then(
               () => setFreeMsg(null),
-              (e) => setFreeMsg(e instanceof ApiError && e.code === 'free_limit' ? (e.detail ?? `Free accounts can save up to ${follows.limit} names. Copy has no limit.`) : 'That didn’t save. Please try again.'),
+              (e) => setFreeMsg(e instanceof ApiError && e.code === 'free_limit' ? (e.detail ?? `Free accounts can save up to ${follows.limit} names. Plus has no limit.`) : 'That didn’t save. Please try again.'),
             )
           }
           className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full font-medium transition-[background,box-shadow,color] duration-150 active:scale-[0.98] disabled:opacity-60 ${hb} ${
@@ -138,7 +138,7 @@ export function FollowButton({ kind, id, name, size = 'sm', className = '', stac
               </p>}
               <FollowSignup people={[{ slug: id, name }]} kind={kind} label="Your email" className="mt-2.5" onDone={() => setJoined(true)} />
               {!joined && <p className="mt-3 border-t border-line pt-3 text-[13px] leading-relaxed text-ink-2">
-                Or get each 13F as it’s filed, with Copy. We check EDGAR every minute.{' '}
+                Or get each 13F as it’s filed, with Plus. We check EDGAR every minute.{' '}
                 <Link to={pricingTo()} onClick={() => track('trial_click')} className="font-medium text-accent hover:text-accent-2">
                   Start 14-day free trial
                 </Link>{' '}
@@ -153,7 +153,7 @@ export function FollowButton({ kind, id, name, size = 'sm', className = '', stac
             </>
           ) : (
           <>
-          <p className="text-[14.5px] font-semibold">{capped ? 'You’re following 10 investors' : signedIn ? 'Following is a Copy feature' : `Follow ${name} with Copy`}</p>
+          <p className="text-[14.5px] font-semibold">{capped ? 'You’re following 10 investors' : signedIn ? 'Following is a Plus feature' : `Follow ${name} with Plus`}</p>
           <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-2">
             {capped ? CAP_MSG : kind === 'investor'
               ? 'Get an email when they file a new 13F, with their biggest buys and sells in it.'

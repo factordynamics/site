@@ -17,7 +17,7 @@ export function History() {
   const active = Boolean(member?.active)
   const hist = useAsync(() => (active ? loadHistory(slug) : Promise.resolve(null)), [slug, active])
   const name = m?.manager ?? ''
-  useTitle(name ? `${name} 13F history · Copybook` : undefined)
+  useTitle(name ? `${name} 13F history · Factor Dynamics` : undefined)
   const status = hist.error instanceof ApiError ? hist.error.status : 0
 
   return (
@@ -41,7 +41,7 @@ export function History() {
             <h1 className="text-[34px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-[44px]">{name || '\u00a0'}</h1>
             <p className="mt-1 flex flex-wrap items-center gap-2 text-[15px] text-ink-2">
               <span>13F history</span>
-              <Badge tone="accent">Copy</Badge>
+              <Badge tone="accent">Plus</Badge>
             </p>
           </div>
         </div>
@@ -454,13 +454,13 @@ function Paywall({ name, quarters, kind }: { name: string; quarters?: string[]; 
             <Lock />
           </span>
           <h2 className="mt-4 text-[24px] font-semibold tracking-[-0.03em]">
-            {kind === 'inactive' ? 'Your Copy plan isn’t active.' : kind === 'free' ? 'This is a Copy feature.' : `Every quarter of ${name || 'this'}’s book.`}
+            {kind === 'inactive' ? 'Your Plus plan isn’t active.' : kind === 'free' ? 'This is a Plus feature.' : `Every quarter of ${name || 'this'}’s book.`}
           </h2>
           <p className="mt-2 text-[15px] leading-relaxed text-ink-2">
             {kind === 'inactive'
-              ? 'Renew Copy to see quarter-by-quarter history, every buy and sell, and CSV export.'
+              ? 'Renew Plus to see quarter-by-quarter history, every buy and sell, and CSV export.'
               : kind === 'free'
-                ? `You’re on the free Friday email. Start a ${TRIAL_DAYS}-day Copy trial to see ${name ? `${name}’s` : 'the'} book quarter by quarter, every buy and sell, and download it as CSV.`
+                ? `You’re on the free Friday email. Start a ${TRIAL_DAYS}-day Plus trial to see ${name ? `${name}’s` : 'the'} book quarter by quarter, every buy and sell, and download it as CSV.`
               : `${qs.length > 1 ? `${qs.length} quarters on file, ${span}. ` : ''}See how the portfolio changed quarter by quarter, every buy and sell, and download it as CSV.`}
           </p>
           <ul className="mx-auto mt-4 inline-grid gap-1.5 text-left text-[14px] text-ink-2">

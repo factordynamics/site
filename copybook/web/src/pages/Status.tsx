@@ -166,7 +166,7 @@ const eventWhen = (a: string, b?: string | null) => {
 }
 
 export function Status() {
-  useTitle('Status · Copybook')
+  useTitle('Status · Factor Dynamics')
   const tick = useTick(60_000, true)
   const p = useAsync(probe, [tick])
   const lat = useAsync(loadLatency, [tick])

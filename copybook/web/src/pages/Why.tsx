@@ -20,7 +20,7 @@ const REASONS: Record<string, string> = {
 // records nothing, so a mail scanner that follows links can't send a reason; the button form-posts t, r
 // and the optional note to the API with fetch, and the thanks shows on this page.
 export function Why() {
-  useTitle('Why you cancelled · Copybook')
+  useTitle('Why you cancelled · Factor Dynamics')
   const [params] = useSearchParams()
   const t = params.get('t') ?? ''
   const r = params.get('r') ?? ''

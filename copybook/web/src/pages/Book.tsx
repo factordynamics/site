@@ -174,7 +174,7 @@ const sortVal = (r: Row, k: Key) =>
   k === 'ticker' ? r.ticker : k === 'change' ? (Number.isNaN(r.prev) ? 0 : r.holders - r.prev) : k === 'filed' ? r.filed : k === 'latest' ? (r.latest?.date ?? '') : (r[k] as number)
 
 export function Book() {
-  useTitle('My book · Copybook')
+  useTitle('My book · Factor Dynamics')
   const member = useMember()
   const pro = isPro(member)
   const { status, follows } = useFollows()
@@ -307,7 +307,7 @@ export function Book() {
   if (isFree(member))
     return (
       <div className="container-x pt-12 md:pt-16">
-        <Header eyebrow="My book · Free" sub="Save up to 5 stocks you own and see what the superinvestors did in them. Copy shows every fund holding them, their weights, insider trades and alerts." />
+        <Header eyebrow="My book · Free" sub="Save up to 5 stocks you own and see what the superinvestors did in them. Plus shows every fund holding them, their weights, insider trades and alerts." />
         <FreeNames className="mt-10 max-w-3xl" />
       </div>
     )
@@ -316,7 +316,7 @@ export function Book() {
       <div className="container-x pt-12 md:pt-16">
         <ApiStatus className="mb-6" />
       <Updating className="mb-4" />
-      <Header eyebrow="My book · Copy" sub="Which superinvestors hold the stocks you own or watch, what they did this season, and the latest Form 4 and 13D on each." />
+      <Header eyebrow="My book · Plus" sub="Which superinvestors hold the stocks you own or watch, what they did this season, and the latest Form 4 and 13D on each." />
         <section className="relative mt-10 overflow-hidden rounded-[var(--radius-card)] bg-card p-8 shadow-[var(--shadow-card)]">
           <div className="pointer-events-none select-none blur-[3px]" aria-hidden="true">
             <Skeleton className="h-8 w-1/3" />
@@ -324,8 +324,8 @@ export function Book() {
           </div>
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-card/60 p-6 text-center">
             <Lock />
-            <p className="mt-3 max-w-md text-[16px] font-semibold">{isFree(member) ? 'This is a Copy feature.' : 'My book is part of Copy.'}</p>
-            <p className="mt-1.5 max-w-md text-[14px] text-ink-2">See which superinvestors hold the stocks you own or watch, what they did this filing season, and the latest Form 4 and 13D on each. Copy Pro adds every 13F filer, crowding, peers and CSV.</p>
+            <p className="mt-3 max-w-md text-[16px] font-semibold">{isFree(member) ? 'This is a Plus feature.' : 'My book is part of Plus.'}</p>
+            <p className="mt-1.5 max-w-md text-[14px] text-ink-2">See which superinvestors hold the stocks you own or watch, what they did this filing season, and the latest Form 4 and 13D on each. Pro adds every 13F filer, crowding, peers and CSV.</p>
             <Button to="/pricing/" className="mt-5">
               {isFree(member) ? `Start ${TRIAL_DAYS}-day free trial` : 'Compare plans'} <Arrow />
             </Button>
@@ -585,7 +585,7 @@ export function Book() {
   )
 }
 
-function Header({ right, eyebrow = 'My book · Copy Pro and Copy Fund', sub = 'Crowding, this season’s buying and selling, and the latest insider and 13D filings in the stocks you own or watch.' }: { right?: React.ReactNode; eyebrow?: string; sub?: string }) {
+function Header({ right, eyebrow = 'My book · Pro and Fund', sub = 'Crowding, this season’s buying and selling, and the latest insider and 13D filings in the stocks you own or watch.' }: { right?: React.ReactNode; eyebrow?: string; sub?: string }) {
   return (
     <header className="flex flex-wrap items-end justify-between gap-4">
       <div className="max-w-2xl">
@@ -665,7 +665,7 @@ function LiteBook({ member }: { member: Member }) {
     <div className="container-x pt-12 md:pt-16">
       <ApiStatus className="mb-6" />
       <Updating className="mb-4" />
-      <Header eyebrow="My book · Copy" sub="Which superinvestors hold the stocks you own or watch, what they did this season, and their latest Form 4 and 13D filings." />
+      <Header eyebrow="My book · Plus" sub="Which superinvestors hold the stocks you own or watch, what they did this season, and their latest Form 4 and 13D filings." />
       <FailingBanner initial={member.channels_failing} />
 
       {status === 'ready' && names.length === 0 ? (
@@ -687,7 +687,7 @@ function LiteBook({ member }: { member: Member }) {
                     {label}
                   </button>
                 ))}
-                <Link to="/upgrade/?plan=pro" aria-describedby="pro-title" title="Part of Copy Pro" className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-ink-3 hover:text-ink-2">
+                <Link to="/upgrade/?plan=pro" aria-describedby="pro-title" title="Part of Pro" className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-ink-3 hover:text-ink-2">
                   <Lock /> All 13F filers
                 </Link>
               </div>
@@ -1112,7 +1112,7 @@ function Import({ link = true }: { link?: boolean }) {
             <Lock />
           </span>
           <span>
-            <span className="font-medium text-ink">Link your fund’s 13F as your book</span> · Copy Pro
+            <span className="font-medium text-ink">Link your fund’s 13F as your book</span> · Pro
           </span>
         </Link>
       )}

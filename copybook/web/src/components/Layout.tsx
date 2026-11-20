@@ -113,7 +113,7 @@ export function Layout() {
             )}
             {cta && (
               <Button to={paying ? '/account/' : '/pricing/'} size="sm" variant="dark" className="hidden sm:inline-flex">
-                {paying ? 'Account' : 'Try Copy free'}
+                {paying ? 'Account' : 'Try Plus free'}
               </Button>
             )}
             <button
@@ -141,7 +141,7 @@ export function Layout() {
             </nav>
             {cta && (
               <Button to={paying ? '/account/' : '/pricing/'} variant="dark" className="mt-4 w-full">
-                {paying ? 'Account' : 'Try Copy free'}
+                {paying ? 'Account' : 'Try Plus free'}
               </Button>
             )}
             {signedIn && !paying && (

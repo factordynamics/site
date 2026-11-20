@@ -18,7 +18,7 @@ export function Consensus() {
 
   const all = useMemo(() => book.data?.rows ?? [], [book.data])
   const mix = useMemo(() => foldSlices(sectorMix(all), 10), [all])
-  useTitle('Consensus · Copybook')
+  useTitle('Consensus · Factor Dynamics')
   const rows = useMemo(() => {
     const s = q.trim().toLowerCase()
     const hits = s ? all.filter((r) => `${r.ticker ?? ''} ${r.issuer}`.toLowerCase().includes(s)) : all

@@ -69,7 +69,7 @@ export function Season() {
   const kahn = soon.data?.expected.find((x) => x.slug === 'irving-kahn' && x.expected_date && x.expected_date >= todayEt)
   const trialLine = [
     'Want each 13F as it’s filed?',
-    med?.median_seconds != null && med.median_seconds < 120 ? 'Median alert under 2 minutes after the SEC publishes the filing.' : 'Copy emails you each one with its moves, checked on EDGAR every minute.',
+    med?.median_seconds != null && med.median_seconds < 120 ? 'Median alert under 2 minutes after the SEC publishes the filing.' : 'Plus emails you each one with its moves, checked on EDGAR every minute.',
     kahn && `${displayName(kahn.manager)} files ${weekday(kahn.expected_date!, todayEt)}.`,
   ]
     .filter(Boolean)
@@ -136,7 +136,7 @@ export function Season() {
           )}
           {getToken() && !passed && next && (
             <div className="mt-4 rounded-xl bg-accent-soft px-4 py-3 text-[15px] leading-snug text-accent-2">
-              <span className="font-medium">Next up: {next}.</span> Copy emails you each one’s 13F as it’s filed, with its moves; free follows get them in Friday’s email.
+              <span className="font-medium">Next up: {next}.</span> Plus emails you each one’s 13F as it’s filed, with its moves; free follows get them in Friday’s email.
               {!isPaying(member) && (
                 <div className="mt-3">
                   <TrialButton />
@@ -237,7 +237,7 @@ export function Season() {
           {d && !paid && rows.length > FREE && (
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line bg-accent-soft px-5 py-4 md:px-6">
               <p className="flex items-center gap-2 text-[13.5px] text-accent-2">
-                <Lock /> {rows.length - FREE} more names, and an email each time a fund you follow files, with Copy
+                <Lock /> {rows.length - FREE} more names, and an email each time a fund you follow files, with Plus
               </p>
               <span className="flex flex-col items-start gap-1">
                 <Button {...trialProps()} size="sm">

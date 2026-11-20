@@ -315,7 +315,7 @@ export async function startSession(body: { checkout_session: string } | { login:
   return { member: r.member, existing: false }
 }
 
-export const PLAN_NAME: Record<string, string> = { copy: 'Copy', pro: 'Copy Pro', fund: 'Copy Fund' }
+export const PLAN_NAME: Record<string, string> = { copy: 'Plus', pro: 'Pro', fund: 'Fund' }
 /** A free Friday-email account (POST /signup): no paid plan, every paid route answers 402. */
 export const isFree = (m?: Member | null) => Boolean(m && !m.active && (m.plan === 'free' || m.status === 'free'))
 /** Active, trialing or paused on Copy or above. Every other state (signed out, free, cancelled, /me failing) sees the trial CTAs. */

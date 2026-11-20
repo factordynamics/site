@@ -178,7 +178,7 @@ export function ManagerPage() {
           trial={
             q3 && q3.kind === 'expected' && due?.expected_date
               ? copyGap(due.expected_date, due.time_et)
-              : `Want ${possessive(shortFirst(f.manager, f.name))} 13F as it’s filed? Copy emails it with its moves, checked on EDGAR every minute.`
+              : `Want ${possessive(shortFirst(f.manager, f.name))} 13F as it’s filed? Plus emails it with its moves, checked on EDGAR every minute.`
           }
         />
       )}
@@ -298,7 +298,7 @@ export function ManagerPage() {
               {!paid && changes.length > 4 && (
                 <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-accent-soft px-4 py-3">
                   <p className="flex items-center gap-2 text-[13.5px] text-accent-2">
-                    <Lock /> {changes.length - 4} more buys and sells{historyNote(f)}, with Copy
+                    <Lock /> {changes.length - 4} more buys and sells{historyNote(f)}, with Plus
                   </p>
                   <Button to={pricingTo()} size="sm">
                     Start 14-day free trial
@@ -545,7 +545,7 @@ function FilerPanel({ f, member }: { f: ManagerFile; member: boolean }) {
             <>
               {' '}
               <Link to={pricingTo()} className="font-medium underline underline-offset-2">
-                See Copy
+                See Plus
               </Link>
             </>
           )}
@@ -573,7 +573,7 @@ function LockedChanges({ top }: { top: string[] }) {
           <Lock />
         </span>
         <p className="mt-3 text-[15px] font-semibold">See every buy and sell</p>
-        <p className="mt-1 max-w-xs text-[13px] text-ink-2">New positions, exits and size changes against the prior quarter come with Copy.</p>
+        <p className="mt-1 max-w-xs text-[13px] text-ink-2">New positions, exits and size changes against the prior quarter come with Plus.</p>
         <Button to={pricingTo()} size="sm" className="mt-4">
           Start 14-day free trial
         </Button>
@@ -592,7 +592,7 @@ function RecapLabel() {
   const r = useAsync(() => loadRecap(q), [q])
   const d = r.data
   if (!d) return <>{quarterLabel(q)} 13F season so far</>
-  return <>{recapTitle({ quarter: d.quarter, filed: d.superinvestors.filed, total: d.superinvestors.total, names: d.filing.filter((f) => f.filed).map((f) => displayName(f.manager)), final: d.final }).replace(/ · Copybook$/, '')}</>
+  return <>{recapTitle({ quarter: d.quarter, filed: d.superinvestors.filed, total: d.superinvestors.total, names: d.filing.filter((f) => f.filed).map((f) => displayName(f.manager)), final: d.final }).replace(/ · Factor Dynamics$/, '')}</>
 }
 
 // "Ackman" for a person, the name in full for a firm: a two-word name the filer's own name starts with ("Kahn
@@ -603,7 +603,7 @@ const shortFirst = (n: string, filer = '') => (/^[A-Z][a-z]+ [A-Z][a-z]+$/.test(
 /** "Copy: alert on Mon Nov 16 ~4 pm ET, 4 days before Friday's email." Until the fund files (expected.json). */
 function copyGap(day: string, timeEt: number) {
   const fr = fridayAfter(day)
-  return `Copy: alert on ${shortDay(day)} ${aboutET(timeEt)}, ${fr.days === 0 ? 'hours before' : `${fr.days} ${fr.days === 1 ? 'day' : 'days'} before`} Friday’s email.`
+  return `Plus: alert on ${shortDay(day)} ${aboutET(timeEt)}, ${fr.days === 0 ? 'hours before' : `${fr.days} ${fr.days === 1 ? 'day' : 'days'} before`} Friday’s email.`
 }
 
 function fridayLine(name: string, day: string, filer: string) {

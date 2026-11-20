@@ -37,7 +37,7 @@ export function Recap() {
   const filedNames = d ? d.filing.filter((f) => f.filed).map((f) => displayName(f.manager)) : []
   // Until about 10 have filed, the headline names them, so a few funds don't read as the whole field.
   const few = d ? recapFilers({ filed: d.superinvestors.filed, names: filedNames, final: d.final }) : null
-  useTitle(d ? (by === 'pct' ? `${Q} 13F recap: the superinvestors' biggest bets by % of book · Copybook` : recapTitle({ quarter: d.quarter, filed: d.superinvestors.filed, total: d.superinvestors.total, names: filedNames, final: d.final })) : undefined)
+  useTitle(d ? (by === 'pct' ? `${Q} 13F recap: the superinvestors' biggest bets by % of book · Factor Dynamics` : recapTitle({ quarter: d.quarter, filed: d.superinvestors.filed, total: d.superinvestors.total, names: filedNames, final: d.final })) : undefined)
 
   if (r.error && !d)
     return (
@@ -193,7 +193,7 @@ export function Recap() {
         <section className="mt-10 flex flex-col items-start justify-between gap-4 rounded-[var(--radius-card)] bg-night p-6 text-white shadow-[var(--shadow-card)] md:flex-row md:items-center md:p-8">
           <div className="max-w-xl">
             <h2 className="text-[20px] font-semibold tracking-[-0.02em]">Next quarter, know the day they file.</h2>
-            <p className="mt-1.5 text-[14.5px] text-white/70">Copy emails you each superinvestor’s moves when the 13F reaches EDGAR (we check every minute), with every list on this page in full.</p>
+            <p className="mt-1.5 text-[14.5px] text-white/70">Plus emails you each superinvestor’s moves when the 13F reaches EDGAR (we check every minute), with every list on this page in full.</p>
           </div>
           <Button to="/pricing/" size="lg">
             Start {TRIAL_DAYS}-day free trial <Arrow />
@@ -213,7 +213,7 @@ function More({ n, what }: { n: number; what: string }) {
     <Link to="/pricing/" className="mt-3 flex items-center gap-2 rounded-xl bg-ink/[0.03] px-3 py-2.5 text-[13px] text-ink-2 hover:text-ink">
       <Lock />
       <span>
-        {n} more {what} with Copy · <span className="font-medium text-accent">Start {TRIAL_DAYS}-day free trial</span>
+        {n} more {what} with Plus · <span className="font-medium text-accent">Start {TRIAL_DAYS}-day free trial</span>
       </span>
     </Link>
   )

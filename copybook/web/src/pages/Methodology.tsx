@@ -253,7 +253,7 @@ const splitSource = (x: SplitLog) => {
 }
 
 export function Methodology() {
-  useTitle('Methodology · Copybook')
+  useTitle('Methodology · Factor Dynamics')
   const log = useAsync(() => fetch(`${DATA}changelog.json`).then((r) => (r.ok ? (r.json() as Promise<{ updated_at?: string; entries: Entry[] }>) : null)), [])
   const idx = useAsync(loadIndex, [])
   const asOf = idx.data?.typesAsOf ?? ''

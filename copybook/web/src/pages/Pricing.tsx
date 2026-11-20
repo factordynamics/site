@@ -44,7 +44,7 @@ const tiers = (filers: string, curated: string): Tier[] => [
     id: 'pro',
     proof: true,
     who: 'For one analyst or quant. 1 seat, card billing.',
-    lead: 'Everything in Copy, plus',
+    lead: 'Everything in Plus, plus',
     now: [
       { t: 'API keys and docs', d: 'Up to 10 keys, with usage on your account page. 60 requests a minute and 20,000 a day per account, across all its keys. Each Fund seat has its own limit. Bulk file downloads aren’t metered.' },
       { t: 'Filer and holdings endpoints', d: `Every 13F filer, ${filers}, as JSON. History: ${HISTORY_EXACT}` },
@@ -142,7 +142,7 @@ async function fromFact(from: string | null): Promise<string | null> {
 
 /** One welcome line per email that links here (?from=<code>, set by the API's email templates). */
 const EMAIL_FROM: Record<string, string> = {
-  e2: `From the deadline email: start Copy free for ${TRIAL_DAYS} days (no card needed).`,
+  e2: `From the deadline email: start Plus free for ${TRIAL_DAYS} days (no card needed).`,
 }
 
 export function Pricing() {
@@ -156,7 +156,7 @@ export function Pricing() {
   const member = useMember()
   const RANK: Record<string, number> = { copy: 1, pro: 2, fund: 3 }
   const mine = member?.active && member.plan !== 'holdterm' ? member.plan : null
-  useTitle('Pricing · Copybook')
+  useTitle('Pricing · Factor Dynamics')
   const cov = useAsync(loadCoverage, [])
   const filers = cov.data ? cov.data.filers.toLocaleString('en-US') : '8,900+'
   const curated = trackedPhrase(cov.data)
@@ -177,9 +177,9 @@ export function Pricing() {
           <div>
             <p className="text-[11.5px] font-semibold uppercase tracking-[0.06em] text-accent">Between seasons</p>
             <h2 id="between" className="mt-2 text-[24px] font-semibold leading-tight tracking-[-0.03em]">
-              {Date.now() < Date.parse('2026-11-17T05:00:00Z') ? 'After Monday, Copy keeps working.' : 'Between 13F seasons, Copy keeps working.'}
+              {Date.now() < Date.parse('2026-11-17T05:00:00Z') ? 'After Monday, Plus keeps working.' : 'Between 13F seasons, Plus keeps working.'}
             </h2>
-            <p className="mt-3 text-[15px] leading-relaxed text-ink-2">13Fs come four times a year. Between them, the funds you follow and the stocks you own keep moving, and Copy emails you when they do.</p>
+            <p className="mt-3 text-[15px] leading-relaxed text-ink-2">13Fs come four times a year. Between them, the funds you follow and the stocks you own keep moving, and Plus emails you when they do.</p>
             <p className="mt-3 text-[14px] leading-relaxed text-ink-3">
               {/* Marketing's rev 78 sentence with payments' recount (purchases dated in the window, $100K and up): public/d/winter-2025-26.json, shown at /winter-2025-26/. */}
               Last winter (Dec 2025–Jan 2026):{' '}
@@ -217,12 +217,12 @@ export function Pricing() {
         ) : (
           hook.data && (
             <p className="mx-auto mt-4 max-w-xl rounded-xl bg-accent-soft px-4 py-2.5 text-[15px] leading-snug text-accent-2">
-              You just saw {hook.data}. Copy emails moves like this, checked on EDGAR every minute.
+              You just saw {hook.data}. Plus emails moves like this, checked on EDGAR every minute.
             </p>
           )
         )}
         <p className="mt-4 text-[16px] leading-relaxed text-ink-2 sm:text-[17px]">
-          Reading a portfolio is free. Copy follows the investors and stocks you care about. Every paid plan starts with {TRIAL_DAYS} days free.
+          Reading a portfolio is free. Plus follows the investors and stocks you care about. Every paid plan starts with {TRIAL_DAYS} days free.
         </p>
         <p className="mt-4 text-[13.5px] text-ink-3">
           We check EDGAR every minute.{' '}
@@ -337,7 +337,7 @@ export function Pricing() {
                       )}
                     </>
                   ) : plan && mine && !member?.seat && tier.id === 'pro' && mine === 'copy' ? (
-                    `Switches your Copy plan to Pro on the same ${member?.interval === 'monthly' ? 'monthly' : 'yearly'} billing, prorated for the rest of this period. You confirm the amount before anything changes.`
+                    `Switches your Plus plan to Pro on the same ${member?.interval === 'monthly' ? 'monthly' : 'yearly'} billing, prorated for the rest of this period. You confirm the amount before anything changes.`
                   ) : plan ? (
                     // Said plainly under every paid button: Copy's trial takes no card (Nov 11); Pro's still does.
                     <>
@@ -448,18 +448,18 @@ export function Pricing() {
             [
               [
                 'Which plan is right for me?',
-                'Copy is for individuals who want to know what the best funds bought, the moment they file. Pro is for anyone who needs the data in their own tools: the API, per-row filing timestamps (as_of point-in-time queries from Nov 30) and exports. Fund adds seats and shared lists for a team.',
+                'Plus is for individuals who want to know what the best funds bought, the moment they file. Pro is for anyone who needs the data in their own tools: the API, per-row filing timestamps (as_of point-in-time queries from Nov 30) and exports. Fund adds seats and shared lists for a team.',
               ],
               [
                 'What’s live in Pro and Fund today?',
-                `Pro: everything in Copy, API keys, the filer, holdings, holders, history and events endpoints, bulk CSV files (each filer’s current version, with per-row filing timestamps), filing acceptance times, signed webhooks, the full My book (every 13F filer, crowding, 13F linking and CSV) and peer overlap. Copy includes My book lite: who among the superinvestors holds your names and what they did this season. Coming, at no extra cost: new, exited and net trades for hedge funds and long-only managers in My book by Nov 20, as_of point-in-time queries from Nov 30 (per-row filing timestamps are live now), history back to 2013Q2 by Dec 31 (today: ${HISTORY_EXACT.replace(/ History back.*/, '').replace(/\.$/, '')}), and Parquet files with no date yet; each turns on in the API changelog when it returns data. Fund adds up to ${FUND_SEATS} seats, a shared book and peer lists, all live, and can be paid by annual invoice, net 30. Net-30 invoicing is for Fund; Pro is paid by card, with a full invoice.`,
+                `Pro: everything in Plus, API keys, the filer, holdings, holders, history and events endpoints, bulk CSV files (each filer’s current version, with per-row filing timestamps), filing acceptance times, signed webhooks, the full My book (every 13F filer, crowding, 13F linking and CSV) and peer overlap. Plus includes My book lite: who among the superinvestors holds your names and what they did this season. Coming, at no extra cost: new, exited and net trades for hedge funds and long-only managers in My book by Nov 20, as_of point-in-time queries from Nov 30 (per-row filing timestamps are live now), history back to 2013Q2 by Dec 31 (today: ${HISTORY_EXACT.replace(/ History back.*/, '').replace(/\.$/, '')}), and Parquet files with no date yet; each turns on in the API changelog when it returns data. Fund adds up to ${FUND_SEATS} seats, a shared book and peer lists, all live, and can be paid by annual invoice, net 30. Net-30 invoicing is for Fund; Pro is paid by card, with a full invoice.`,
               ],
               [
                 'How does the free trial work?',
-                `Every paid plan is free for ${TRIAL_DAYS} days. Copy needs no card: add one before day ${TRIAL_DAYS + 1} to keep it, or the trial simply ends and nothing is charged. Pro and Fund take a card at signup so they continue without a gap; you’re charged on day ${TRIAL_DAYS + 1} unless you cancel from Manage billing before then (a fund can start by invoice instead, below).`,
+                `Every paid plan is free for ${TRIAL_DAYS} days. Plus needs no card: add one before day ${TRIAL_DAYS + 1} to keep it, or the trial simply ends and nothing is charged. Pro and Fund take a card at signup so they continue without a gap; you’re charged on day ${TRIAL_DAYS + 1} unless you cancel from Manage billing before then (a fund can start by invoice instead, below).`,
               ],
-              ['Can a fund try Copy Fund without a card?', 'Yes. Start a 14-day trial, pay by invoice: no card. On day 14 we email an invoice for $1,990 (a year), due in 30 days, payable online by card or US bank account (ACH); cancel before then and nothing is owed. One trial per company. Card trial? Switch to invoice in your account. Monthly Fund is paid by card.'],
-              ['What does the founding price mean?', 'Copy: $9/month or $79/year, locked while you stay subscribed (a pause keeps it); from Feb 1, 2027, new members pay $12/month or $99/year. Pro and Fund have no founding offer: Pro is $39/mo or $390/yr and Fund is $199/mo or $1,990/yr.'],
+              ['Can a fund try Fund without a card?', 'Yes. Start a 14-day trial, pay by invoice: no card. On day 14 we email an invoice for $1,990 (a year), due in 30 days, payable online by card or US bank account (ACH); cancel before then and nothing is owed. One trial per company. Card trial? Switch to invoice in your account. Monthly Fund is paid by card.'],
+              ['What does the founding price mean?', 'Plus: $9/month or $79/year, locked while you stay subscribed (a pause keeps it); from Feb 1, 2027, new members pay $12/month or $99/year. Pro and Fund have no founding offer: Pro is $39/mo or $390/yr and Fund is $199/mo or $1,990/yr.'],
               ['Can I switch plans?', 'Yes. Upgrade, downgrade or change between monthly and yearly from Manage billing on your account page. Stripe prorates the difference.'],
               [
                 'How fast are filing alerts?',
