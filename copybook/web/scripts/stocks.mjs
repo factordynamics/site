@@ -206,10 +206,7 @@ const hlTickers = hlIndex?.tickers ?? {}
 // Issuer codes whose lines are separate funds (ingest's hl/index.json `funds`: VanEck ETF Trust 92189F is SMH, GDX, MOAT…),
 // never one company's share classes. hl/ and hlr/ sum every fund under the code into one row per filer, so a fund's
 // page publishes no every-filer rows or counts from them (lead, Nov 20) until ingest keys them by CUSIP9.
-// Single foreign companies ingest's funds listed from Nov 20 ~16:00Z (an ADR or registered share beside its options:
-// TSM, BABA, SONY, ASML, SHEL…). They keep their every-filer view; drop this once ingest's e17e67c is on Pages.
-const NOT_FUNDS = new Set(['00215W', '01609W', '023111', '03938L', '04016X', '042068', '05501U', '055622', '059460', '07725L', '090040', '09073Q', '09075V', '194693', '204409', '20441B', '26853E', '29446M', '33611D', '36165L', '36168Q', '37733W', '43289P', '450047', '45257L', '45258D', '456788', '45857P', '47737L', '47759T', '48138M', '50202M', '52490G', '53229C', '53620U', '583435', '59564R', '636274', '64110W', '653656', '654503', '654902', '66987V', '67010L', '71654V', '72651A', '732908', '74638P', '780259', '78392B', '80105N', '81141R', '817323', '835699', '861012', '86366E', '874039', '874080', '87936R', '88034P', '88429K', '892331', '89677Q', '89686D', '89977P', '90138A', '91531W', '91822M', '91912E', '92837L', '92857W', '973921', '98370X', '98372W', '98390R', '98422D', '98423X', '984245', '985915', '988740', '98945L', '98980A', 'D18190', 'G16252', 'G39387', 'G5214E', 'H17182', 'H5919C', 'H8817H', 'M74240', 'N07059'])
-const FUNDS = new Set(Object.keys(hlIndex?.funds ?? {}).filter((c) => !NOT_FUNDS.has(c)))
+const FUNDS = new Set(Object.keys(hlIndex?.funds ?? {}))
 const fundCode = (tickers) => tickers.map((t) => hlTickers[t]).find((c) => c && FUNDS.has(c)) ?? null
 for (const s of stocks.values()) {
   if (!s.classes.size) continue // no public ticker: private, bonds, unmapped
