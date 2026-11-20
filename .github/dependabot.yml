@@ -1,0 +1,21 @@
+# Weekly dependency updates: one grouped pull request per ecosystem, opened on Mondays, when
+# builders review them (never auto-merged, so nothing lands in a filing week's restart window).
+# Dependabot alerts and security updates are on in the repository settings, so a vulnerable
+# dependency gets its own pull request without waiting for the weekly run.
+# Merging a pull request that touches copybook/web/ or holdterm/ deploys that site.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directories: ["/", "/holdterm", "/copybook/web", "/copybook/api"]
+    schedule: {interval: "weekly", day: "monday"}
+    open-pull-requests-limit: 2
+    groups:
+      npm:
+        patterns: ["*"]
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule: {interval: "weekly", day: "monday"}
+    open-pull-requests-limit: 2
+    groups:
+      actions:
+        patterns: ["*"]
