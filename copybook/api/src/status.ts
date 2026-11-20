@@ -1,5 +1,6 @@
 import { dupesBlocked } from './alerts';
 import type { Env } from './env';
+import { in13fSeason } from './seasons';
 
 /**
  * The public /status/ data (PUBLIC_URL/status.json, written by the cron like latency.json, so pages read it without a
@@ -14,6 +15,13 @@ const PROBE_MS = 10_000;
 const DEPLOY_GAP_S = 60;
 /** Consecutive bad minute checks (failed, or the Worker answering as failover) before /status/ calls gene down. */
 export const GENE_DOWN_CHECKS = 3;
+
+/** When the curated data went stale (null while fresh): index.json older than 90 min in 13F season, 6 h outside it. */
+export function curatedStaleSince(builtAt: string | null | undefined, now: number): string | null {
+  if (!builtAt) return null;
+  const since = Date.parse(builtAt) + (in13fSeason(now) ? 90 : 360) * 60_000;
+  return now > since ? iso(since) : null;
+}
 
 interface ProbeState {
   /** Per UTC hour (YYYY-MM-DDTHH): [ok, checks], 8 days kept. */
@@ -281,6 +289,8 @@ export async function buildStatus(env: Env, now: number, s: ProbeState) {
       // Acceptance of the newest 13F in the data build to that build.
       last_13f_lag_seconds: fresh?.last_13f && fresh.data_built_at ? Math.max(0, Math.round((Date.parse(fresh.data_built_at) - Date.parse(fresh.last_13f.accepted_at)) / 1000)) : null,
       data_age_seconds: fresh?.data_built_at ? Math.round((now - Date.parse(fresh.data_built_at)) / 1000) : null,
+      // Ingest's publish has stalled since then (curatedStaleSince); null while fresh.
+      curated_stale_since: curatedStaleSince(fresh?.data_built_at, now),
       poller_host: poller?.host ?? null,
       poller_last_run: poller?.last_run_at ?? null,
       // The backup poller's last takeover: seconds from Cloudflare's last heartbeat to gene's first poll.

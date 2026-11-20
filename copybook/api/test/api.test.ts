@@ -1446,6 +1446,20 @@ describe('copybook api', () => {
     expect(sent).toHaveLength(0);
   });
 
+  it('/status/ curated_stale_since: index.json over 90 min old in 13F season, over 6 h outside it', async () => {
+    const { curatedStaleSince } = await import('../src/status');
+    const { in13fSeason } = await import('../src/seasons');
+    // Q3 2026's season: Oct 1 00:00Z through the Nov 16 deadline (22:00 ET) plus 7 days.
+    expect([Date.parse('2026-09-30T23:59Z'), Date.parse('2026-10-01T00:00Z'), Date.parse('2026-11-24T02:59Z'), Date.parse('2026-11-24T03:01Z')].map(in13fSeason)).toEqual([false, true, true, false]);
+    // In season: stale from build + 90 min.
+    expect(curatedStaleSince('2026-11-20T01:00:00Z', Date.parse('2026-11-20T02:29Z'))).toBeNull();
+    expect(curatedStaleSince('2026-11-20T01:00:00Z', Date.parse('2026-11-20T03:00Z'))).toBe('2026-11-20T02:30:00Z');
+    // Outside it: a 3 h old index is fresh; past 6 h it's stale from build + 6 h.
+    expect(curatedStaleSince('2026-12-10T06:00:00Z', Date.parse('2026-12-10T09:00Z'))).toBeNull();
+    expect(curatedStaleSince('2026-12-10T06:00:00Z', Date.parse('2026-12-10T12:01Z'))).toBe('2026-12-10T12:00:00Z');
+    expect(curatedStaleSince(null, Date.parse('2026-12-10T12:01Z'))).toBeNull();
+  });
+
   it('/status/ data: probe uptime and daily bars, restarts told apart (deploy, unplanned, unconfirmed), 13F amber, freshness', async () => {
     const { recordProbe, buildStatus } = await import('../src/status');
     const t0 = Date.UTC(2026, 10, 11, 10, 0);

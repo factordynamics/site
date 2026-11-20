@@ -52,3 +52,11 @@ export function pauseResumesAt(now: number): { at: number; quarter: string; dead
   const d = DEADLINES.find((x) => endOf(x.date) - 14 * DAY > now) ?? DEADLINES[DEADLINES.length - 1];
   return { at: Math.floor((endOf(d.date) - 14 * DAY) / 1000), quarter: d.quarter, deadline: d.date };
 }
+
+/** 13F season: from a quarter's end through its filing deadline plus 7 days (the after-deadline amendments). */
+export function in13fSeason(now: number): boolean {
+  return DEADLINES.some((d) => {
+    const [y, q] = d.quarter.split('Q').map(Number);
+    return now >= Date.UTC(y, q * 3, 1) && now <= endOf(d.date) + 7 * DAY;
+  });
+}
