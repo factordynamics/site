@@ -3123,7 +3123,10 @@ describe('copybook api', () => {
     const cmpx = { ...base, slug: 'acadian', slugs: ['acadian'], accession: ACA, moves: { bought_usd: 0, sold_usd: 0, new: [], added: [], trimmed: [], exited: [] }, held: [{ cusip: '20451W101', ticker: 'CMPX', issuer: 'CMPX', display_name: null, put_call: null, change: 'added', reason: 'own_prior' }] };
     await env.DB.put('alerts:pending-check', JSON.stringify([cmpx]));
     expect(await checkHeld(env, now)).toMatchObject({ checked: [{ accession: ACA, passed: 0, held: 1 }] });
-    expect(await checkHeld(env, now + 24 * 3600_000)).toMatchObject({ checked: [{ accession: ACA, passed: 1, held: 0 }] });
+    // Before the day is up, other holders' share counts settle it: 6 of CMPX's, none at an integer ratio, so no split.
+    await hist.put('hl/20451W.json', JSON.stringify({ issuer: '20451W', columns: ['cik', 'period', 'shares', 'prev_shares', 'value', 'prev_value', 'cusip'], rows: [[2635682, 1161231], [500, 480], [900, 1000], [1200, 1000], [700, 650], [3000, 3100]].map(([s, p], i) => [String(i), '2026Q3', s, p, s, p, '20451W101']) }));
+    expect(await checkHeld(env, now + 3600_000)).toMatchObject({ checked: [{ accession: ACA, passed: 1, held: 0 }] });
+    hist.m.delete('hl/20451W.json');
     expect(await env.DB.get('alerts:pending-check')).toBeNull();
     // A row held because the filer's own value looks wrong (Mizuho Securities' GOOG at $150 against filers' $341), on a
     // line the build flags suspect_units: never counted (the lead, Nov 11), a day on as well. It leaves the queue with
@@ -3142,7 +3145,7 @@ describe('copybook api', () => {
     expect([sent, await env.DB.get('alerts:pending-check')]).toEqual([[], null]);
     expect((await reconciliation(env)).held).toEqual([
       { accession: MZ, ticker: 'GOOG', cusip: '02079K107', rule: 'price_vs_filers', held_at: accepted, released_at: new Date(wk).toISOString().replace(/\.\d{3}Z$/, 'Z'), outcome: 'not_counted' },
-      expect.objectContaining({ accession: ACA, ticker: 'CMPX', rule: 'own_prior', outcome: 'released_after_1d' }),
+      expect.objectContaining({ accession: ACA, ticker: 'CMPX', rule: 'own_prior', outcome: 'released_no_split' }),
       expect.objectContaining({ accession: ACC, ticker: 'APH', outcome: 'passed' }),
     ]);
     sent = [];
@@ -4133,6 +4136,29 @@ describe('copybook api', () => {
     sent = [];
     await cron(6);
     expect(sent).toHaveLength(0);
+  });
+
+  it('own_prior held rows: other holders\' share ratios say split or no split before the 1-day ceiling', async () => {
+    const { peerSplit } = await import('../src/alerts');
+    const X = '303250104', Y = '303250203';
+    // [cusip, shares, prev_shares] per holder, 2026Q3; one-class rows and one summed row with classes[].
+    const file = (rows: [string, number, number][], summed: [string, number, number][] = []) =>
+      JSON.stringify({ issuer: '303250', schema: 5, columns: ['cik', 'period', 'shares', 'prev_shares', 'value', 'prev_value', 'put_call', 'classes', 'cusip'], rows: [
+        ...rows.map(([c, s, p], i) => [String(i), '2026Q3', s, p, s * 10, p * 10, null, null, c]),
+        ...(summed.length ? [['s', '2026Q3', null, null, 1, 1, null, summed.map(([c, s, p]) => ({ cusip: c, shares: s, prev_shares: p, value: s, prev_value: p })), null]] : []),
+      ] });
+    // Ordinary trades (one holder doubled: the row the gate held) and no split: released.
+    await hist.put('hl/303250.json', file([[X, 2000, 1000], [X, 1050, 1000], [X, 980, 1000], [X, 1200, 1000], [X, 900, 1000], [X, 1000, 1000]]));
+    expect(await peerSplit(env, X, '2026Q3')).toBe('no_split');
+    // A 1-for-3 reverse split nobody listed (KORU, Nov 2026): most holders at a third of their shares. Held.
+    await hist.put('hl/303250.json', file([[X, 334, 1000], [X, 333, 1000], [X, 333, 999], [X, 1000, 1000], [X, 667, 2000], [X, 2000, 1000]]));
+    expect(await peerSplit(env, X, '2026Q3')).toBe('split');
+    // Another class's split never counts for this one; too few holders of this class can't say.
+    await hist.put('hl/303250.json', file([[Y, 2000, 1000], [Y, 4000, 2000], [Y, 600, 300], [Y, 200, 100], [Y, 20, 10], [X, 1000, 1000]], [[X, 1100, 1000], [Y, 50, 25]]));
+    expect(await peerSplit(env, X, '2026Q3')).toBeNull();
+    expect(await peerSplit(env, Y, '2026Q3')).toBe('split');
+    // A third quarter's rows don't count.
+    expect(await peerSplit(env, Y, '2026Q2')).toBeNull();
   });
 
   it('per-class moves (Nov 23): each class priced on its own; with the schema-6 index, class lines are counted and tagged, a mixed issuer reads "A sold, B bought", pinned webhooks get the summed row', async () => {

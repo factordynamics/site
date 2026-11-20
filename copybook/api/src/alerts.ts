@@ -1269,6 +1269,27 @@ export async function perShareMedians(env: Env, cusips: string[], quarter: strin
 }
 
 /**
+ * Whether other holders of a CUSIP show a split this quarter, from the holder index: of the rows with shares in both
+ * quarters (at least 5), half or more at an integer share ratio k >= 2 (or 1/k, within 2%) is a split; under a fifth
+ * is none. Null when it can't say (too few holders, or between). gene only, like the consensus check (CPU).
+ */
+export async function peerSplit(env: Env, cusip: string, quarter: string): Promise<'split' | 'no_split' | null> {
+  if ((await import('./failover')).isCloudflare(env)) return null;
+  const d = await holderIndex(env, cusip.slice(0, 6).toUpperCase()).catch(() => null);
+  if (!d) return null;
+  const ratios = classEntries(d)
+    .filter((e) => e.period === quarter && !e.put_call && (!e.cusip || e.cusip === cusip.toUpperCase()) && e.shares > 0 && e.prev_shares > 0)
+    .map((e) => e.shares / e.prev_shares);
+  if (ratios.length < 5) return null;
+  const atK = ratios.filter((x) => {
+    const q = x >= 1 ? x : 1 / x;
+    const k = Math.round(q);
+    return k >= 2 && Math.abs(Math.log(q / k)) <= Math.log(1.02);
+  }).length;
+  return atK / ratios.length >= 0.5 ? 'split' : atK / ratios.length < 0.2 ? 'no_split' : null;
+}
+
+/**
  * Per-class moves (the lead, Nov 11; from ingest's schema-6 holder index, once ingest publishes it): for a filing with lines on
  * two or more CUSIPs of one issuer, the issuer's listed classes (held by 3+ filers this quarter) and their tickers.
  * Before schema 6 nothing is listed, so alerts read as they did.
@@ -2074,6 +2095,11 @@ export async function checkHeld(env: Env, now: number): Promise<Record<string, u
       if (!why) {
         ok.push(row);
         end(a, h, 'passed');
+      } else if (why === 'own_prior' && (await peerSplit(env, r.cusip, a.quarter)) === 'no_split') {
+        // Other holders' share counts settle it before the day is up: a k-for-1 split moves most of them by about k.
+        // Deadline week: 116 of 125 own_prior rows had peers with no split, held 24 h each for nothing.
+        ok.push(row);
+        end(a, h, 'released_no_split');
       } else if (day && why === 'own_prior') {
         // own_prior can't tell a real trade (a quant fund doubling shares as the price halves) from a split nobody
         // has listed; a day on, with the build agreeing and still no split in splits.json, it goes out unmarked.
@@ -2115,7 +2141,7 @@ interface HeldEnd {
   rule: HeldRow['reason'];
   held_at: string;
   released_at: string | null;
-  outcome: 'passed' | 'released_after_1d' | 'shown_as_filed' | 'dropped' | 'not_counted' | 'expired' | null;
+  outcome: 'passed' | 'released_no_split' | 'released_after_1d' | 'shown_as_filed' | 'dropped' | 'not_counted' | 'expired' | null;
 }
 
 /** One reconciliation check, newest first in KV alerts:reconciled (latency.json's `reconciliation`). */
