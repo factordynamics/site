@@ -162,6 +162,8 @@ beforeEach(async () => {
   consensusQ = {};
   resendUsed = 0;
   (await import('../src/email')).mailQuota.day = '';
+  // gene's mid-minute heartbeat recheck waits in real time; tests that step minutes by hand turn it on themselves.
+  (await import('../src/failover')).RECHECK.enabled = false;
   gh = [];
   ghQueued = 0;
   vi.stubGlobal('fetch', async (input: string, init?: RequestInit) => {
@@ -1244,7 +1246,18 @@ describe('copybook api', () => {
 
     // A member follows Ackman on gene: Cloudflare's cron has it a minute later.
     await putFollows('n', { investors: ['dan-loeb', 'bill-ackman'] });
-    await run(gene, min(3));
+    // gene's :00 read finds Cloudflare's min(2) heartbeat fresh and reads it again 75 s after it; Cloudflare beat meanwhile
+    // (its :13 stamp), so gene stays the backup.
+    const { RECHECK } = await import('../src/failover');
+    const waits: number[] = [];
+    RECHECK.enabled = true;
+    RECHECK.sleep = async (ms: number) => {
+      waits.push(ms);
+      r2.m.set('sync/alive-cloudflare.json', new TextEncoder().encode(JSON.stringify({ last_run_at: new Date(min(3) + 13_000).toISOString() })));
+    };
+    expect(await run(gene, min(3))).toMatchObject({ poller: 'backup (cloudflare polls)', recheck: new Date(min(3) + 13_000).toISOString() });
+    expect(waits).toEqual([15_000]);
+    RECHECK.enabled = false;
     await run(cf, min(3));
     expect(JSON.parse((await cfStore.get('follows:n'))!).investors).toEqual(['dan-loeb', 'bill-ackman']);
 
@@ -1269,10 +1282,14 @@ describe('copybook api', () => {
     // claim Cloudflare took first stands: exactly one email, and gene records the filing as handled.
     const ackman = '0000950123-26-055555';
     secFiles.feed = `<feed>${filing('0001336528', ackman, 'PERSHING SQUARE')}</feed>`;
-    await run(cf, min(4));
+    // From here each host's clock reads its minute: both stamp their sync writes by it, as they do live, so a later
+    // write on either side wins (with real time here, Cloudflare's stamps would always beat gene's test-time ones).
+    const at = (host: Env, t: number) => (vi.setSystemTime(t), run(host, t));
+    vi.useFakeTimers({ toFake: ['Date'], now: min(4) });
+    await at(cf, min(4));
     expect(toMember()).toHaveLength(1);
     geneRace = true;
-    expect(await run(gene, min(4))).toMatchObject({ poller: 'gene polls (cloudflare silent)' });
+    expect(await at(gene, min(4))).toMatchObject({ poller: 'gene polls (cloudflare silent)' });
     geneRace = false;
     expect(toMember()).toHaveLength(1);
     expect(JSON.parse((await gene.DB.get('alerts:handled'))!)).toContain(ackman);
@@ -1282,15 +1299,25 @@ describe('copybook api', () => {
     // minute and the next, applies gene's handled filings first and never sends it again: one email while both run.
     const loeb = '0000950123-26-044444';
     secFiles.feed = `<feed>${filing('0001040273', loeb, 'THIRD POINT')}${filing('0001336528', ackman, 'PERSHING SQUARE')}</feed>`;
-    expect(await run(gene, min(5))).toMatchObject({ poller: 'backup (cloudflare polls)' });
-    expect(await run(gene, min(6))).toMatchObject({ poller: 'gene polls (cloudflare silent)', takeover: { seconds: 120 } });
-    expect(JSON.parse(text('sync/takeover-gene.json')!).seconds).toBe(120);
-    expect(toMember()).toHaveLength(2);
-    expect(await run(cf, min(6) + 20_000)).toMatchObject({ poller: 'resuming: polls from next minute' });
-    expect(await run(gene, min(7))).toMatchObject({ poller: 'backup (cloudflare polls)' });
-    expect((await run(gene, min(7))).takeover).toBeUndefined();
-    await run(cf, min(7) + 20_000);
-    await run(cf, min(8));
+    // Without the recheck: a minute on, gene still backs up; two minutes on (past 90 s), gene polls (120 s).
+    expect(await at(gene, min(5))).toMatchObject({ poller: 'backup (cloudflare polls)' });
+    // With it, the same minute's second read finds the heartbeat unmoved 75 s after it and gene polls then (Nov 13-19:
+    // 107 s each time, the next :00).
+    RECHECK.enabled = true;
+    RECHECK.sleep = async (ms: number) => void waits.push(ms);
+    // gene polls and takes Third Point's filing; the email waits in the member's mail window (Ackman's, a minute ago).
+    expect(await at(gene, min(5))).toMatchObject({ poller: 'gene polls (cloudflare silent)', takeover: { seconds: 75 }, poll: { filings: ['dan-loeb 2026Q3 (no moves)'], held: 1 } });
+    RECHECK.enabled = false;
+    expect(waits).toEqual([15_000, 15_000]);
+    expect(JSON.parse(text('sync/takeover-gene.json')!).seconds).toBe(75);
+    expect(toMember()).toHaveLength(1);
+    expect(await at(cf, min(6) + 20_000)).toMatchObject({ poller: 'resuming: polls from next minute' });
+    expect(await at(gene, min(7))).toMatchObject({ poller: 'backup (cloudflare polls)' });
+    expect((await at(gene, min(7))).takeover).toBeUndefined();
+    await at(cf, min(7) + 20_000);
+    await at(cf, min(8));
+    vi.useRealTimers();
+    // Third Point, batched on gene in the member's window, went out from Cloudflare once the window ended.
     expect(toMember().map((m) => m.subject)).toHaveLength(2);
     expect(JSON.parse((await cfStore.get('alerts:handled'))!)).toEqual(expect.arrayContaining([ackman, loeb]));
 

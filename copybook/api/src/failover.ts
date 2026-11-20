@@ -25,6 +25,10 @@ const HOLD = 'sync/hold-cloudflare.json';
 /** gene polls when Cloudflare's cron hasn't run for this long: with gene's 1-minute run, it polls within about 2.5 minutes
  * of Cloudflare's last heartbeat (the drill's 10-minute threshold took 10.7). */
 export const BACKUP_AFTER_MS = 90_000;
+/** gene's second read of a heartbeat that was fresh at :00: unmoved this long after it, gene polls (Cloudflare missed a minute). */
+const RECHECK_AFTER_MS = 75_000;
+/** The recheck's wait, replaceable in tests (which step both hosts' minutes by hand). */
+export const RECHECK = { enabled: true, sleep: (ms: number) => new Promise<void>((r) => setTimeout(r, ms)) };
 /** Cloudflare's own gap after which it applies gene's changes for a minute before polling again: gene may be polling. */
 const GAP_MS = BACKUP_AFTER_MS;
 /** Where gene records each takeover (R2), for /status/'s \"backup poller takes over within N min\". */
@@ -415,19 +419,21 @@ export async function syncedMinute(env: Env, now: number, run: (env: Env) => Pro
   const out: Record<string, unknown> = {};
   if (isCloudflare(env)) {
     env = { ...env, DB: r2kv(env.HIST, env.DB) };
-    const mine = await readIndex(env, 'cloudflare');
-    out.sync_applied = await apply(env, mine);
     // An operator's hold (R2 sync/hold-cloudflare.json {until}, for the poller drill): no poll and no heartbeat, so gene
-    // sees Cloudflare silent and takes over after BACKUP_AFTER_MS; past `until` this side resumes as after any gap.
+    // sees Cloudflare silent and takes over; past `until` this side resumes as after any gap.
     const hold = JSON.parse((await r2Get(env, HOLD).catch(() => null)) ?? 'null') as { until?: string } | null;
     if (hold?.until && Date.parse(hold.until) > now) {
+      out.sync_applied = await apply(env, await readIndex(env, 'cloudflare'));
       out.poller = `held until ${hold.until}`;
       return out;
     }
+    // The heartbeat first, before the sync: written after it, a slow sync (Nov 18, 21.6 s) landed it past gene's check.
     const raw = await r2Get(env, ALIVE);
     const last = raw ? Date.parse((JSON.parse(raw) as { last_run_at: string }).last_run_at) : 0;
     await r2Put(env, ALIVE, JSON.stringify({ last_run_at: iso(now), build: env.BUILD_SHA?.slice(0, 12) ?? null }));
     cfLate = now - last > 60_000;
+    const mine = await readIndex(env, 'cloudflare');
+    out.sync_applied = await apply(env, mine);
     if (now - last > GAP_MS) {
       // Back from a gap (or first run): gene may have polled meanwhile. Its handled filings are applied above;
       // one more minute lets gene see this side alive and stop before this side polls.
@@ -466,7 +472,25 @@ export async function syncedMinute(env: Env, now: number, run: (env: Env) => Pro
   // The data run's big files as local copies, every 10 minutes (requests read these, never a slow download).
   if (new Date(now).getUTCMinutes() % 10 === 2 || !(await env.HIST.get('data/filers.json'))) out.local_data = await (await import('./v1data')).refreshLocalData(env);
   const cfLast = cf.last_run_at ? Date.parse(cf.last_run_at) : 0;
-  if (now - cfLast < BACKUP_AFTER_MS) {
+  // A heartbeat still fresh at :00 is read once more at its time + RECHECK_AFTER_MS (Cloudflare stamps at about :13, so
+  // about :28): unmoved, gene takes over then, about 75 s after it, not at the next :00 (107 s, all 6 takeovers Nov 13-19).
+  let takenAt = now;
+  if (RECHECK.enabled && cfLast && now - cfLast < BACKUP_AFTER_MS) {
+    const wait = cfLast + RECHECK_AFTER_MS - now;
+    if (wait > 0 && wait <= 45_000) {
+      await RECHECK.sleep(wait);
+      try {
+        const again = await r2Get(env, ALIVE);
+        const at = again ? (JSON.parse(again) as { last_run_at: string }).last_run_at : null;
+        out.recheck = at ?? 'none';
+        if (at && Date.parse(at) === cfLast) takenAt = cfLast + RECHECK_AFTER_MS;
+      } catch (e) {
+        // Unreadable: never a reason to poll.
+        out.recheck = `error: ${e}`;
+      }
+    }
+  }
+  if (takenAt === now && now - cfLast < BACKUP_AFTER_MS) {
     await env.DB.put('host:poller', JSON.stringify(cf));
     out.poller = 'backup (cloudflare polls)';
     // 13Fs Cloudflare sent without moves: gene computes them from EDGAR and sends the follow-up.
@@ -482,7 +506,7 @@ export async function syncedMinute(env: Env, now: number, run: (env: Env) => Pro
   // The first minute of a takeover: how long after Cloudflare's last heartbeat gene took the poll.
   const before = JSON.parse((await env.DB.get('host:poller')) ?? 'null') as PollerLine | null;
   if (before?.host !== 'gene' && cfLast) {
-    const t = { at: iso(now), cloudflare_last_run_at: cf.last_run_at, seconds: Math.round((now - cfLast) / 1000) };
+    const t = { at: iso(takenAt), cloudflare_last_run_at: cf.last_run_at, seconds: Math.round((takenAt - cfLast) / 1000) };
     out.takeover = t;
     await r2Put(env, TAKEOVER, JSON.stringify(t)).catch((e) => (out.takeover_log = `error: ${e}`));
   }
