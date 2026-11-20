@@ -1162,7 +1162,13 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
             for k in cl.values():
                 f = funds.setdefault(code, {})
                 f[k["cusip"]] = f.get(k["cusip"]) or k["ticker"]
-    funds = {code: [{"cusip": c, "ticker": t} for c, t in sorted(f.items())] for code, f in sorted(funds.items()) if len(f) > 1}
+    # Listed when the code has two funds held, or one fund held under a code that maps several tickers (Putnam 74676P:
+    # filers hold one fund, yet the other fund's page would show its row).
+    n_tick: dict[str, int] = {}
+    for c in index.values():
+        n_tick[c] = n_tick.get(c, 0) + 1
+    funds = {code: [{"cusip": c, "ticker": t} for c, t in sorted(f.items())] for code, f in sorted(funds.items())
+             if len(f) > 1 or n_tick.get(code, 0) > 1}
     write(out / "index.json", {"note": "ticker -> issuer code (first 6 of the CUSIP); one file per issuer in hl/",
                                "schema": HL_SCHEMA,
                                "types_sig": signature(types), "tickers": dict(sorted(index.items())), "funds": funds})
