@@ -1493,7 +1493,7 @@ describe('copybook api', () => {
     await hist.put('hl/874039.json', JSON.stringify({ schema: 5, issuer: '874039', tickers: ['TSM'], columns: cols, rows: [['0000000006', 'F', null, 'wealth', false, '2026Q3', 10, 10, 100, 100, 'unchanged', 0.1, '874039100', '874039', null, 0], ['0000000007', 'G', null, 'hedge_fund', false, '2026Q3', 5, 5, 50, 50, 'unchanged', 0.1, '874039900', '874039', null, 0]], counts: { holders: 2 } }));
     hist.m.set('pre/stock-codes.json', new TextEncoder().encode('{"SMH":"92189F","BRK.B":"084670"}'));
     const orig = globalThis.fetch;
-    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => (String(u).startsWith(`${SITE}data/hl/index.json`) ? Response.json({ schema: 5, tickers: {}, classes: {}, funds }) : orig(u, init)));
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => (String(u).startsWith(`${SITE}data/hl/index.json`) ? Response.json({ schema: 5, tickers: { 'BRK.A': '084670', 'BRK.B': '084670', GDX: '92189F', SMH: '92189F' }, classes: {}, funds }) : orig(u, init)));
     // Past the fund list's 10-minute cache from earlier tests.
     vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 11 * 60_000 });
     try {
@@ -1506,9 +1506,9 @@ describe('copybook api', () => {
       expect(((await holdersOf(env, '92189F', [], 'GDX'))!.rows.map((r) => (r as { filer: { cik: string } }).filer.cik)).sort()).toEqual(['0000000001', '0000000002', '0000000004']);
       // By the issuer code alone: no rows rather than the funds' sum.
       expect(await holdersOf(env, '92189F')).toBeNull();
-      // GDX, which the one-ticker-per-code map lacks, resolves through the fund list.
+      // GDX and BRK.A, which the one-ticker-per-code map lacks, resolve through hl/index.json's tickers.
       const { issuerCode } = await import('../src/v1data');
-      expect(await issuerCode(env, 'GDX')).toEqual({ code: '92189F', ticker: 'GDX' });
+      expect([await issuerCode(env, 'GDX'), await issuerCode(env, 'brk.a')]).toEqual([{ code: '92189F', ticker: 'GDX' }, { code: '084670', ticker: 'BRK.A' }]);
       // Berkshire is one company's share classes on SEC's 13(f) list: the summed row with both classes, as pinned.
       // A single foreign company listed with its options (TSM 874039): a calls-only filer stays among its holders.
       expect((await holdersOf(env, '874039', [], 'TSM'))!.rows.map((r) => (r as { filer: { cik: string } }).filer.cik).sort()).toEqual(['0000000006', '0000000007']);

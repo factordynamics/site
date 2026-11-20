@@ -502,9 +502,10 @@ async function issuerCodeRaw(env: Env, id: string): Promise<{ code: string; tick
     const text = await new Response(pre.body).text();
     const at = text.indexOf(`"${up}":"`);
     if (at >= 0) return { code: text.slice(at + up.length + 4, at + up.length + 10), ticker: up };
-    // The map keeps one ticker per issuer code: a fund under a code of separate funds (GDX beside SMH in 92189F).
-    const fund = Object.entries(await fundsOf(env)).find(([, fs]) => fs.some((f) => f.ticker?.toUpperCase() === up));
-    if (fund) return { code: fund[0], ticker: up };
+    // The map keeps one ticker per issuer code: hl/index.json's tickers has every class and fund (BRK.A, GOOG, FOX; GDX
+    // beside SMH in 92189F).
+    const code = (await hlIndex(env)).tickers[up];
+    if (code) return { code, ticker: up };
     return /^[0-9A-Z]{6}$/.test(up) ? { code: up, ticker: null } : null;
   }
   const res = await fetch(`${env.DATA_URL}stock_holders.json`, { cf: { cacheTtl: 3600 } } as RequestInit);
@@ -887,7 +888,7 @@ function countsOf(rows: any[]) {
  * their 13F's accession and EDGAR acceptance when cached; weight comes from the row, else a curated fund's total.
  */
 /** Ingest's `funds` in hl/index.json: CUSIP6s whose lines are separate funds (VanEck 92189F), each fund's own CUSIP and ticker. */
-let FUNDS: { at: number; funds: Record<string, { cusip: string; ticker: string | null }[]> } | null = null;
+let FUNDS: { at: number; funds: Record<string, { cusip: string; ticker: string | null }[]>; tickers: Record<string, string> } | null = null;
 /**
  * Codes ingest's funds listed (Nov 20) that SEC's Official 13(f) List (2026Q3) reads as one company: share classes
  * (Alphabet CAP STK CL A/C, Berkshire CL A/CL B NEW, Fox CL A/CL B COM) or common with its options, warrants, rights or
@@ -895,16 +896,17 @@ let FUNDS: { at: number; funds: Record<string, { cusip: string; ticker: string |
  * summed row with classes[], as pinned clients get it, until per-class serving or ingest's rule excludes them.
  */
 const NOT_FUNDS = new Set(['011532', '023135', '025537', '025816', '02079K', '035710', '040413', '053015', '084670', '097023', '19247L', '23834J', '35137L', '38964R', '389930', '674599', '683712', '68989M', '75134P', '76655K', '83601L', '896438', '949746', '98421M', 'M8216R']);
-async function fundsOf(env: Env): Promise<Record<string, { cusip: string; ticker: string | null }[]>> {
+async function hlIndex(env: Env): Promise<NonNullable<typeof FUNDS>> {
   if (!FUNDS || Date.now() - FUNDS.at > 600_000) {
     const d = (await fetch(`${env.DATA_URL}hl/index.json`, { cf: { cacheTtl: 600 } } as RequestInit)
       .then((r) => (r.ok ? r.json() : null))
-      .catch(() => null)) as { funds?: Record<string, { cusip: string; ticker: string | null }[]> } | null;
+      .catch(() => null)) as { funds?: Record<string, { cusip: string; ticker: string | null }[]>; tickers?: Record<string, string> } | null;
     const funds = d?.funds ? Object.fromEntries(Object.entries(d.funds).filter(([code]) => !NOT_FUNDS.has(code))) : null;
-    FUNDS = { at: Date.now(), funds: funds ?? FUNDS?.funds ?? {} };
+    FUNDS = { at: Date.now(), funds: funds ?? FUNDS?.funds ?? {}, tickers: d?.tickers ?? FUNDS?.tickers ?? {} };
   }
-  return FUNDS.funds;
+  return FUNDS;
 }
+const fundsOf = async (env: Env) => (await hlIndex(env)).funds;
 
 /**
  * One fund's rows from an issuer index that sums separate funds under one CUSIP6 (schema 5: a filer's SMH, GDX and MOAT
