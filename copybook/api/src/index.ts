@@ -342,7 +342,12 @@ export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDeliver
   const counted = [...firsts.values()].sort((a, b) => b.sent.localeCompare(a.sent));
   // After-hours filings (the lead, Nov 19) are timed from EDGAR's first public listing (06:00 ET the next weekday),
   // the later of it and acceptance; gap_seconds per alert stays from acceptance, so nothing is hidden.
-  const listed = (l: LatencyRow) => edgarListedAt(Date.parse(l.accepted));
+  // Only one EDGAR actually held to the morning: accepted after hours and first seen at or after that listing. Form 4s
+  // and 13D/Gs accepted after 17:30 ET are often listed that evening (Broadwood's, Nov 19, alerted in 57 s).
+  const listed = (l: LatencyRow) => {
+    const t = edgarListedAt(Date.parse(l.accepted));
+    return t !== null && Date.parse(l.detected_at ?? l.sent) >= t ? t : null;
+  };
   const timed = (l: LatencyRow) => {
     const t = listed(l);
     return t === null ? l.seconds : Math.max(0, Math.round((Date.parse(l.sent) - Math.max(t, Date.parse(l.accepted))) / 1000));
