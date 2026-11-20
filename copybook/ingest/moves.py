@@ -134,8 +134,8 @@ BAND = (0.8, 1.25)  # the options band: a price "matches" another within it
 # Separate funds under one CUSIP6 (VanEck ETF Trust 92189F: SMH, GDX, MOAT; Direxion 25460G; Roundhill 77926X) are not
 # share classes, read from SEC data only: the filed title of class or issuer name names an ETF, ETN, fund, trust
 # series or shares of beneficial interest.
-_FUND = re.compile(r"\b(ETFS?|ETNS?|FUNDS?|FD|SH(ARE)?S? BEN(EFICIAL)? INT(EREST)?|BENEFICIAL INT|SER(IES)? TR(UST)?|"
-                   r"ETF TR(UST)?|ISHARES|SPDR|PROSHARES|INVESCO QQQ)\b")
+_FUND = re.compile(r"\b(ETFS?|ETNS?|FUNDS?|FDS?|SH(ARE)?S? BEN(EFICIAL)? INT(EREST)?|BENEFICIAL INT|SER(IES)? TR(UST)?|"
+                   r"ETF TR(UST)?|SHS TR(UST)?|EXCHANGE TRADED|ISHARES|SPDR|PROSHARES|INVESCO QQQ)\b")
 # A line that reads as one company's share class: CL A, CLASS B, CAP STK CL C, COM SER A (tracking stocks), in its
 # title, its issuer name (McMill 2026Q2/A files both Berkshire lines as title "Equity", issuer "BERKSHIRE HATHAWAY
 # CLASS B" and "BERKSHIRE HATHAWAY INC DCLASS A") or SEC's 13(f) list description for the CUSIP ("CL B NEW").
