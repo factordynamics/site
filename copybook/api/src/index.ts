@@ -1893,7 +1893,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const offset = Number(url.searchParams.get('offset') ?? 0);
     if (!keep || !Number.isInteger(limit) || limit < 1 || limit > 1000 || !Number.isInteger(offset) || offset < 0) return json({ ok: false, error: 'type: hedge_fund, long_only (or active), index, bank, wealth, pension, sovereign, insurance, other; cohort: all or curated; current_only: true or false; limit 1-1000', code: 'bad_request' }, 400, h);
     const is = await issuerCode(env, holdersJson[1]);
-    const hs = is ? await holdersOf(env, is.code) : null;
+    const hs = is ? await holdersOf(env, is.code, [], is.ticker) : null;
     if (!is || !hs) return json({ ok: false, error: 'unknown ticker', code: 'not_found' }, 404, h);
     // Current share positions by default; calls and puts, and exits, in their own lists (include_options=true mixes options in).
     const sp = splitHolders(hs.rows.filter(keep), url.searchParams.get('include_options') === 'true');
@@ -1908,7 +1908,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const keep = holderFilter(url.searchParams);
     if (!keep) return json({ ok: false, error: 'type: hedge_fund, long_only (or active), index, bank, wealth, pension, sovereign, insurance, other; cohort: all or curated; current_only: true or false', code: 'bad_request' }, 400, h);
     const is = await issuerCode(env, ticker);
-    const hs = is ? await holdersOf(env, is.code) : null;
+    const hs = is ? await holdersOf(env, is.code, [], is.ticker) : null;
     const full = hs && hs.source !== 'public' ? hs : null;
     const pub = full ? null : await fetch(`${env.SITE_URL}d/stocks/${ticker}.json`, { cf: { cacheTtl: 900 } } as RequestInit);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

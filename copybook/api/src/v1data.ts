@@ -882,7 +882,37 @@ function countsOf(rows: any[]) {
  * the data run), else the older single-period s/{issuer6}.json. Largest first. Curated funds' rows carry
  * their 13F's accession and EDGAR acceptance when cached; weight comes from the row, else a curated fund's total.
  */
-export async function holdersOf(env: Env, code: string, timing: string[] = []): Promise<{ issuer: string; tickers: string[]; display_name: string | null; period: string | null; prev_period: string | null; counts: Record<string, unknown> | null; counts_current?: Record<string, unknown> | null; rows: HolderRow[]; pending?: (HolderRow & { reason: 'filed_newer_not_indexed' })[]; truncated: boolean; stamp?: Stamp; source: 'hl' | 's' | 'public' } | null> {
+/** Ingest's `funds` in hl/index.json: CUSIP6s whose lines are separate funds (VanEck 92189F), each fund's own CUSIP and ticker. */
+let FUNDS: { at: number; funds: Record<string, { cusip: string; ticker: string | null }[]> } | null = null;
+async function fundsOf(env: Env): Promise<Record<string, { cusip: string; ticker: string | null }[]>> {
+  if (!FUNDS || Date.now() - FUNDS.at > 600_000) {
+    const d = (await fetch(`${env.DATA_URL}hl/index.json`, { cf: { cacheTtl: 600 } } as RequestInit)
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null)) as { funds?: Record<string, { cusip: string; ticker: string | null }[]> } | null;
+    FUNDS = { at: Date.now(), funds: d?.funds ?? FUNDS?.funds ?? {} };
+  }
+  return FUNDS.funds;
+}
+
+/**
+ * One fund's rows from an issuer index that sums separate funds under one CUSIP6 (schema 5: a filer's SMH, GDX and MOAT
+ * in one row's classes[]): each filer's entry for that fund's CUSIP, with its own shares, values and change, and its
+ * weight scaled to that entry. Filers without the fund drop out. Never the summed row (the lead, Nov 20).
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function fundRows(raw: any[], cusip: string): any[] {
+  const want = cusip.toUpperCase();
+  return raw.flatMap((r) => {
+    const cls = Array.isArray(r.classes) && r.classes.length ? (r.classes as Record<string, unknown>[]) : null;
+    if (!cls) return String(r.cusip ?? '').toUpperCase() === want ? [r] : [];
+    const e = cls.find((c) => String(c.cusip ?? '').toUpperCase() === want);
+    if (!e) return [];
+    const { classes: _c, classes_held: _h, net_direction: _n, shares_unit: _u, shares_ratio: _r, ratio_source: _s, ...rest } = r;
+    return [{ ...rest, cusip: want, ticker: e.ticker ?? r.ticker ?? null, put_call: e.put_call ?? null, prev_cusip: e.prev_cusip ?? null, shares: e.shares, prev_shares: e.prev_shares, value: e.value, prev_value: e.prev_value, change: e.change, value_delta: e.value_delta, value_delta_basis: e.value_delta_basis, unreliable: e.unreliable, price_outlier: e.price_outlier, weight: typeof r.weight === 'number' && r.value ? (r.weight * Number(e.value)) / Number(r.value) : r.weight }];
+  });
+}
+
+export async function holdersOf(env: Env, code: string, timing: string[] = [], ticker: string | null = null): Promise<{ issuer: string; tickers: string[]; display_name: string | null; period: string | null; prev_period: string | null; counts: Record<string, unknown> | null; counts_current?: Record<string, unknown> | null; rows: HolderRow[]; pending?: (HolderRow & { reason: 'filed_newer_not_indexed' })[]; truncated: boolean; stamp?: Stamp; source: 'hl' | 's' | 'public' } | null> {
   let t = Date.now();
   const mark = (name: string) => (timing.push(`${name};dur=${Date.now() - t}`), (t = Date.now()));
   const read = await readHolderIndex(env, code);
@@ -894,6 +924,16 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
   // An index published before hl/ schema 3 has no held marking: its outliers are marked here, so /v1 never serves one as
   // a trade (GuardCap's BKNG -$3.30B). A no-op once ingest's schema-3 file is in.
   if (Number(d.schema ?? 0) < 3) raw = raw.map(legacyMark);
+  // A CUSIP6 of separate funds: only the asked fund's own lines, with counts of those alone (ingest's sum every fund).
+  // Asked by the issuer code, or by a ticker the list lacks: no rows, never the funds' sum.
+  const funds = (await fundsOf(env))[code];
+  if (funds?.length) {
+    const fund = ticker ? funds.find((f) => f.ticker?.toUpperCase() === ticker.toUpperCase()) : undefined;
+    if (!fund) return null;
+    raw = fundRows(raw, fund.cusip);
+    d.counts = { ...countsOf(raw), fund_cusip: fund.cusip };
+    d.tickers = [fund.ticker];
+  }
   // A reissue (SEC-confirmed) whose new issuer code ingest hasn't merged yet (its index covers one period only: TEVA's
   // M8769Q, Nov 11): merged here with the old code's index at read time. Once ingest merges the pair, this is a no-op.
   const { REISSUED_ISSUER, REISSUED: RE } = await import('./edgar');
@@ -1185,7 +1225,7 @@ ROUTES.push(
     const is = await issuerCode(env, decodeURIComponent(id));
     if (!is) return v1error('not_found', 404, 'No such ticker or CUSIP among 13F holdings.');
     const timing = [`issuer;dur=${Date.now() - t0}`];
-    const h = await holdersOf(env, is.code, timing);
+    const h = await holdersOf(env, is.code, timing, is.ticker);
     if (!h) return v1error('not_found', 404, `No 13F filer reports holding ${is.ticker ?? is.code} in its latest book.`);
     const latestQ = latestPeriod(h.rows);
     if (quarter && latestQ && quarter !== latestQ) return incomplete(quarter, latestQ);
@@ -1419,7 +1459,7 @@ ROUTES.push(
       // One stock: every 13F holder's change in it, from the holder index (each filer's latest book in that quarter).
       const is = await issuerCode(env, stock);
       if (!is) return v1error('not_found', 404, 'No such ticker or CUSIP among 13F holdings.');
-      const h = await holdersOf(env, is.code);
+      const h = await holdersOf(env, is.code, [], is.ticker);
       if (!h) return v1error('not_found', 404, `No 13F filer reports holding ${is.ticker ?? is.code} in its latest book.`);
       // The holder index has each filer's latest book only: a past quarter by ticker would be a survivor subset.
       const latestQ = latestPeriod(h.rows);

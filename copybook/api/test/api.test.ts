@@ -1473,6 +1473,40 @@ describe('copybook api', () => {
     expect(sent).toHaveLength(0);
   });
 
+  it('a fund under one CUSIP6 of separate funds (VanEck 92189F): SMH\'s holders are its own lines, never the funds\' sum', async () => {
+    const { holdersOf } = await import('../src/v1data');
+    const SMH = '92189F676', GDX = '92189F106', MOAT = '92189F643';
+    const cls = (cusip: string, ticker: string, value: number, prev: number, shares: number, prev_shares: number) => ({ cusip, ticker, put_call: null, prev_cusip: null, shares, prev_shares, value, prev_value: prev, change: shares > prev_shares ? 'added' : 'trimmed', value_delta: value - prev, value_delta_basis: 'trade', unreliable: null, price_outlier: false });
+    const cols = ['cik', 'name', 'slug', 'type', 'curated', 'period', 'shares', 'prev_shares', 'value', 'prev_value', 'change', 'weight', 'cusip', 'issuer_cusip6', 'classes', 'value_delta'];
+    // Schema 5 as ingest publishes it today: a filer's VanEck funds summed in one row, classes[] per fund.
+    const rows = [
+      ['0000000001', 'A', null, 'hedge_fund', false, '2026Q3', null, null, 1000, 900, 'mixed', 0.1, null, '92189F', [cls(SMH, 'SMH', 300, 200, 30, 20), cls(GDX, 'GDX', 700, 700, 70, 75)], 100],
+      ['0000000002', 'B', null, 'hedge_fund', false, '2026Q3', null, null, 900, 800, 'added', 0.2, null, '92189F', [cls(GDX, 'GDX', 600, 500, 60, 50), cls(MOAT, 'MOAT', 300, 300, 30, 31)], 100],
+      ['0000000003', 'C', null, 'wealth', false, '2026Q3', 20, 10, 200, 100, 'added', 0.05, SMH, '92189F', null, 100],
+      ['0000000004', 'D', null, 'wealth', false, '2026Q3', 5, 5, 50, 50, 'unchanged', 0.01, GDX, '92189F', null, 0],
+    ];
+    await hist.put('hl/92189F.json', JSON.stringify({ schema: 5, issuer: '92189F', tickers: ['GDX', 'MOAT', 'SMH'], columns: cols, rows, counts: { holders: 4, net: 300, net_quarter: '2026Q3', net_by_period: { '2026Q3': 300 } } }));
+    const funds = { '92189F': [{ cusip: GDX, ticker: 'GDX' }, { cusip: MOAT, ticker: 'MOAT' }, { cusip: SMH, ticker: 'SMH' }] };
+    const orig = globalThis.fetch;
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => (String(u).startsWith(`${SITE}data/hl/index.json`) ? Response.json({ schema: 5, tickers: {}, classes: {}, funds }) : orig(u, init)));
+    // Past the fund list's 10-minute cache from earlier tests.
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 11 * 60_000 });
+    try {
+      const smh = (await holdersOf(env, '92189F', [], 'SMH'))!;
+      const val = (r: Record<string, unknown>) => Number(r.value_usd ?? r.value);
+      // Only A and C hold SMH; B (GDX and MOAT) and D (GDX) never appear. The total is the SMH lines' own 300 + 200.
+      expect(smh.rows.map((r) => (r as { filer: { cik: string } }).filer.cik).sort()).toEqual(['0000000001', '0000000003']);
+      expect(smh.rows.reduce((s, r) => s + val(r as Record<string, unknown>), 0)).toBe(500);
+      expect([smh.tickers, smh.counts?.holders, smh.counts?.net_by_period]).toEqual([['SMH'], 2, { '2026Q3': 200 }]);
+      expect(((await holdersOf(env, '92189F', [], 'GDX'))!.rows.map((r) => (r as { filer: { cik: string } }).filer.cik)).sort()).toEqual(['0000000001', '0000000002', '0000000004']);
+      // By the issuer code alone: no rows rather than the funds' sum.
+      expect(await holdersOf(env, '92189F')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+      hist.m.delete('hl/92189F.json');
+    }
+  });
+
   it('/speed/: an after-hours filing is timed from EDGAR\'s 06:00 ET listing, keeps its acceptance gap, and p90 is shown with and without them', async () => {
     const { latencyReport } = await import('../src/index');
     const row = (accession: string, accepted: string, sent: string) => ({ slug: 'x', kind: 'form4', form: '4', accession, accepted, sent, seconds: Math.round((Date.parse(sent) - Date.parse(accepted)) / 1000) });
