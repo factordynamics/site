@@ -107,6 +107,30 @@ class FundSeries(unittest.TestCase):
         for code in FUND_FAMILIES:
             self.assertTrue(moves.fund_series([{"cusip": c} for c in LIST_Q3 if c.startswith(code)]), code)
 
+    def test_foreign_companies_beside_their_options_are_not_funds(self):
+        # SEC's 2026Q3 13(f) list as published; 4babefa put these (and ~80 more) in funds on Nov 20.
+        rows = {
+            "874039100": ("", "SPONSORED ADS", "TAIWAN SEMICONDUCTOR MANUFAC"), "874039900": ("", "CALL", "TAIWAN SEMICONDUCTOR MANUFAC"), "874039950": ("", "PUT", "TAIWAN SEMICONDUCTOR MANUFAC"),
+            "81141R100": ("", "SPONSORD ADS", "SEA LTD"), "81141R950": ("", "PUT", "SEA LTD"),
+            "892331307": ("", "ADS", "TOYOTA MOTOR CORP"), "892331957": ("", "PUT", "TOYOTA MOTOR CORP"),
+            "71654V101": ("", "SP ADR NON VTG", "PETROLEO BRASILEIRO S A"), "71654V408": ("", "SPONSORED ADR", "PETROLEO BRASILEIRO S A"), "71654V958": ("", "PUT", "PETROLEO BRASILEIRO S A"),
+            "N07059210": ("", "N Y REGISTRY SHS", "ASML HLDG NV"), "N07059900": ("", "CALL", "ASML HLDG NV"), "N07059950": ("", "PUT", "ASML HLDG NV"),
+            "H17182108": ("", "NAMEN AKT", "CRISPR THERAPEUTICS AG"), "H17182958": ("", "PUT", "CRISPR THERAPEUTICS AG"),
+            "H8817H100": ("", "REGISTERED SHS", "TRANSOCEAN LTD"), "H8817H900": ("", "CALL", "TRANSOCEAN LTD"),
+            "G39387108": ("", "ORDINARY SHARES", "GLOBALFOUNDRIES INC"), "G39387958": ("", "PUT", "GLOBALFOUNDRIES INC"),
+            "36168Q104": ("", "SUB VTG SHS", "GFL ENVIRONMENTAL INC"), "36168Q954": ("", "PUT", "GFL ENVIRONMENTAL INC"),
+            "72651A207": ("", "LTD PARTNR INT A", "PLAINS GP HLDGS L P"), "72651A957": ("", "PUT", "PLAINS GP HLDGS L P"),
+            "G16252101": ("", "LP INT UNIT", "BROOKFIELD INFRASTRUCTURE PA"),
+            "78392B206": ("", "AMERICAN DEPOSIT", "SK HYNIX INC"),
+            "450047303": ("", "SPON GDS ECH", "IRSA INVERSIONES Y REP S A"),
+            # separate exchange-traded notes under one bank code stay funds
+            "06368L304": ("", "MICROSECTORS LVG", "BANK OF MONTREAL"), "06368L403": ("", "MICROSE LKD 43", "BANK OF MONTREAL"),
+        }
+        moves.LISTS["2026Q3"] = rows
+        for code in sorted({c[:6] for c in rows} - {"06368L"}):
+            self.assertFalse(moves.fund_series([{"cusip": c} for c in rows if c.startswith(code)]), code)
+        self.assertTrue(moves.fund_series([{"cusip": c} for c in rows if c.startswith("06368L")]))
+
     def test_unlisted_mutual_fund_by_sec_ticker_list(self):
         saved = set(moves.MF_TICKERS)
         try:

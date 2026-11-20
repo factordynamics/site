@@ -158,8 +158,13 @@ def _listed(cusip: str) -> tuple[str, str] | None:
 
 # How SEC's 13(f) list describes a company's own securities: common, a share class, ordinary shares, ADRs, a REIT's or
 # closed-end fund's shares of beneficial interest, and the warrants, rights and units beside them.
-_COMPANY = re.compile(r"^(COM\b|COMMON|CL\s*[A-K]\b|CLASS\s+[A-K]\b|CAP STK|SHS\b|ORD\b|SPONS? ADR|ADR\b|"
-                      r"SH(S)? BEN INT|COM SH|UNIT\b|\*W EXP|RIGHT\b|WTS?\b|PFD|DEP SHS|PERP PFD|CONV PFD)")
+_COMPANY = re.compile(r"^(COM\b|COMMON|CL\s*[A-K]\b|CLASS\s+[A-K]\b|CAP STK|SHS\b|ORD\b|ADR\b|"
+                      r"SH(S)? BEN INT|COM SH|UNIT\b|\*W EXP|RIGHT\b|WTS?\b|PFD|DEP SHS|PERP PFD|CONV PFD|"
+                      # foreign issuers (Nov 20: 4babefa put TSM, BABA, SONY and ~100 more ADRs beside their puts in
+                      # funds): SPONSORED ADS, SPONSORD ADS, SPON ADS, SP ADR NON VTG, ADS, AMERICAN DEPOSIT,
+                      # NY REGISTRY, NAMEN AKT, REGISTERED SHS, ORDINARY SHARES, SUB VTG SHS, LP INT UNIT
+                      r"SP(ON(S|SORE?D)?)? (ADR|ADS|GDS)|ADS\b|AMERICAN DEP|N ?Y REGISTRY|NAMEN AKT|REGISTERED SH|"
+                      r"ORDINARY|USD ORD|SUB VTG|LP INT|LTD PARTNR)")
 
 
 _PUTCALL = re.compile(r"^(PUT|CALL)\b")
