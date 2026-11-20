@@ -201,7 +201,16 @@ writeFileSync(join(out, 'd', 'splits.json'), JSON.stringify({ generated_at: inde
 const list = []
 const byTicker = {}
 mkdirSync(join(out, 'd', 'stocks'), { recursive: true })
-const hlTickers = (await read('hl/index.json').catch(() => null))?.tickers ?? {}
+const hlIndex = await read('hl/index.json').catch(() => null)
+const hlTickers = hlIndex?.tickers ?? {}
+// Issuer codes whose lines are separate funds (ingest's hl/index.json `funds`: VanEck ETF Trust 92189F is SMH, GDX, MOAT…),
+// never one company's share classes. hl/ and hlr/ sum every fund under the code into one row per filer, so a fund's
+// page publishes no every-filer rows or counts from them (lead, Nov 20) until ingest keys them by CUSIP9.
+// A code whose tickers we group as one company's share classes stays out even when ingest lists it (live Nov 20: GOOG/GOOGL
+// 02079K, BRK.A/B 084670, FOXA/FOX 35137L): their summed issuer view is the documented shape until per-class lands.
+const classCodes = new Set([...stocks.values()].filter((s) => s.classes.size > 1).flatMap((s) => [...s.classes.keys()].map((t) => hlTickers[t])))
+const FUNDS = new Set(Object.keys(hlIndex?.funds ?? {}).filter((c) => !classCodes.has(c)))
+const fundCode = (tickers) => tickers.map((t) => hlTickers[t]).find((c) => c && FUNDS.has(c)) ?? null
 for (const s of stocks.values()) {
   if (!s.classes.size) continue // no public ticker: private, bonds, unmapped
   const classes = [...s.classes.values()].sort((a, b) => b.value - a.value)
@@ -245,6 +254,8 @@ for (const s of stocks.values()) {
     counts: { holders: holders.length, prev_holders: prevHolders, new: count('new'), added: count('added'), trimmed: count('trimmed'), exited: count('exited'), unknown: count('unknown') },
     quarters: [...new Set(holders.map((h) => h.quarter))].sort().reverse(),
     ...(s.splits ? { splits: s.splits } : {}),
+    // A fund under an issuer code shared with other funds: its every-filer lenses are off (FUNDS).
+    ...(fundCode(classes.map((c) => c.ticker)) ? { fund: true } : {}),
     generated_at: index.generated_at,
   }
   writeFileSync(join(out, 'd', 'stocks', `${ticker}.json`), JSON.stringify(file))
@@ -665,7 +676,7 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
   // and long-only holder, from every filer's full latest book). The top-500 shards below left multi-strategy funds
   // (Citadel, Millennium, AQR...) off mid- and small-cap pages; they stay only as the fallback.
   const hlr = await read('hlr/index.json').catch(() => null)
-  const hlIdx = (await read('hl/index.json').catch(() => null))?.tickers ?? {}
+  const hlIdx = hlTickers
   const gz = async (path) => gunzipSync(base.startsWith('http') ? Buffer.from(await (await fetch(base + path).then((r) => (r.ok ? r : Promise.reject(new Error(`${path}: ${r.status}`))))).arrayBuffer()) : readFileSync(join(base, path)))
   if (hlr) {
     const hc = Object.fromEntries(hlr.columns.map((c, j) => [c, j]))
@@ -679,7 +690,7 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
     for (const part of hlr.parts) {
       for (const [code, hs] of Object.entries(JSON.parse(await gz(`hlr/${part.file}`)).issuers)) {
         const pages = pagesOf.get(code)
-        if (!pages) continue
+        if (!pages || FUNDS.has(code)) continue
         for (const r of hs) {
           const [cik, q, sh, value, w, ch, delta] = [r[hc.cik], r[hc.period], r[hc.shares], r[hc.value], r[hc.weight] ?? 0, r[hc.change], r[hc.value_delta]]
           if (qn(q) < newest - 2) continue // same freshness rule as the shards below
@@ -792,7 +803,7 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
   const issuers = new Map() // issuer6 -> pages
   for (const t of per.keys()) {
     const code = hlIdx[t]
-    if (code) (issuers.get(code) ?? issuers.set(code, []).get(code)).push(t)
+    if (code && !FUNDS.has(code)) (issuers.get(code) ?? issuers.set(code, []).get(code)).push(t)
   }
   const hlOf = new Map()
   const codes = [...issuers.keys()]
@@ -858,6 +869,21 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
       writeFileSync(sf, JSON.stringify(s))
     } catch {}
   }
+  // Fund pages (FUNDS): a marker file in place of the summed rows, so the page says why and no title, description or card
+  // carries a count that sums other funds. The shard fallback (no hlr/) is per CUSIP and keeps its rows.
+  let fundPages = 0
+  for (const x of list) {
+    if (!(hlr && fundCode([x.t, ...(x.a ?? [])]))) continue
+    writeFileSync(join(out, 'd', 'h', `${x.t}.json`), JSON.stringify({ ticker: x.t, fund: true, columns: ['slug', 'name', 'quarter', 'shares', 'value', 'weight', 'tier', 'lens'], rows: [], generated_at: fl?.generated_at ?? index.generated_at }))
+    const sf = join(out, 'd', 'stocks', `${x.t}.json`)
+    try {
+      const s = JSON.parse(readFileSync(sf, 'utf8'))
+      delete s.title_counts
+      writeFileSync(sf, JSON.stringify(s))
+    } catch {}
+    fundPages++
+  }
+  console.log(`fund pages without every-filer lenses: ${fundPages} (${FUNDS.size} fund issuer codes in hl/index.json)`)
   if (hlr) {
     const off = []
     for (const [t, h] of hlOf) {

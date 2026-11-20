@@ -59,6 +59,8 @@ export type Stock = {
   counts: { holders: number; prev_holders: number; new: number; added: number; trimmed: number; exited: number }
   // All-filer and hedge-fund holder counts for the tab title (scripts/stocks.mjs).
   title_counts?: { filers: number; hedge: number; quarter?: string | null }
+  /** One of several funds under a shared issuer code (ingest's hl/index.json funds): no every-filer lenses from hl/. */
+  fund?: boolean
   quarters: string[]
   /** Splits by quarter: adjusted (ingest confirmed and multiplied earlier share counts) or excluded (looks like a split, left out of counts). */
   splits?: Record<string, { ratio: string; adjusted: boolean }>
@@ -413,8 +415,9 @@ type HRaw = {
   rows: [string, string, string, number, number, number, 0 | 1 | 2, number?][]
 }
 const lensBlock = (x: HRaw['smart']): SmartCounts | null => (x ? { ...x, moves: x.moves.filter((m) => !unreliable({ change: m[3] }) && m[4] != null).map(([slug, name, quarter, change, delta_value]) => ({ slug, name: displayName(name), quarter, change, delta_value })) } : null)
+/** Null for a fund under a shared issuer code (scripts/stocks.mjs writes only a `fund` marker): no every-filer view. */
 export const loadFilerHolders = (t: string) =>
-  getJSON<HRaw>(`${D}h/${encodeURIComponent(t)}.json${fresh()}`).then((d) => ({
+  getJSON<HRaw & { fund?: boolean }>(`${D}h/${encodeURIComponent(t)}.json${fresh()}`).then((d) => d.fund ? null : ({
     /** Every filer holding it: exact from ingest's full-book index when present (the shards undercount large books). */
     filers: d.index ? d.index.holders + d.index.older : d.filers,
     /** Filers whose latest 13F is for the newest or previous quarter; the rest are on older filings. */

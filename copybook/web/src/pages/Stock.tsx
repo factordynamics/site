@@ -29,6 +29,30 @@ const CHANGE: Record<string, { label: string; tone: 'up' | 'down' | 'neutral' }>
 
 const signed = (n: number, f: (v: number) => string) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${f(Math.abs(n))}`
 
+/** A fund page's rows from the API's summed issuer rows: each filer's own entry for this page's CUSIP9s in classes[],
+ *  weight scaled to it; a filer with none (it holds only sibling funds) is dropped. */
+function ownFund(rows: ApiHolder[], cusips: Set<string>): ApiHolder[] {
+  const out: ApiHolder[] = []
+  for (const r of rows) {
+    const own = (r.classes ?? []).filter((c) => cusips.has(c.cusip))
+    if (!own.length) continue
+    const value = own.reduce((a, c) => a + (c.value || 0), 0)
+    if (value <= 0 && !own.some((c) => c.shares > 0)) continue
+    const prevValue = own.reduce((a, c) => a + (c.prev_value || 0), 0)
+    out.push({
+      ...r,
+      shares: own.reduce((a, c) => a + (c.shares || 0), 0),
+      prev_shares: own.reduce((a, c) => a + (c.prev_shares || 0), 0),
+      value_usd: value,
+      prev_value_usd: prevValue,
+      change: own.length === 1 ? own[0].change : r.change,
+      weight: r.weight != null && r.value_usd ? (r.weight * value) / r.value_usd : null,
+      classes: own,
+    })
+  }
+  return out.sort((a, b) => b.value_usd - a.value_usd)
+}
+
 export function StockPage() {
   const { ticker = '' } = useParams()
   useTrackVisit()
@@ -59,7 +83,8 @@ export function StockPage() {
   const tracked = useMemo(() => (d?.holders ?? []).filter((h) => scope === 'all' || h.featured), [d, scope])
   const wide = view === 'filers' || view === 'smart' || view === 'hedge'
   const typed = view === 'smart' || view === 'hedge' ? view : null
-  const fh = useAsync(() => (wide && d ? loadFilerHolders(d.ticker) : Promise.resolve(null)), [wide, d?.ticker])
+  // A fund under a shared issuer code (SMH, GDX…): hl/'s every-filer rows sum all its sibling funds, so none are published.
+  const fh = useAsync(() => (wide && d && !d.fund ? loadFilerHolders(d.ticker) : Promise.resolve(null)), [wide, d?.ticker, d?.fund])
   // Hedge funds and active managers: the same filer list, cut to those types.
   // One count everywhere (title, My book, these tabs): filers whose latest 13F is for this quarter or the
   // last, with those on older 13Fs shown apart as "+N older".
@@ -70,7 +95,7 @@ export function StockPage() {
     const b = x[typed]
     return { ...x, filers: b ? b.current + b.older : 0, cur: b?.current ?? 0, older: b?.older ?? 0, quarters: b?.quarters ?? {}, rows: x.rows.filter((r) => r[typed]) }
   }, [wide, view, fh.data])
-  const filersLoading = wide && !fh.data && !fh.error
+  const filersLoading = wide && !d?.fund && !fh.data && !fh.error
   // The wider lenses read ingest's hl/ build, which can trail EDGAR by days (Nov 16: the Nov 11 build): say when it
   // was built, so a deadline-day visitor never reads it as today's. data_built_at is the build's own time; built_at is
   // the store's upload watermark (the oldest object's stamp), the fallback until ingest publishes data_built_at.
@@ -87,18 +112,19 @@ export function StockPage() {
     let r = null
     for (let i = 0, off = 0; i < pages; i++) {
       r = await loadHolders(d.ticker, view === 'smart' ? 'hedge_fund,long_only' : view === 'hedge' ? 'hedge_fund' : null, off)
-      rows.push(...r.holders)
+      // Fund pages: each row is the filer's sum over every fund under the issuer code; keep only this page's CUSIP9s.
+      rows.push(...(d.fund ? ownFund(r.holders, new Set(d.classes.map((c) => c.cusip))) : r.holders))
       if (r.next_offset == null) break
       off = r.next_offset
     }
-    return r ? { count: r.filers ?? r.count, truncated: r.truncated, rows, more: r.next_offset != null } : null
+    return r ? { count: d.fund ? rows.length : (r.filers ?? r.count), truncated: r.truncated, rows, more: r.next_offset != null } : null
   }, [wide, d?.ticker, view, pages, member?.plan, member?.active])
   const lensTotal = typed && fh.data?.[typed] ? fh.data[typed]!.current + fh.data[typed]!.older : 0
   const api = full.data && !full.data.truncated && (!typed || full.data.count >= lensTotal * 0.8) ? full.data : null
   const who = view === 'smart' ? 'hedge funds and long-only managers' : view === 'hedge' ? 'hedge funds' : '13F filers'
   // Every filer's latest position; a fund we track closely keeps its row, with its change since the filing before.
   const holders = useMemo(() => {
-    if (!filers) return tracked
+    if (!filers && !(api && d?.fund)) return tracked
     const mine = new Map(tracked.map((h) => [h.slug, h]))
     if (api)
       return api.rows
@@ -109,11 +135,12 @@ export function StockPage() {
           const change = r.change === 'unknown' || (f === 'both' && r.change !== 'new' && r.change !== 'exited') ? null : r.change
           return { slug: r.filer.slug, manager: m?.manager ?? displayName(r.filer.name), firm: r.filer.name, quarter: r.period, featured: m?.featured ?? false, shares: r.shares, value: r.value_usd, weight: r.weight ?? 0, prev_shares: r.prev_shares ?? 0, prev_value: r.prev_value_usd ?? 0, delta_value: f ? 0 : r.value_usd - (r.prev_value_usd ?? 0), change, ...(f ? { flag: f, note: flagNote({ ...r, value: r.value_usd, prev_value: r.prev_value_usd }) } : {}) }
         })
+    if (!filers) return tracked
     return filers.rows.map(
       (r): StockHolder =>
         mine.get(r.slug) ?? { slug: r.slug, manager: r.name, firm: r.name, quarter: r.quarter, featured: r.tier === 2, shares: r.shares, value: r.value, weight: r.weight, prev_shares: 0, prev_value: 0, delta_value: 0, change: null },
     )
-  }, [filers, tracked, api])
+  }, [filers, tracked, api, d?.fund])
   const exited = useMemo(() => (d?.exited ?? []).filter((h) => scope === 'all' || h.featured), [d, scope])
   const notCounted = useMemo(() => (d?.not_counted ?? []).filter((h) => scope === 'all' || h.featured), [d, scope])
   // Flagged rows never drop out of sight: listed under the moves with their note, valued by what can be trusted. A
@@ -351,7 +378,8 @@ export function StockPage() {
         </div>
       </div>
 
-      {(view === 'hedge' || view === 'smart') && <p className="mt-2 text-right text-[12.5px] text-ink-3">{typesAsOfLabel(idx.data?.typesAsOf)}</p>}
+      {(view === 'hedge' || view === 'smart') && !d?.fund && <p className="mt-2 text-right text-[12.5px] text-ink-3">{typesAsOfLabel(idx.data?.typesAsOf)}</p>}
+      {wide && d?.fund && !api && <p className="mt-2 text-[13px] text-ink-2">Every-filer view isn’t available for this fund yet; the funds we track are shown.</p>}
 
       {sinceRows.length > 0 && (
         <Panel className="mt-4" title="Since the latest 13Fs" sub="Holdings filed after each fund’s 13F, on Form 4 and Schedule 13D/G">
@@ -489,11 +517,11 @@ export function StockPage() {
           <div className="min-w-0">
             <h2 className="text-[15px] font-semibold">Every holder</h2>
             <p className="text-[13px] text-ink-3">
-              {api ? `All ${api.count.toLocaleString('en-US')} ${who}, largest first, each compared with its previous 13F` : filers && filers.filers > holders.length ? `The ${holders.length} largest of ${countLabel(filers)} ${who}` : `${holders.length.toLocaleString('en-US')} funds`} · shares only; options are listed separately below
-              {wide && !api && ' · change shows for the funds we track closely until other filers’ prior quarters are on file'}
+              {api ? `All ${api.count.toLocaleString('en-US')}${d?.fund && api.more ? '+' : ''} ${who}, largest first, each compared with its previous 13F` : filers && filers.filers > holders.length ? `The ${holders.length} largest of ${countLabel(filers)} ${who}` : `${holders.length.toLocaleString('en-US')} funds`} · shares only; options are listed separately below
+              {wide && !api && !d?.fund && ' · change shows for the funds we track closely until other filers’ prior quarters are on file'}
             </p>
           </div>
-          {paid && d && <CsvButton variant="outline" label="Holders CSV" download={() => downloadFile(`/stocks/${encodeURIComponent(d.ticker)}/holders.csv${typed ? `?type=${typed === 'hedge' ? 'hedge_fund' : 'hedge_fund,long_only'}` : ''}`, `copybook-${d.ticker}-holders${typed ? `-${typed === 'hedge' ? 'hedge-funds' : 'hedge-long-only'}` : ''}.csv`)} />}
+          {paid && d && !d.fund && <CsvButton variant="outline" label="Holders CSV" download={() => downloadFile(`/stocks/${encodeURIComponent(d.ticker)}/holders.csv${typed ? `?type=${typed === 'hedge' ? 'hedge_fund' : 'hedge_fund,long_only'}` : ''}`, `copybook-${d.ticker}-holders${typed ? `-${typed === 'hedge' ? 'hedge-funds' : 'hedge-long-only'}` : ''}.csv`)} />}
         </header>
         <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Every holder">
           <table className="w-full text-[14px]">

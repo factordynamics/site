@@ -419,6 +419,8 @@ export type ApiHolder = {
   suspect_units?: boolean
   suspect_reason?: string | null
   unreliable?: 'value' | 'shares' | 'both' | null
+  /** One entry per CUSIP9 when the row sums several (a filer's VanEck funds under 92189F; BRK.A and BRK.B). */
+  classes?: { cusip: string; shares: number; prev_shares: number | null; value: number; prev_value: number | null; change: ApiHolder['change'] }[]
 }
 /** A page of up to 1,000 holders, largest first; `truncated` while only the public top 25 is on the server. */
 export const loadHolders = (t: string, type: string | null, offset: number) =>
