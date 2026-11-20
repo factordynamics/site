@@ -1486,7 +1486,11 @@ describe('copybook api', () => {
       ['0000000004', 'D', null, 'wealth', false, '2026Q3', 5, 5, 50, 50, 'unchanged', 0.01, GDX, '92189F', null, 0],
     ];
     await hist.put('hl/92189F.json', JSON.stringify({ schema: 5, issuer: '92189F', tickers: ['GDX', 'MOAT', 'SMH'], columns: cols, rows, counts: { holders: 4, net: 300, net_quarter: '2026Q3', net_by_period: { '2026Q3': 300 } } }));
-    const funds = { '92189F': [{ cusip: GDX, ticker: 'GDX' }, { cusip: MOAT, ticker: 'MOAT' }, { cusip: SMH, ticker: 'SMH' }] };
+    // Berkshire's share classes, as ingest's funds listed them on Nov 20 (BRK.B and a stray CUSIP, no BRK.A).
+    const BRKA = '084670108', BRKB = '084670702';
+    await hist.put('hl/084670.json', JSON.stringify({ schema: 5, issuer: '084670', tickers: ['BRK.A', 'BRK.B'], columns: cols, rows: [['0000000005', 'E', null, 'wealth', false, '2026Q3', null, null, 2000, 1900, 'mixed', 0.3, null, '084670', [cls(BRKA, 'BRK.A', 1500, 1500, 2, 2), cls(BRKB, 'BRK.B', 500, 400, 1000, 900)], 100]], counts: { holders: 1 } }));
+    const funds = { '92189F': [{ cusip: GDX, ticker: 'GDX' }, { cusip: MOAT, ticker: 'MOAT' }, { cusip: SMH, ticker: 'SMH' }], '084670': [{ cusip: BRKB, ticker: 'BRK.B' }, { cusip: '084670770', ticker: null }] };
+    hist.m.set('pre/stock-codes.json', new TextEncoder().encode('{"SMH":"92189F","BRK.B":"084670"}'));
     const orig = globalThis.fetch;
     vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => (String(u).startsWith(`${SITE}data/hl/index.json`) ? Response.json({ schema: 5, tickers: {}, classes: {}, funds }) : orig(u, init)));
     // Past the fund list's 10-minute cache from earlier tests.
@@ -1501,9 +1505,17 @@ describe('copybook api', () => {
       expect(((await holdersOf(env, '92189F', [], 'GDX'))!.rows.map((r) => (r as { filer: { cik: string } }).filer.cik)).sort()).toEqual(['0000000001', '0000000002', '0000000004']);
       // By the issuer code alone: no rows rather than the funds' sum.
       expect(await holdersOf(env, '92189F')).toBeNull();
+      // GDX, which the one-ticker-per-code map lacks, resolves through the fund list.
+      const { issuerCode } = await import('../src/v1data');
+      expect(await issuerCode(env, 'GDX')).toEqual({ code: '92189F', ticker: 'GDX' });
+      // Berkshire is one company's share classes on SEC's 13(f) list: the summed row with both classes, as pinned.
+      const brk = (await holdersOf(env, '084670', [], 'BRK.B'))!;
+      expect(brk.rows.map((r) => [val(r as Record<string, unknown>), ((r as { classes?: unknown[] }).classes ?? []).length])).toEqual([[2000, 2]]);
     } finally {
       vi.useRealTimers();
       hist.m.delete('hl/92189F.json');
+      hist.m.delete('hl/084670.json');
+      hist.m.delete('pre/stock-codes.json');
     }
   });
 

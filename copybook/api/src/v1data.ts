@@ -501,7 +501,11 @@ async function issuerCodeRaw(env: Env, id: string): Promise<{ code: string; tick
   if (pre) {
     const text = await new Response(pre.body).text();
     const at = text.indexOf(`"${up}":"`);
-    return at >= 0 ? { code: text.slice(at + up.length + 4, at + up.length + 10), ticker: up } : /^[0-9A-Z]{6}$/.test(up) ? { code: up, ticker: null } : null;
+    if (at >= 0) return { code: text.slice(at + up.length + 4, at + up.length + 10), ticker: up };
+    // The map keeps one ticker per issuer code: a fund under a code of separate funds (GDX beside SMH in 92189F).
+    const fund = Object.entries(await fundsOf(env)).find(([, fs]) => fs.some((f) => f.ticker?.toUpperCase() === up));
+    if (fund) return { code: fund[0], ticker: up };
+    return /^[0-9A-Z]{6}$/.test(up) ? { code: up, ticker: null } : null;
   }
   const res = await fetch(`${env.DATA_URL}stock_holders.json`, { cf: { cacheTtl: 3600 } } as RequestInit);
   if (!res.ok) return null;
@@ -884,12 +888,20 @@ function countsOf(rows: any[]) {
  */
 /** Ingest's `funds` in hl/index.json: CUSIP6s whose lines are separate funds (VanEck 92189F), each fund's own CUSIP and ticker. */
 let FUNDS: { at: number; funds: Record<string, { cusip: string; ticker: string | null }[]> } | null = null;
+/**
+ * Codes ingest's funds listed (Nov 20) that SEC's Official 13(f) List (2026Q3) reads as one company: share classes
+ * (Alphabet CAP STK CL A/C, Berkshire CL A/CL B NEW, Fox CL A/CL B COM) or common with its options, warrants, rights or
+ * preferred (AMZN, BA, WFC, OXY). One filer's title reading as a fund listed the whole code. Served as before: the
+ * summed row with classes[], as pinned clients get it, until per-class serving or ingest's rule excludes them.
+ */
+const NOT_FUNDS = new Set(['011532', '023135', '025537', '025816', '02079K', '035710', '040413', '053015', '084670', '097023', '19247L', '23834J', '35137L', '38964R', '389930', '674599', '683712', '68989M', '75134P', '76655K', '83601L', '896438', '949746', '98421M', 'M8216R']);
 async function fundsOf(env: Env): Promise<Record<string, { cusip: string; ticker: string | null }[]>> {
   if (!FUNDS || Date.now() - FUNDS.at > 600_000) {
     const d = (await fetch(`${env.DATA_URL}hl/index.json`, { cf: { cacheTtl: 600 } } as RequestInit)
       .then((r) => (r.ok ? r.json() : null))
       .catch(() => null)) as { funds?: Record<string, { cusip: string; ticker: string | null }[]> } | null;
-    FUNDS = { at: Date.now(), funds: d?.funds ?? FUNDS?.funds ?? {} };
+    const funds = d?.funds ? Object.fromEntries(Object.entries(d.funds).filter(([code]) => !NOT_FUNDS.has(code))) : null;
+    FUNDS = { at: Date.now(), funds: funds ?? FUNDS?.funds ?? {} };
   }
   return FUNDS.funds;
 }
