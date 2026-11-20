@@ -61,13 +61,17 @@ export function in13fSeason(now: number): boolean {
   });
 }
 
+/** Federal holidays (observed) when EDGAR is closed, through 2027. */
+const EDGAR_HOLIDAYS = new Set(['2026-11-11', '2026-11-26', '2026-12-25', '2027-01-01', '2027-01-18', '2027-02-15', '2027-05-31', '2027-06-18', '2027-07-05', '2027-09-06', '2027-10-11', '2027-11-11', '2027-11-25', '2027-12-24', '2027-12-31']);
+
 /** /speed/'s label for a filing EDGAR accepted after hours (the lead, Nov 19). */
 export const AFTER_HOURS_LABEL = 'filed after hours; EDGAR publishes it the next morning';
 
 /**
  * When EDGAR first lists a filing accepted after hours: one accepted from 17:30 ET (it carries the next business day's
  * filing date) or on a weekend is published at 06:00 ET on the next weekday. Null for one accepted in hours, whose
- * listing is its acceptance. Federal holidays aren't skipped (the next one in season is Thanksgiving, Nov 26).
+ * listing is its acceptance. EDGAR is closed on federal holidays (Davis's 13F, Tue Nov 10 18:48 ET, listed Thu Nov 12
+ * after Veterans Day), so they are skipped too.
  */
 export function edgarListedAt(acceptedMs: number): number | null {
   const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', weekday: 'short' }).formatToParts(new Date(acceptedMs)).map((p) => [p.type, p.value]));
@@ -78,7 +82,7 @@ export function edgarListedAt(acceptedMs: number): number | null {
   let day = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day));
   const wd = (t: number) => new Date(t).getUTCDay();
   if (weekend || mins >= 17 * 60 + 30) day += DAY;
-  while (wd(day) === 0 || wd(day) === 6) day += DAY;
+  while (wd(day) === 0 || wd(day) === 6 || EDGAR_HOLIDAYS.has(new Date(day).toISOString().slice(0, 10))) day += DAY;
   // 06:00 in New York on that day: try EST then EDT, keeping the one that reads 06:00 there.
   for (const off of [5, 4]) {
     const t = day + (6 + off) * 3600_000;

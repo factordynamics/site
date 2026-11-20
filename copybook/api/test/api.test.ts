@@ -1455,12 +1455,14 @@ describe('copybook api', () => {
       row('c', '2026-11-16T22:47:00Z', '2026-11-17T11:01:30Z'), // 17:47 ET (Biglari's): listed Tue 06:00 ET, 90 s on
       row('d', '2026-11-20T23:00:00Z', '2026-11-23T11:10:00Z'), // Fri 18:00 ET: listed Mon 06:00 ET, 600 s on
       row('e', '2026-11-19T22:58:00Z', '2026-11-19T22:59:00Z'), // 17:58 ET but listed that evening (Broadwood's): 60 s, in hours
+      row('f', '2026-11-10T23:48:25Z', '2026-11-12T11:03:14Z'), // Tue 18:48 ET (Davis's): Wed was Veterans Day, listed Thu 06:00 ET
     ] as never, Date.UTC(2026, 10, 23, 12));
     const c = r.alerts.find((x: { accession: string }) => x.accession === 'c') as Record<string, unknown>;
     expect(c).toMatchObject({ accepted_at: '2026-11-16T22:47:00Z', gap_seconds: 44_070, after_hours: true, edgar_listed_at: '2026-11-17T11:00:00Z', seconds_from_listing: 90 });
+    expect(r.alerts.find((x: { accession: string }) => x.accession === 'f')).toMatchObject({ edgar_listed_at: '2026-11-12T11:00:00Z', seconds_from_listing: 194 });
     for (const id of ['a', 'e']) expect(r.alerts.find((x: { accession: string }) => x.accession === id)).not.toHaveProperty('after_hours');
-    expect([r.p90_seconds, r.p90_seconds_excluding_after_hours, r.after_hours]).toEqual([600, 120, { count: 2, label: 'filed after hours; EDGAR publishes it the next morning', timed_from: 'edgar_listed_at' }]);
-    expect(r.by_form['Form 4']).toMatchObject({ count: 5, p90_seconds: 600 });
+    expect([r.p90_seconds, r.p90_seconds_excluding_after_hours, r.after_hours]).toEqual([600, 120, { count: 3, label: 'filed after hours; EDGAR publishes it the next morning', timed_from: 'edgar_listed_at' }]);
+    expect(r.by_form['Form 4']).toMatchObject({ count: 6, p90_seconds: 600 });
   });
 
   it('/status/ curated_stale_since: index.json over 90 min old in 13F season, over 6 h outside it', async () => {
