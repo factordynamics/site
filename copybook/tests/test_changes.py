@@ -848,6 +848,11 @@ class ShareClassHoldersTest(unittest.TestCase):
             # Boreal Capital: sleeves filed at 0 shares with value beside a priced class, both quarters.
             "0002080094": [line("46429B689", "A", 160, 160, 14034, 13000, "unchanged"),
                            line("46429B747", "B", 0, 0, 20432, 19000, "exited") | {"value_delta": 20432}],
+            # Morgan Stanley 2026Q3: two VanEck ETF Trust funds under one CUSIP6, separate securities, not classes.
+            "0000895421": [line("92189F676", "SMH", 2926265, 4074538, 1782096922, 2672449897, "trimmed")
+                           | {"title": "SEMICONDUCTR ETF", "issuer": "VANECK ETF TRUST"},
+                           line("92189F106", "GDX", 13849572, 16420795, 1215992538, 1238949068, "trimmed")
+                           | {"title": "GOLD MINERS ETF", "issuer": "VANECK ETF TRUST"}],
         }
         saved = (moves.DATA, dict(moves.LATEST), dict(moves.PERIOD), dict(moves.FILING))
         with tempfile.TemporaryDirectory() as d:
@@ -866,6 +871,9 @@ class ShareClassHoldersTest(unittest.TestCase):
                 self.assertEqual((m["change"], m["value_delta"], m["unreliable"], m["held_reason"]),
                                  ("unknown", None, "both", "class_swap"))
                 self.assertEqual(read("084670")["counts"]["net"], 0)
+                # hl/index.json funds: the VanEck funds, each on its own; Berkshire's share classes aren't funds.
+                self.assertEqual(json.loads((P(d) / "hl" / "index.json").read_text())["funds"],
+                                 {"92189F": [{"cusip": "92189F106", "ticker": "GDX"}, {"cusip": "92189F676", "ticker": "SMH"}]})
                 # The units guard holding one class (B at $748,850) must not leave the other counted at -$4.87B.
                 moves.LATEST["0002056447"] = [books["0002056447"][0],
                                               books["0002056447"][1] | {"unreliable": "shares", "suspect_units": True}]

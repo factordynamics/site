@@ -1154,9 +1154,18 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
     if os.environ.get("SCOPE", "full") == "full":  # hlf/BUILD: the full run whose all-filer books built this index;
         # curated rebuilds keep it. upload_history.py publishes it as meta/builds.json stores.hl.data_built_at.
         write(full / "BUILD", read(DATA / "build.json") or {})
+    # Issuer codes whose lines are separate funds (VanEck ETF Trust 92189F: SMH, GDX, MOAT), never one issuer's share
+    # classes: the API serves each fund on its own and never the hl/ row, which sums different funds. Always present.
+    funds: dict[str, dict[str, str | None]] = {}
+    for (code, _), cl in CLS.items():
+        if fund_series(cl):
+            for k in cl.values():
+                f = funds.setdefault(code, {})
+                f[k["cusip"]] = f.get(k["cusip"]) or k["ticker"]
+    funds = {code: [{"cusip": c, "ticker": t} for c, t in sorted(f.items())] for code, f in sorted(funds.items()) if len(f) > 1}
     write(out / "index.json", {"note": "ticker -> issuer code (first 6 of the CUSIP); one file per issuer in hl/",
                                "schema": HL_SCHEMA,
-                               "types_sig": signature(types), "tickers": dict(sorted(index.items()))})
+                               "types_sig": signature(types), "tickers": dict(sorted(index.items())), "funds": funds})
     write_site_holders(site, signature(types))
     return len(keep)
 
