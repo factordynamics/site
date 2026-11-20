@@ -196,7 +196,7 @@ beforeEach(async () => {
       if (next) return Response.json(next.body ?? {}, { status: next.status });
       return new Response('ok', { status: url.startsWith('https://hooks.example.com') ? hookStatus : 200 });
     }
-    if (url === `${SITE}data/index.json`) return Response.json(index);
+    if (url.split('?')[0] === `${SITE}data/index.json`) return Response.json(index);
     if (url.startsWith(`${SITE}d/stocks/`)) { const k = url.slice(`${SITE}d/stocks/`.length).replace('.json', ''); return stockPages[k] ? Response.json(stockPages[k]) : new Response('not found', { status: 404 }); }
     if (url === `${SITE}d/f/index.json`) return Response.json({ cards: [{ accession: '0000950123-26-011111', slug: 'warren-buffett' }] });
     if (url === `${SITE}data/filers.json`) return new Response(JSON.stringify({ count: filers.length, filers }, null, 1));
@@ -1458,6 +1458,26 @@ describe('copybook api', () => {
     expect(curatedStaleSince('2026-12-10T06:00:00Z', Date.parse('2026-12-10T09:00Z'))).toBeNull();
     expect(curatedStaleSince('2026-12-10T06:00:00Z', Date.parse('2026-12-10T12:01Z'))).toBe('2026-12-10T12:00:00Z');
     expect(curatedStaleSince(null, Date.parse('2026-12-10T12:01Z'))).toBeNull();
+    // The flag follows a publish within a minute: a moved index.json ETag queues the backstop that minute, read past
+    // Pages' 10-minute edge cache (a new URL each minute).
+    const { indexChanged } = await import('../src/alerts');
+    let live = '"a"';
+    const urls: string[] = [];
+    const orig = globalThis.fetch;
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => {
+      if (!String(u).startsWith(`${env.DATA_URL}index.json`)) return orig(u, init);
+      urls.push(String(u));
+      const tag = new Headers(init?.headers).get('if-none-match');
+      return tag === live ? new Response(null, { status: 304 }) : new Response(null, { headers: { etag: live } });
+    });
+    await env.DB.delete('idx:etag');
+    expect(await indexChanged(env, Date.parse('2026-11-20T04:00Z'))).toBe(false);
+    expect(urls).toHaveLength(0);
+    await env.DB.put('idx:etag', '"a"');
+    expect(await indexChanged(env, Date.parse('2026-11-20T04:01Z'))).toBe(false);
+    live = '"b"';
+    expect(await indexChanged(env, Date.parse('2026-11-20T04:02Z'))).toBe(true);
+    expect(new Set(urls).size).toBe(2);
   });
 
   it('/status/ data: probe uptime and daily bars, restarts told apart (deploy, unplanned, unconfirmed), 13F amber, freshness', async () => {

@@ -2536,6 +2536,21 @@ async function typesGuard(env: Env): Promise<void> {
   await sendMail(env, [{ to: env.CONTACT_EMAIL ?? 'hello@factordynamics.com', subject: 'Copybook: ingest held a filer-type change (published types kept)', text: `The data run of ${g.checked_at} didn't publish its filer types: ${g.reason ?? 'the counts moved too far'}. Members still get alerts routed by the previous types.\n\n${moved}\n\nTo accept the move, dispatch a full run with accept_types.\n` }], { tier: 'account' });
 }
 
+/** index.json past GitHub Pages' 10-minute edge cache (max-age=600): a new URL each minute, so a publish is seen in a minute. */
+const indexUrl = (env: Env, now: number) => `${env.DATA_URL}index.json?t=${Math.floor(now / 60_000)}`;
+
+/**
+ * Whether ingest has published an index.json the backstop hasn't read (its ETag moved): checked every minute, one
+ * conditional request, so /status/'s freshness (curated_stale_since) sets and clears within a minute of a publish
+ * rather than at the hourly backstop.
+ */
+export async function indexChanged(env: Env, now: number): Promise<boolean> {
+  const etag = await env.DB.get('idx:etag');
+  if (!etag) return false;
+  const res = await fetch(indexUrl(env, now), { method: 'HEAD', headers: { 'if-none-match': etag } });
+  return res.ok && res.headers.get('etag') !== etag;
+}
+
 export async function runBackstop(env: Env, now: number): Promise<Record<string, unknown>> {
   await typesGuard(env).catch((e) => console.error(`types_guard: ${e}`));
   await import('./download').then((d) => d.checkBulk(env, 1_000_000, now)).catch((e) => console.error(`bulk_check: ${e}`));
@@ -2543,7 +2558,7 @@ export async function runBackstop(env: Env, now: number): Promise<Record<string,
   // straight to the follow-ups. Its derived KV (CIK map, /v1 filers, periods) is unchanged too.
   // Without /status/'s freshness record yet, read the index once even if unchanged, so it's filled.
   const etag = (await env.DB.get('status:fresh')) ? await env.DB.get('idx:etag') : null;
-  const res = await fetch(`${env.DATA_URL}index.json`, etag ? { headers: { 'if-none-match': etag } } : {});
+  const res = await fetch(indexUrl(env, now), etag ? { headers: { 'if-none-match': etag } } : {});
   if (res.status !== 304 && !res.ok) throw new Error(`index.json ${res.status}`);
   const idx = (res.status === 304 ? { managers: [] } : await res.json()) as { managers?: IndexRow[]; generated_at?: string; build_id?: string };
   if (res.status === 304) return { status: 'unchanged', ...(await pendingFollowups(env, now)) };
@@ -3095,7 +3110,7 @@ async function runMinute(env: Env, scheduledTime: number): Promise<Record<string
   const m = t.getUTCMinutes();
   const h = t.getUTCHours();
   const due: Job[] = [];
-  if (m === 17) due.push({ name: 'backstop', at: scheduledTime });
+  if (m === 17 || (!busy && (await indexChanged(env, scheduledTime).catch(() => false)))) due.push({ name: 'backstop', at: scheduledTime });
   if (m === 47) due.push({ name: 'events', at: scheduledTime });
   if (m === 32 && h === 3) due.push({ name: 'digest', at: scheduledTime - 3600_000 });
   if (m === 52) due.push({ name: 'watch', at: scheduledTime });
