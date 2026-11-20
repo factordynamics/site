@@ -14,15 +14,34 @@ USER_AGENT = "Copybook factordynamics.com copybook@factordynamics.com"
 DATA_BASE = "https://data.sec.gov"
 ARCHIVE_BASE = "https://www.sec.gov"
 MIN_INTERVAL = float(os.environ.get("COPYBOOK_SEC_INTERVAL", "0.12"))  # stay under 10 req/s
+# Overnight rate (lead, Nov 20): full runs 0.4 s and keepalive runs 1.0 s from 23:00 to 10:45 UTC, filing runs
+# unchanged (4 + 2.5 + 1 = 7.5 req/s). The window ends before EDGAR's 06:00 ET listing of after-hours filings (11:00Z),
+# so keepalive is back at its daytime rate first. Judged per request, so a run crossing 10:45Z slows down mid-run.
+_night = os.environ.get("COPYBOOK_SEC_INTERVAL_NIGHT")
+NIGHT_INTERVAL = float(_night) if _night else None
+NIGHT_WINDOW = ((23, 0), (10, 45))  # UTC, start inclusive, end exclusive
 
 _last_request = 0.0
+
+
+def night(now: time.struct_time | None = None) -> bool:
+    t = now or time.gmtime()
+    hm = (t.tm_hour, t.tm_min)
+    return hm >= NIGHT_WINDOW[0] or hm < NIGHT_WINDOW[1]
+
+
+def interval(now: time.struct_time | None = None) -> float:
+    """Seconds between requests now: the overnight rate inside the window (unless SEC refused this run), else the
+    daytime MIN_INTERVAL."""
+    return NIGHT_INTERVAL if NIGHT_INTERVAL is not None and night(now) else MIN_INTERVAL
 
 
 def _sleep():
     global _last_request
     elapsed = time.monotonic() - _last_request
-    if elapsed < MIN_INTERVAL:
-        time.sleep(MIN_INTERVAL - elapsed)
+    gap = interval()
+    if elapsed < gap:
+        time.sleep(gap - elapsed)
     _last_request = time.monotonic()
 
 
@@ -35,7 +54,7 @@ _refusals = 0  # consecutive refusals across every URL; a success resets it
 
 
 def get(url: str, retries: int = 5) -> bytes:
-    global MIN_INTERVAL, _refusals
+    global MIN_INTERVAL, NIGHT_INTERVAL, _refusals
     backoff = 1.0
     last_err: Exception | None = None
     refused = 0
@@ -58,6 +77,7 @@ def get(url: str, retries: int = 5) -> bytes:
                 if retry_after and retry_after.isdigit():
                     wait = max(wait, float(retry_after))
                 _refusals += 1
+                NIGHT_INTERVAL = None  # back to the daytime rate at once, for the rest of the run
                 MIN_INTERVAL = min(max(MIN_INTERVAL, 0.1) * 2, 2.0)
                 print(f"edgar: SEC refused {url} ({e.code}); pausing {wait:.0f} s, then one request every "
                       f"{MIN_INTERVAL:.2f} s", flush=True)
