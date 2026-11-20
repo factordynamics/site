@@ -1489,7 +1489,8 @@ describe('copybook api', () => {
     // Berkshire's share classes, as ingest's funds listed them on Nov 20 (BRK.B and a stray CUSIP, no BRK.A).
     const BRKA = '084670108', BRKB = '084670702';
     await hist.put('hl/084670.json', JSON.stringify({ schema: 5, issuer: '084670', tickers: ['BRK.A', 'BRK.B'], columns: cols, rows: [['0000000005', 'E', null, 'wealth', false, '2026Q3', null, null, 2000, 1900, 'mixed', 0.3, null, '084670', [cls(BRKA, 'BRK.A', 1500, 1500, 2, 2), cls(BRKB, 'BRK.B', 500, 400, 1000, 900)], 100]], counts: { holders: 1 } }));
-    const funds = { '92189F': [{ cusip: GDX, ticker: 'GDX' }, { cusip: MOAT, ticker: 'MOAT' }, { cusip: SMH, ticker: 'SMH' }], '084670': [{ cusip: BRKB, ticker: 'BRK.B' }, { cusip: '084670770', ticker: null }] };
+    const funds = { '92189F': [{ cusip: GDX, ticker: 'GDX' }, { cusip: MOAT, ticker: 'MOAT' }, { cusip: SMH, ticker: 'SMH' }], '084670': [{ cusip: BRKB, ticker: 'BRK.B' }, { cusip: '084670770', ticker: null }], '874039': [{ cusip: '874039100', ticker: 'TSM' }, { cusip: '874039900', ticker: null }] };
+    await hist.put('hl/874039.json', JSON.stringify({ schema: 5, issuer: '874039', tickers: ['TSM'], columns: cols, rows: [['0000000006', 'F', null, 'wealth', false, '2026Q3', 10, 10, 100, 100, 'unchanged', 0.1, '874039100', '874039', null, 0], ['0000000007', 'G', null, 'hedge_fund', false, '2026Q3', 5, 5, 50, 50, 'unchanged', 0.1, '874039900', '874039', null, 0]], counts: { holders: 2 } }));
     hist.m.set('pre/stock-codes.json', new TextEncoder().encode('{"SMH":"92189F","BRK.B":"084670"}'));
     const orig = globalThis.fetch;
     vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => (String(u).startsWith(`${SITE}data/hl/index.json`) ? Response.json({ schema: 5, tickers: {}, classes: {}, funds }) : orig(u, init)));
@@ -1509,12 +1510,15 @@ describe('copybook api', () => {
       const { issuerCode } = await import('../src/v1data');
       expect(await issuerCode(env, 'GDX')).toEqual({ code: '92189F', ticker: 'GDX' });
       // Berkshire is one company's share classes on SEC's 13(f) list: the summed row with both classes, as pinned.
+      // A single foreign company listed with its options (TSM 874039): a calls-only filer stays among its holders.
+      expect((await holdersOf(env, '874039', [], 'TSM'))!.rows.map((r) => (r as { filer: { cik: string } }).filer.cik).sort()).toEqual(['0000000006', '0000000007']);
       const brk = (await holdersOf(env, '084670', [], 'BRK.B'))!;
       expect(brk.rows.map((r) => [val(r as Record<string, unknown>), ((r as { classes?: unknown[] }).classes ?? []).length])).toEqual([[2000, 2]]);
     } finally {
       vi.useRealTimers();
       hist.m.delete('hl/92189F.json');
       hist.m.delete('hl/084670.json');
+      hist.m.delete('hl/874039.json');
       hist.m.delete('pre/stock-codes.json');
     }
   });
