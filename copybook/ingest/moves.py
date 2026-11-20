@@ -139,7 +139,7 @@ _FUND = re.compile(r"\b(ETFS?|ETNS?|FUNDS?|FDS?|SH(ARE)?S? BEN(EFICIAL)? INT(ERE
 # A line that reads as one company's share class: CL A, CLASS B, CAP STK CL C, COM SER A (tracking stocks), in its
 # title, its issuer name (McMill 2026Q2/A files both Berkshire lines as title "Equity", issuer "BERKSHIRE HATHAWAY
 # CLASS B" and "BERKSHIRE HATHAWAY INC DCLASS A") or SEC's 13(f) list description for the CUSIP ("CL B NEW").
-_SHARE_CLASS = re.compile(r"(\bCL|CLASS|\bSER|\bSERIES)\s*[A-K]\b")
+_SHARE_CLASS = re.compile(r"(\bCL|CLASS|\bSER|\bSERIES)\s+[A-K]\b")  # a space: "CLI" and "CLE" in fund names aren't classes
 
 
 def _class_text(k: dict) -> str:
@@ -147,17 +147,62 @@ def _class_text(k: dict) -> str:
     return f"{k.get('title') or ''} | {k.get('issuer') or ''} | {listed}".upper()
 
 
-def fund_series(cls: dict) -> bool:
-    """The issuer's lines are separate funds (any class's title, issuer name or 13(f) list description reads as a
-    fund), never share classes."""
-    return any(_FUND.search(_class_text(k)) for k in cls.values())
+def _listed(cusip: str) -> tuple[str, str] | None:
+    """(description, issuer name) on the newest SEC 13(f) list read this run that carries the CUSIP."""
+    for _, rows in sorted(LISTS.items(), reverse=True):
+        r = rows.get(cusip)
+        if r:
+            return r[1].upper(), (r[2] if len(r) > 2 else "").upper()
+    return None
+
+
+# How SEC's 13(f) list describes a company's own securities: common, a share class, ordinary shares, ADRs, a REIT's or
+# closed-end fund's shares of beneficial interest, and the warrants, rights and units beside them.
+_COMPANY = re.compile(r"^(COM\b|COMMON|CL\s*[A-K]\b|CLASS\s+[A-K]\b|CAP STK|SHS\b|ORD\b|SPONS? ADR|ADR\b|"
+                      r"SH(S)? BEN INT|COM SH|UNIT\b|\*W EXP|RIGHT\b|WTS?\b|PFD|DEP SHS|PERP PFD|CONV PFD)")
+
+
+_PUTCALL = re.compile(r"^(PUT|CALL)\b")
+
+
+def fund_series(lines) -> bool:
+    """An issuer code whose lines are separate funds (VanEck ETF Trust 92189F), never one company's securities.
+    Judged per code over every filer's lines, SEC's 13(f) list first (Nov 20: one filer's fund-like line put Alphabet
+    02079K, Berkshire 084670, Fox 35137L, Amazon 023135 and 33 more in funds):
+    - any listed CUSIP described as a share class (CL A, CAP STK CL C, CL B NEW): not funds;
+    - else funds when a listed CUSIP is described as something other than a company's own securities (COM, ORD,
+      ADR, warrants, rights, units, preferreds, options): a fund (CORE S&P500 ETF, SEMICONDUCTR ETF). When the code
+      also lists a company security, two such fund listings are needed: never a company's common beside its
+      warrants, or a single trust's units beside its options (SPY 78462F);
+    - with no CUSIP listed: funds when a ticker under the code is on SEC's mutual fund ticker list, else when most
+      filers' lines read as a fund by title and issuer name."""
+    lines = list(lines)
+    listed = {k["cusip"]: x for k in lines if k.get("cusip") and (x := _listed(k["cusip"]))}
+    if listed:
+        if any(_SHARE_CLASS.search(d) for d, _ in listed.values()):
+            return False
+        fundlike = sum(not (_COMPANY.search(d) or _PUTCALL.search(d)) for d, _ in listed.values())
+        company = any(_COMPANY.search(d) for d, _ in listed.values())
+        return fundlike >= (2 if company else 1)
+    if any((k.get("ticker") or "").upper() in MF_TICKERS for k in lines):
+        return True  # SEC's mutual fund ticker list (company_tickers_mf.json) names one of its classes
+    votes = [bool(_FUND.search(f"{k.get('title') or ''} | {k.get('issuer') or ''}".upper())) for k in lines]
+    return 2 * sum(votes) > len(votes)
+
+
+def fund_codes() -> set[str]:
+    """Issuer codes that are fund series, from every filer's lines in CLS."""
+    by: dict[str, list] = {}
+    for (code, _), cl in CLS.items():
+        by.setdefault(code, []).extend(cl.values())
+    return {code for code, ls in by.items() if fund_series(ls)}
 
 
 def share_class(k: dict) -> bool:
     return bool(_SHARE_CLASS.search(_class_text(k)))
 
 
-def class_holds(cls: dict, known: bool) -> str | None:
+def class_holds(cls: dict, known: bool, fund: bool | None = None) -> str | None:
     """Hold share classes that can't be traded as filed (lead and quant, Nov 11), each on its class (side, reason):
     a class with value and no shares (Boreal Capital files ETF sleeves as 0 SH,
     $1.3M; the single-line rule's zero_shares). Returns "class_swap" when two of the filer's share classes trade places
@@ -169,7 +214,7 @@ def class_holds(cls: dict, known: bool) -> str | None:
     for k in cls.values():  # option-style and check-digit CUSIPs are held per line (write_holders)
         if (k["shares"] <= 0 < k["value"]) or (known and k["prev_shares"] <= 0 < k["prev_value"]):
             k["side"], k["reason"] = "both", k["reason"] if k["side"] else "zero_shares"
-    if fund_series(cls):
+    if fund_series(cls.values()) if fund is None else fund:
         return None
     price = lambda v, s: v / s if s > 0 and v > 0 else None
     near = lambda a, b: a is not None and b is not None and BAND[0] <= a / b <= BAND[1]
@@ -472,6 +517,24 @@ NOT_SHARE = re.compile(r"\bUNITS?\b|\bRIGHTS?\b|\bRTS?\b|\*W\b|\bWTS?\b|WARRANT"
 
 
 LIST_URLS: dict[str, str] = {}  # quarter -> the SEC 13(f) list file read
+MF_TICKERS: set[str] = set()  # SEC company_tickers_mf.json symbols, read once per run (sec_mf_tickers)
+MF_URL = "https://www.sec.gov/files/company_tickers_mf.json"
+
+
+def sec_mf_tickers() -> set[str]:
+    """SEC's list of mutual fund and ETF class tickers. Unreadable: empty, and unlisted codes go by filers' lines."""
+    from ingest.edgar import get
+    try:
+        data = json.loads(get(MF_URL))
+        i = data["fields"].index("symbol")
+        MF_TICKERS.clear()
+        MF_TICKERS.update(str(r[i]).upper() for r in data["data"] if r[i])
+    except Exception as e:  # noqa: BLE001
+        print(f"::warning::moves: SEC mutual fund tickers: {e}", flush=True)
+    return MF_TICKERS
+
+
+FUNDS_NOW: set[str] = set()  # this run's fund-series issuer codes (fund_codes), set once CLS is built
 LISTS: dict[str, dict] = {}  # quarter -> SEC 13(f) list rows read this run (write_links), for live share classes
 
 
@@ -500,7 +563,7 @@ def sec_13f_lists(quarters: list[str]) -> dict[str, dict[str, tuple[str, str]]]:
             if len(line) > 40 and re.match(r"^[0-9A-Z]{9}", line):
                 rest = line[40:]
                 rows[line[:9]] = ("A" if "*A*" in rest else "D" if "*D*" in rest else "",
-                                  re.split(r"\s{2,}|\*[AD]\*", rest.strip())[0])
+                                  re.split(r"\s{2,}|\*[AD]\*", rest.strip())[0], line[10:40].strip())
         out[q] = rows
         LISTS[q] = rows
         LIST_URLS[q] = href if href.startswith("http") else ARCHIVE_BASE + href
@@ -931,6 +994,10 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                 tick.setdefault(c[:6], {})[t] = tick.setdefault(c[:6], {}).get(t, 0) + (r.get("value") or 0)
         book[cik] = EQUITY.get(cik) or sum(by_issuer.values())  # the SH book, as on stock pages
         top10[cik] = {k for k, v in sorted(by_issuer.items(), key=lambda kv: -kv[1])[:10] if v > 0}
+    if not MF_TICKERS:
+        sec_mf_tickers()
+    FUNDS_NOW.clear()
+    FUNDS_NOW.update(fund_codes())
     pending, worth = [], {}  # every hl/ and hlf/ file, written only once the class-sum ceiling passes
     out, full = DATA / "hl", DATA / "hlf"
     out.mkdir(exist_ok=True)
@@ -970,7 +1037,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
             multi = len(cls) > 1 and not reissue
             out_sh, out_ps, unit, ratio_of, held_n, basis = sh, ps, None, None, 0, None
             if multi:
-                swap = class_holds(cls, known)
+                swap = class_holds(cls, known, code in FUNDS_NOW)
                 for k in cls.values():
                     k["change"] = class_change(k, known)
                     if k["change"] == "unchanged":
@@ -1157,8 +1224,8 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
     # Issuer codes whose lines are separate funds (VanEck ETF Trust 92189F: SMH, GDX, MOAT), never one issuer's share
     # classes: the API serves each fund on its own and never the hl/ row, which sums different funds. Always present.
     funds: dict[str, dict[str, str | None]] = {}
-    for (code, _), cl in CLS.items():
-        if fund_series(cl):
+    for (code, _), cl in CLS.items():  # every filer's CUSIPs under the code
+        if code in FUNDS_NOW:
             for k in cl.values():
                 f = funds.setdefault(code, {})
                 f[k["cusip"]] = f.get(k["cusip"]) or k["ticker"]
