@@ -837,8 +837,11 @@ class ShareClassHoldersTest(unittest.TestCase):
                                                     "value_delta": (sh - ps) * v / sh if sh else -pv}
         books = {
             # McMill Wealth: Q2 13F-HR/A swapped BRK's CUSIPs (A 6,522 sh at $500, B 3 sh at $748K); Q3 is right.
-            "0002056447": [line("084670108", "BRK.A", 3, 6522, 3 * 747005, 3263544, "trimmed"),
-                           line("084670702", "BRK.B", 6672, 3, 6672 * 497.95, 2246550, "added")],
+            # Titles as filed (0002056447-26-000004): "Equity", the class only in the issuer name.
+            "0002056447": [line("084670108", "BRK.A", 3, 6522, 3 * 747005, 3263544, "trimmed")
+                           | {"title": "Equity", "issuer": "BERKSHIRE HATHAWAY INC DCLASS A"},
+                           line("084670702", "BRK.B", 6672, 3, 6672 * 497.95, 2246550, "added")
+                           | {"title": "Equity", "issuer": "BERKSHIRE HATHAWAY CLASS B"}],
             # Trivest MSFT: common plus a call-style CUSIP filed with no putCall: the option line is held, not a class.
             "0000929638": [line("594918104", "MSFT", 1200, 1000, 1200 * 517.0, 1000 * 495.0, "added"),
                            line("594918904", "MSFT", 98000, 0, 50264200, 0, "new")],

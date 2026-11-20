@@ -131,27 +131,59 @@ def issuer_change(clean: list[dict], known: bool) -> str | None:
 BAND = (0.8, 1.25)  # the options band: a price "matches" another within it
 
 
+# Separate funds under one CUSIP6 (VanEck ETF Trust 92189F: SMH, GDX, MOAT; Direxion 25460G; Roundhill 77926X) are not
+# share classes, read from SEC data only: the filed title of class or issuer name names an ETF, ETN, fund, trust
+# series or shares of beneficial interest.
+_FUND = re.compile(r"\b(ETFS?|ETNS?|FUNDS?|FD|SH(ARE)?S? BEN(EFICIAL)? INT(EREST)?|BENEFICIAL INT|SER(IES)? TR(UST)?|"
+                   r"ETF TR(UST)?|ISHARES|SPDR|PROSHARES|INVESCO QQQ)\b")
+# A line that reads as one company's share class: CL A, CLASS B, CAP STK CL C, COM SER A (tracking stocks), in its
+# title, its issuer name (McMill 2026Q2/A files both Berkshire lines as title "Equity", issuer "BERKSHIRE HATHAWAY
+# CLASS B" and "BERKSHIRE HATHAWAY INC DCLASS A") or SEC's 13(f) list description for the CUSIP ("CL B NEW").
+_SHARE_CLASS = re.compile(r"(\bCL|CLASS|\bSER|\bSERIES)\s*[A-K]\b")
+
+
+def _class_text(k: dict) -> str:
+    listed = next((rows[k["cusip"]][1] for _, rows in sorted(LISTS.items(), reverse=True) if k["cusip"] in rows), "")
+    return f"{k.get('title') or ''} | {k.get('issuer') or ''} | {listed}".upper()
+
+
+def fund_series(cls: dict) -> bool:
+    """The issuer's lines are separate funds (any class's title, issuer name or 13(f) list description reads as a
+    fund), never share classes."""
+    return any(_FUND.search(_class_text(k)) for k in cls.values())
+
+
+def share_class(k: dict) -> bool:
+    return bool(_SHARE_CLASS.search(_class_text(k)))
+
+
 def class_holds(cls: dict, known: bool) -> str | None:
     """Hold share classes that can't be traded as filed (lead and quant, Nov 11), each on its class (side, reason):
     a class with value and no shares (Boreal Capital files ETF sleeves as 0 SH,
-    $1.3M; the single-line rule's zero_shares). Returns "class_swap" when the filer's classes trade places between
-    quarters (McMill Wealth 2026Q2 13F-HR/A 0002056447-26-000004: 084670108 at $500 a share, 084670702 at $748K):
-    each class's prior price matches the other class's current price and not its own; the whole row is then held."""
+    $1.3M; the single-line rule's zero_shares). Returns "class_swap" when two of the filer's share classes trade places
+    between quarters (McMill Wealth 2026Q2 13F-HR/A 0002056447-26-000004: 084670108 at $500 a share, 084670702 at
+    $748K): each one's prior price matches the other's current price and not its own. Only that pair is held (lead,
+    Nov 20); the issuer's other classes stay counted. Only pairs whose titles both read as share classes are compared,
+    and never in an issuer whose lines are separate funds: with 20+ ETFs in one CUSIP6 some pair crosses in the band by
+    chance (Morgan Stanley 2026Q3 92189F held $4.6B of SMH, GDX, MOAT and others as class_swap)."""
     for k in cls.values():  # option-style and check-digit CUSIPs are held per line (write_holders)
         if (k["shares"] <= 0 < k["value"]) or (known and k["prev_shares"] <= 0 < k["prev_value"]):
             k["side"], k["reason"] = "both", k["reason"] if k["side"] else "zero_shares"
+    if fund_series(cls):
+        return None
     price = lambda v, s: v / s if s > 0 and v > 0 else None
     near = lambda a, b: a is not None and b is not None and BAND[0] <= a / b <= BAND[1]
-    ks = list(cls.values())  # every class, held or not: a line the units guard held still shows the swap
+    ks = [k for k in cls.values() if share_class(k)]  # held or not: a line the units guard held still shows the swap
+    swapped = False
     for i, a in enumerate(ks):
         for b in ks[i + 1:]:
             pa, pb = price(a["prev_value"], a["prev_shares"]), price(b["prev_value"], b["prev_shares"])
             ca, cb = price(a["value"], a["shares"]), price(b["value"], b["shares"])
             if near(pa, cb) and near(pb, ca) and not near(pa, ca) and not near(pb, cb):
-                for k in cls.values():
+                for k in (a, b):
                     k["side"], k["reason"] = "both", "class_swap"
-                return "class_swap"
-    return None
+                swapped = True
+    return "class_swap" if swapped else None
 
 
 PARITY: dict = {}  # quality.json parity: hl/ net = the sum of counted changes/ rows (the hard gate's result)
@@ -883,7 +915,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
             k = CLS.setdefault((c[:6], cik), {}).setdefault(c, {
                 "cusip": c, "ticker": t, "shares": 0, "prev_shares": 0, "value": 0, "prev_value": 0, "value_delta": 0,
                 "changes": set(), "switch": False, "prev_cusip": None, "basis": set(), "side": None, "reason": None,
-                "price_outlier": False})
+                "price_outlier": False, "title": r.get("title"), "issuer": r.get("issuer")})
             for f in ("shares", "prev_shares", "value", "prev_value", "value_delta"):
                 k[f] += r.get(f) or 0
             k["changes"].add(r.get("change"))
