@@ -1527,6 +1527,22 @@ def main() -> int:
           + "; ".join(f"{k} {g[0]} lines |$| {g[1]:,.0f} (largest: " + ", ".join(
               f"{sl} {c} {ch} {v:,.0f}" for v, sl, c, ch in sorted(g[2], key=lambda x: -x[0])[:5]) + ")"
               for k, g in sorted(gap.items(), key=lambda kv: -kv[1][1])), flush=True)
+    # Curated pages take those holds (lead, Nov 20): page_holds.json for build.py's later runs, applied here now.
+    holds = {}
+    for cik in curated:
+        if cik not in LATEST or cik not in HLQ:
+            continue
+        lines = {r0["cusip"]: [r1["unreliable"], r1.get("held_reason") or "units"]
+                 for r0, r1 in zip(LATEST[cik], align(cik, LATEST[cik]))
+                 if r1.get("unreliable") and not (r0.get("unreliable") or r0.get("suspect_units") or r0.get("price_outlier"))
+                 and not r0.get("put_call")
+                 and r0.get("shares_type") != "PRN" and r0.get("cusip")}
+        if lines:
+            holds[cik] = {"slug": curated[cik].get("slug"), "quarter": HLQ[cik], "lines": lines}
+    build.PAGE_HOLDS.write_text(json.dumps(holds, separators=(",", ":"), sort_keys=True) + "\n")
+    applied = sum(build.hold_page(h) for h in holds.values())
+    print(f"moves: curated pages hold hl/'s lines: {sum(len(h['lines']) for h in holds.values())} lines across "
+          f"{len(holds)} funds; {applied} newly held on pages this run", flush=True)
     off = parity_gate(per_quarter)
     PARITY.update({"quarter": max(HLQ.values(), default=None), "issuers": len(NETQ), "matched": len(NETQ) - len(off),
                    "checked_at": datetime_now()})

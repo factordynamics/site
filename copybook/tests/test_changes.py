@@ -160,6 +160,44 @@ class QuarterCsvTest(unittest.TestCase):
         self.assertEqual(lines[3], "")
 
 
+class PageHoldsTest(unittest.TestCase):
+    def test_curated_page_takes_hl_holds(self):
+        import tempfile
+        from pathlib import Path
+        saved = build.DATA, build.HIST
+        with tempfile.TemporaryDirectory() as tmp:
+            build.DATA, build.HIST = Path(tmp), Path(tmp) / "h"
+            try:
+                rows = [{**row("BAD", 900, 600), "prev_shares": 100, "prev_value": 100, "change": "added",
+                         "share_change": 800, "value_delta": 500, "weight": 0.6, "pct_of_book": 0.6},
+                        {**row("OK", 40, 400), "prev_shares": 50, "prev_value": 500, "change": "trimmed",
+                         "share_change": -10, "value_delta": -100, "weight": 0.4, "pct_of_book": 0.4},
+                        {**row("OK", 1, 50, "Put"), "change": "new", "value_delta": 50}]
+                page = {"slug": "f", "quarter": "2026Q3", "prev_quarter": "2026Q2", "holdings": rows,
+                        "total_value_counted": 1050, "equity_value_counted": 1000}
+                (build.DATA / "f.json").write_text(json.dumps(page))
+                (build.HIST / "f").mkdir(parents=True)
+                (build.HIST / "f" / "2026Q3.json").write_text(json.dumps(page | {"holdings": rows, "exited": []}))
+                (build.HIST / "f" / "2026Q3.v1.json").write_text(json.dumps({"holdings": [], "exited": []}))
+                holds = {"slug": "f", "quarter": "2026Q3", "lines": {"BAD": ["both", "cusip_check_digit"]}}
+                self.assertEqual(build.hold_page(holds), 2)  # the page and its h/ quarter
+                got = json.loads((build.DATA / "f.json").read_text())
+                bad, ok = got["holdings"][0], got["holdings"][1]
+                self.assertEqual((bad["change"], bad["value_delta"], bad["share_change"], bad["held_reason"],
+                                  bad["unreliable"], bad["weight"]), (None, 0, None, "cusip_check_digit", "both", 0.0))
+                self.assertEqual((ok["change"], ok["weight"]), ("trimmed", 1.0))  # the counted book is OK alone
+                self.assertEqual((got["total_value_counted"], got["equity_value_counted"]), (450, 400))
+                self.assertEqual(got["changes"]["added"], 0)
+                self.assertEqual(got["moves"]["bought_usd"], 50)  # the put, not the held line's $500
+                v1 = json.loads((build.HIST / "f" / "2026Q3.v1.json").read_text())
+                self.assertEqual([(p["cusip"], p.get("held_reason")) for p in v1["holdings"]],
+                                 [("BAD", "cusip_check_digit"), ("OK", None), ("OK", None)])
+                self.assertEqual(build.hold_page(holds), 0)  # already held: nothing rewritten
+                self.assertEqual(build.hold_page(holds | {"quarter": "2026Q2"}), 0)  # another quarter's holds
+            finally:
+                build.DATA, build.HIST = saved
+
+
 if __name__ == "__main__":
     unittest.main()
 

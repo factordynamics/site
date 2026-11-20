@@ -1863,7 +1863,7 @@ V1_EXTRA = ("pct_of_book", "notional_pct_of_book", "delta_pct_of_book", "display
             "value_delta_basis", "unreliable", "value_change", "price_outlier", "suspect_units", "suspect_reason",
             "shares_basis", "shares_as_filed", "option_held", "held_lines", "mixed_scale", "value_rescale",
             "cusip_mismatch", "class_switch", "cusip_pair", "cusip_as_filed", "filed_cusip", "filed_price", "matched_cusip", "reference_price",
-            "split", "prev_shares_as_filed", "suspect_duplicate", "prev_reason", "discretion", "other_managers", "vote_sole", "vote_shared", "vote_none")
+            "split", "prev_shares_as_filed", "suspect_duplicate", "prev_reason", "held_reason", "discretion", "other_managers", "vote_sole", "vote_shared", "vote_none")
 
 
 def v1_position(h: dict) -> dict:
@@ -1980,6 +1980,95 @@ def write_history(m: dict) -> None:
     # Public: quarter metadata only, so Pages gives away no past holdings.
     public = [{k: v for k, v in q.items() if k != "top_holdings"} for q in index]
     (DATA / f"{m['slug']}-history.json").write_text(json.dumps(head | {"history": public}, separators=(",", ":")) + "\n")
+
+
+PAGE_HOLDS = DATA / "page_holds.json"  # moves.py: {cik: {slug, quarter, lines: {cusip: [side, held_reason]}}}
+
+
+def page_holds() -> dict:
+    try:
+        return json.loads(PAGE_HOLDS.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def held_line(r: dict, side: str, reason: str) -> dict:
+    """A share line hl/ holds, as the fund page shows it (build.hold's shape): no trade in $, out of the counted
+    totals and weights, change unknown (null) unless new, exited or disclosed_later, and why in held_reason."""
+    r = r | {"unreliable": side, "held_reason": reason, "value_delta": 0, "delta_pct_of_book": 0.0,
+             "value_delta_basis": None}
+    if side == "value":
+        return r
+    r["share_change"] = None
+    if side == "shares":
+        r["value_change"] = round((r.get("value") or 0) - (r.get("prev_value") or 0))
+    if r.get("change") not in ("new", "exited", "disclosed_later"):
+        r["change"] = None
+    return r
+
+
+def hold_page(holds: dict) -> int:
+    """Curated pages take hl/'s per-line holds (lead, Nov 20): the latest quarter's {slug}.json, h/{slug}/{q}.json,
+    its .v1.json and the two history indexes' counted totals. Run after build.py writes a page and by moves.py once
+    hl/'s holds are known, so a keepalive that skips moves.py keeps them. Returns the lines held."""
+    slug, q, lines = holds.get("slug"), holds.get("quarter"), holds.get("lines") or {}
+    if not (slug and lines):
+        return 0
+    held = 0
+
+    def fix(rows: list[dict]) -> list[dict]:
+        nonlocal held
+        out = []
+        for r in rows:
+            got = None if r.get("put_call") or r.get("shares_type") == "PRN" or r.get("unreliable") \
+                else lines.get(r.get("cusip"))
+            if got:
+                r = held_line(r, *got)
+                held += 1
+            out.append(r)
+        return out
+
+    def write(path: Path, doc: dict) -> None:
+        text = json.dumps(doc, separators=(",", ":")) + "\n"
+        if path.read_text() != text:
+            path.write_text(text)
+
+    totals = None
+    page = DATA / f"{slug}.json"
+    if page.exists() and (d := json.loads(page.read_text())).get("quarter") == q:
+        rows = fix(d["holdings"])
+        if held:
+            tvc, evc = counted(rows)
+            reweight(rows, evc)
+            totals = {"total_value_counted": tvc, "equity_value_counted": evc}
+            write(page, d | totals | {"holdings": rows,
+                                      "changes": {c: sum(1 for r in rows if r["change"] == c) for c in CHANGE_KINDS},
+                                      # moves() reads a first row with no change as "no prior quarter"
+                                      "moves": moves(sorted(rows, key=lambda r: r.get("change") is None))})
+    folder = HIST / slug
+    body_path = folder / f"{q}.json"
+    if body_path.exists():
+        n0 = held
+        body = json.loads(body_path.read_text())
+        rows = fix(body["holdings"]) + fix(body["exited"])
+        if held > n0:
+            tvc, evc = counted(rows)
+            reweight(rows, evc)
+            totals = {"total_value_counted": tvc, "equity_value_counted": evc}
+            write(body_path, body | totals | {"holdings": [r for r in rows if r["change"] != "exited"],
+                                              "exited": [r for r in rows if r["change"] == "exited"]})
+            v1_path = folder / f"{q}.v1.json"
+            if v1_path.exists():
+                v1 = json.loads(v1_path.read_text())
+                write(v1_path, v1 | {"total_value_counted_usd": tvc, "equity_value_counted_usd": evc,
+                                     "holdings": [v1_position(r) for r in rows if r["change"] != "exited"],
+                                     "exited": [v1_position(r) for r in rows if r["change"] == "exited"]})
+    if totals:
+        for path in (folder / "index.json", DATA / f"{slug}-history.json"):
+            if path.exists():
+                ix = json.loads(path.read_text())
+                write(path, ix | {"history": [e | totals if e.get("quarter") == q else e for e in ix.get("history") or []]})
+    return held
 
 
 def write_status(payload: dict) -> None:
@@ -2100,12 +2189,15 @@ def write_json(payload: dict) -> None:
         )
         + "\n"
     )
+    holds = page_holds()
     for m in payload["managers"]:
         if not m.get("ok"):
             continue
         (DATA / f"{m['slug']}.json").write_text(json.dumps(manager_json(m), separators=(",", ":")) + "\n")
         if m.get("history"):
             write_history(m)
+        if (h := holds.get(m["cik"])) and h.get("slug") == m["slug"]:
+            hold_page(h)
     write_status(payload)
     names = {m["slug"]: m["manager"] for m in payload["managers"]}
     (DATA / "copycat.json").write_text(json.dumps(payload["copycat"], separators=(",", ":")) + "\n")
