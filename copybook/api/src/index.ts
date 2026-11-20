@@ -1027,6 +1027,21 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   // Operator: send one real, already-parsed Form 4 or 13D/G (from /v1/events' store) through the alert
   // fan-out to the named members only: their email, chat, feed and webhook, with their team rules. It
   // is marked a replay (never counted in latency) and stays out of the day's digest store.
+  // Operator: a test Pro member with one /v1 key, for reading the public API when no real key exists. Test addresses
+  // only (copybook-test-), test flag set, no Stripe object, no email, alerts off. Erase with POST /ops/erase-member.
+  if (req.method === 'POST' && path === '/ops/test-key') {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    const email = String((await body(req)).email ?? '').trim().toLowerCase();
+    if (!/^copybook-test-[a-z0-9-]+@/.test(email)) return json({ ok: false, error: 'email must be a copybook-test- address' }, 400, h);
+    if (await env.DB.get(`email:${email}`)) return json({ ok: false, error: 'that address already has a member' }, 409, h);
+    const now = Math.floor(Date.now() / 1000);
+    const m: Member = { customer: `test_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`, email, status: 'active', plan: 'pro', interval: 'monthly', period_end: now + 86400, subscription: 'none', alerts: 'off', test: 'ops-read' } as Member;
+    await putMember(env, m);
+    const made = await createKey(env, m, 'ops-read');
+    await logAccess(env, req, 'POST /ops/test-key', [m.customer], 'test member and key created');
+    return json({ ok: true, customer: m.customer, key: made?.key ?? null }, 200, h);
+  }
+
   // Operator: revokes one API key by member email and key name (test cleanup). Answers with counts only.
   if (req.method === 'POST' && path === '/ops/revoke-key') {
     if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);

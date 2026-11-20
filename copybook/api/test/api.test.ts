@@ -2940,6 +2940,16 @@ describe('copybook api', () => {
     const left = [];
     for (const p of ['cus:', 'follows:', 'channels:', 'stats:', 'delivered:', 'why:', 'feedtok:', 'email:gone']) left.push(...(await env.DB.list({ prefix: p })).keys.map((k) => k.name).filter((n) => n.includes('gone') || n.includes(fid)));
     expect(left).toEqual(['follows:cus_gone2']);
+    // A test member with a /v1 key, for reading the public API: test addresses only; counted as test; erasing it
+    // revokes the key.
+    expect((await op('/ops/test-key', { email: 'someone@example.com' })).status).toBe(400);
+    const tk = await (await op('/ops/test-key', { email: 'copybook-test-read@fldubai.com' })).json();
+    expect(tk.key).toMatch(/^cbk_live_/);
+    const v1 = () => handleRequest(new Request('https://api.test/v1/filers?limit=1', { headers: { authorization: `Bearer ${tk.key}` } }), env);
+    expect((await v1()).status).not.toBe(401);
+    expect(JSON.parse((await env.DB.get(`cus:${tk.customer}`))!)).toMatchObject({ test: 'ops-read', plan: 'pro', alerts: 'off', subscription: 'none' });
+    expect((await op('/ops/erase-member', { email: 'copybook-test-read@fldubai.com' })).status).toBe(200);
+    expect((await v1()).status).toBe(401);
   });
 
   it('alert moves: a unit mismatch between quarters is never sent (GuardCap BKNG); real trades are', () => {
