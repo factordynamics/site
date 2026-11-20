@@ -60,3 +60,30 @@ export function in13fSeason(now: number): boolean {
     return now >= Date.UTC(y, q * 3, 1) && now <= endOf(d.date) + 7 * DAY;
   });
 }
+
+/** /speed/'s label for a filing EDGAR accepted after hours (the lead, Nov 19). */
+export const AFTER_HOURS_LABEL = 'filed after hours; EDGAR publishes it the next morning';
+
+/**
+ * When EDGAR first lists a filing accepted after hours: one accepted from 17:30 ET (it carries the next business day's
+ * filing date) or on a weekend is published at 06:00 ET on the next weekday. Null for one accepted in hours, whose
+ * listing is its acceptance. Federal holidays aren't skipped (the next one in season is Thanksgiving, Nov 26).
+ */
+export function edgarListedAt(acceptedMs: number): number | null {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', weekday: 'short' }).formatToParts(new Date(acceptedMs)).map((p) => [p.type, p.value]));
+  const mins = Number(parts.hour) * 60 + Number(parts.minute);
+  const weekend = parts.weekday === 'Sat' || parts.weekday === 'Sun';
+  if (!weekend && mins >= 6 * 60 && mins < 17 * 60 + 30) return null;
+  // The ET calendar day to publish on: today if before 06:00 on a weekday, else the next weekday.
+  let day = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day));
+  const wd = (t: number) => new Date(t).getUTCDay();
+  if (weekend || mins >= 17 * 60 + 30) day += DAY;
+  while (wd(day) === 0 || wd(day) === 6) day += DAY;
+  // 06:00 in New York on that day: try EST then EDT, keeping the one that reads 06:00 there.
+  for (const off of [5, 4]) {
+    const t = day + (6 + off) * 3600_000;
+    const h = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', hourCycle: 'h23' }).format(new Date(t));
+    if (Number(h) === 6) return t;
+  }
+  return day + 11 * 3600_000;
+}

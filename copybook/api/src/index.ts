@@ -16,6 +16,7 @@ import { businessSummary, handleKeepResume, handleWhy } from './revenue';
 import { inviteSeat, listSeats, removeSeat, revokeSeatSessions, seatsView } from './seats';
 import { stripe, verifyStripeSignature } from './stripe';
 import { hmacHex, signToken, verifyToken } from './tokens';
+import { AFTER_HOURS_LABEL, edgarListedAt } from './seasons';
 
 /** Paid data the data workflow uploads besides h/: every filer's full book per quarter, per-issuer holders, bulk exports. */
 const INGEST_KEY = /^(fb\/\d{4}Q[1-4]\/\d{10}\.json|s\/[0-9A-Z]{6}\.json|hl\/[0-9A-Z]{6}\.json|hq\/\d{4}Q[1-4]\/([0-9A-Z]{6}|index)\.json|v\/\d{10}\/\d{10}-\d{2}-\d{6}\.json|changes\/\d{4}Q[1-4]\.json|meta\/builds\.json|bulk\/\d{4}Q[1-4]\.(csv\.gz|parquet))$/;
@@ -339,12 +340,19 @@ export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDeliver
   for (const l of log.filter((l) => !l.replay && !l.email_delayed && Date.parse(l.sent) >= from && ((l.kind ?? '13f') !== '13f' || l.moves)).sort((a, b) => a.sent.localeCompare(b.sent)))
     if (!firsts.has(l.accession)) firsts.set(l.accession, l);
   const counted = [...firsts.values()].sort((a, b) => b.sent.localeCompare(a.sent));
+  // After-hours filings (the lead, Nov 19) are timed from EDGAR's first public listing (06:00 ET the next weekday),
+  // the later of it and acceptance; gap_seconds per alert stays from acceptance, so nothing is hidden.
+  const listed = (l: LatencyRow) => edgarListedAt(Date.parse(l.accepted));
+  const timed = (l: LatencyRow) => {
+    const t = listed(l);
+    return t === null ? l.seconds : Math.max(0, Math.round((Date.parse(l.sent) - Math.max(t, Date.parse(l.accepted))) / 1000));
+  };
   // Every alert counts in the season's figures; the late 13Fs from before the moves fix are also listed to explain them.
   const rows = counted;
   const pre = counted.filter(isPre);
   // A 13F's channel time is its moves post, as its email's is (a first post without the moves isn't timed).
   const chRows = ch.filter((c) => Date.parse(c.delivered) >= from && c.moves !== false);
-  const all = spread(rows.map((l) => l.seconds));
+  const all = spread(rows.map(timed));
   const FORM: Record<string, string> = { '13f': '13F-HR', form4: '4', '13d': 'SC 13D', '13g': 'SC 13G' };
   const formOf = (l: LatencyRow) => l.form ?? FORM[l.kind ?? '13f'] ?? 'other';
   // Form families as the page shows them: 13F-HR (and /A), Form 4, Schedule 13D, Schedule 13G.
@@ -360,14 +368,17 @@ export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDeliver
     since: new Date(from).toISOString().replace(/\.\d{3}Z$/, 'Z'),
     median_seconds: all.median_seconds,
     p90_seconds: all.p90_seconds,
-    p95_seconds: nearest(rows.map((l) => l.seconds), 0.95),
+    // The same p90 without the after-hours filings at all, for /speed/ to show next to it.
+    p90_seconds_excluding_after_hours: spread(rows.filter((l) => listed(l) === null).map(timed)).p90_seconds,
+    after_hours: { count: rows.filter((l) => listed(l) !== null).length, label: AFTER_HOURS_LABEL, timed_from: 'edgar_listed_at' },
+    p95_seconds: nearest(rows.map(timed), 0.95),
     count: all.count,
     by_form: (() => {
-      const g = group(rows, (l) => family(formOf(l)), (l) => l.seconds) as Record<string, Record<string, unknown>>;
+      const g = group(rows, (l) => family(formOf(l)), timed) as Record<string, Record<string, unknown>>;
       // 13F split by acceptance time, not by outcome: the season (each accession once, at its moves email, with how many
       // took over 15 minutes), and only those accepted after the moves fix.
       const f13 = rows.filter((l) => family(formOf(l)) === '13F');
-      if (g['13F']) Object.assign(g['13F'], { season: { ...spread(f13.map((l) => l.seconds)), max_seconds: f13.length ? Math.max(...f13.map((l) => l.seconds)) : null, over_15m: f13.filter((l) => l.seconds > 900).length }, since_fix: spread(f13.filter((l) => Date.parse(l.accepted) >= fixAt).map((l) => l.seconds)) });
+      if (g['13F']) Object.assign(g['13F'], { season: { ...spread(f13.map(timed)), max_seconds: f13.length ? Math.max(...f13.map(timed)) : null, over_15m: f13.filter((l) => timed(l) > 900).length, p90_seconds_excluding_after_hours: spread(f13.filter((l) => listed(l) === null).map(timed)).p90_seconds }, since_fix: spread(f13.filter((l) => Date.parse(l.accepted) >= fixAt).map(timed)) });
       return g;
     })(),
     moves_fix_at: MOVES_FIX_AT,
@@ -375,8 +386,8 @@ export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDeliver
     team_delivered_recorded_from: TEAM_TIMED_FROM,
     before_moves_fix: { '13F': { ...spread(pre.map((l) => l.seconds)), max_seconds: pre.length ? Math.max(...pre.map((l) => l.seconds)) : null, rows: pre.map((l) => ({ accession: l.accession, manager: l.manager ?? null, slug: l.slug, accepted_at: l.accepted, sent_at: l.sent, seconds: l.seconds })) } },
     by_channel: { email: all, ...group(chRows, (c) => c.channel, (c) => c.seconds) },
-    by_coverage: group(rows, (l) => l.coverage ?? 'curated', (l) => l.seconds),
-    recent: rows.slice(0, 20).map((l) => ({ form: formOf(l), manager: l.manager ?? null, slug: l.slug, coverage: l.coverage ?? 'curated', accession: l.accession, accepted_at: l.accepted, delivered_at: l.sent, seconds: l.seconds, channel: 'email' })),
+    by_coverage: group(rows, (l) => l.coverage ?? 'curated', timed),
+    recent: rows.slice(0, 20).map((l) => ({ form: formOf(l), manager: l.manager ?? null, slug: l.slug, coverage: l.coverage ?? 'curated', accession: l.accession, accepted_at: l.accepted, delivered_at: l.sent, seconds: l.seconds, channel: 'email', ...(listed(l) !== null ? { after_hours: true, edgar_listed_at: new Date(listed(l)!).toISOString().replace(/\.\d{3}Z$/, 'Z'), seconds_from_listing: timed(l) } : {}) })),
     // One row per alert this season, replays and test sends included and flagged (the figures above exclude them),
     // then the misses that never went out. Times are UTC to the second; null where they weren't recorded.
     alerts: (() => {
@@ -411,6 +422,7 @@ export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDeliver
           email_accepted_at: iso(l.sent),
           sent_at: iso(l.sent),
           gap_seconds: l.seconds,
+          ...(listed(l) !== null ? { after_hours: true, edgar_listed_at: iso(new Date(listed(l)!).toISOString()), seconds_from_listing: timed(l) } : {}),
           team_delivered_at: iso(team.get(l.accession)),
           first_alert_at: f13 ? iso(l.first_alert_at ?? (l.followup ? null : l.sent)) : null,
           moves_sent_at: f13 ? iso(l.sent) : null,

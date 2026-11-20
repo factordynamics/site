@@ -1446,6 +1446,22 @@ describe('copybook api', () => {
     expect(sent).toHaveLength(0);
   });
 
+  it('/speed/: an after-hours filing is timed from EDGAR\'s 06:00 ET listing, keeps its acceptance gap, and p90 is shown with and without them', async () => {
+    const { latencyReport } = await import('../src/index');
+    const row = (accession: string, accepted: string, sent: string) => ({ slug: 'x', kind: 'form4', form: '4', accession, accepted, sent, seconds: Math.round((Date.parse(sent) - Date.parse(accepted)) / 1000) });
+    const r = latencyReport([
+      row('a', '2026-11-17T15:00:00Z', '2026-11-17T15:01:00Z'), // 10:00 ET: 60 s
+      row('b', '2026-11-17T20:00:00Z', '2026-11-17T20:02:00Z'), // 15:00 ET: 120 s
+      row('c', '2026-11-16T22:47:00Z', '2026-11-17T11:01:30Z'), // 17:47 ET (Biglari's): listed Tue 06:00 ET, 90 s on
+      row('d', '2026-11-20T23:00:00Z', '2026-11-23T11:10:00Z'), // Fri 18:00 ET: listed Mon 06:00 ET, 600 s on
+    ] as never, Date.UTC(2026, 10, 23, 12));
+    const c = r.alerts.find((x: { accession: string }) => x.accession === 'c') as Record<string, unknown>;
+    expect(c).toMatchObject({ accepted_at: '2026-11-16T22:47:00Z', gap_seconds: 44_070, after_hours: true, edgar_listed_at: '2026-11-17T11:00:00Z', seconds_from_listing: 90 });
+    expect(r.alerts.find((x: { accession: string }) => x.accession === 'a')).not.toHaveProperty('after_hours');
+    expect([r.p90_seconds, r.p90_seconds_excluding_after_hours, r.after_hours]).toEqual([600, 120, { count: 2, label: 'filed after hours; EDGAR publishes it the next morning', timed_from: 'edgar_listed_at' }]);
+    expect(r.by_form['Form 4']).toMatchObject({ count: 4, p90_seconds: 600 });
+  });
+
   it('/status/ curated_stale_since: index.json over 90 min old in 13F season, over 6 h outside it', async () => {
     const { curatedStaleSince } = await import('../src/status');
     const { in13fSeason } = await import('../src/seasons');
@@ -4953,7 +4969,7 @@ describe('copybook api', () => {
     // Per form family and per channel (email: acceptance to the mailer; chat: to the first successful post), this season only.
     // An even count's median is the mean of the middle two (40 and 60 -> 50), not the lower one.
     expect(lat.by_form).toEqual({
-      '13F': { count: 2, median_seconds: 50, p90_seconds: 60, season: { count: 2, median_seconds: 50, p90_seconds: 60, max_seconds: 60, over_15m: 0 }, since_fix: { count: 2, median_seconds: 50, p90_seconds: 60 } },
+      '13F': { count: 2, median_seconds: 50, p90_seconds: 60, season: { count: 2, median_seconds: 50, p90_seconds: 60, max_seconds: 60, over_15m: 0, p90_seconds_excluding_after_hours: 60 }, since_fix: { count: 2, median_seconds: 50, p90_seconds: 60 } },
       'Form 4': { count: 1, median_seconds: 100, p90_seconds: 100 },
     });
     expect(lat.by_channel).toEqual({ email: { count: 3, median_seconds: 60, p90_seconds: 100 }, slack: { count: 3, median_seconds: 61, p90_seconds: 101 }, discord: { count: 1, median_seconds: 43, p90_seconds: 43 } });
