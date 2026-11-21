@@ -1482,7 +1482,9 @@ def main() -> int:
             shards.append({"cik": cik, "name": b.get("name") or m.get("name"), "quarter": b["quarter"], "_fb_only": True})
         cur = next(s for s in shards if s["cik"] == cik)
         if b["quarter"] >= (PERIOD.get(cik) or cur.get("quarter") or ""):
-            LATEST[cik] = [h | {"shares_type": h.get("shares_type") or "SH"} for h in (b.get("holdings") or []) + (b.get("exited") or [])]
+            # unheld: the page's lines as built, never the holds this step put on it last run (page_holds.json)
+            LATEST[cik] = [build.unheld(h) | {"shares_type": h.get("shares_type") or "SH"}
+                           for h in (b.get("holdings") or []) + (b.get("exited") or [])]
             PERIOD[cik] = b["quarter"]
             FILING[cik] = filing(b)
             if b.get("equity_value"):

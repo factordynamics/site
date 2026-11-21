@@ -194,6 +194,14 @@ class PageHoldsTest(unittest.TestCase):
                 self.assertEqual([(p["cusip"], p.get("held_reason")) for p in v1["holdings"]],
                                  [("BAD", "cusip_check_digit"), ("OK", None), ("OK", None)])
                 self.assertEqual(build.hold_page(holds), 0)  # already held: nothing rewritten
+                # moves.py reads the page back as built: the next run judges the line afresh (Nov 21: it read its own
+                # holds as filed flags and wrote page_holds.json {}).
+                back = build.unheld(bad)
+                self.assertEqual({k: back.get(k) for k in ("change", "value_delta", "share_change", "unreliable",
+                                                           "held_reason", "held_from")},
+                                 {"change": "added", "value_delta": 500, "share_change": 800, "unreliable": None,
+                                  "held_reason": None, "held_from": None})
+                self.assertIs(build.unheld(ok), ok)
                 # h/ is also build.py's cache: a cached quarter comes back without the holds, weights recomputed, so a
                 # run without page_holds.json never shows a trade beside a stale held_reason.
                 cached = build.cached_quarters()["A1"]["holdings"]

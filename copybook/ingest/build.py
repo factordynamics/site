@@ -1997,11 +1997,24 @@ def page_holds() -> dict:
         return {}
 
 
+HELD_FIELDS = ("unreliable", "change", "share_change", "value_delta", "delta_pct_of_book", "value_delta_basis",
+               "value_change")
+
+
+def unheld(r: dict) -> dict:
+    """A page line as built, before hold_page held it (identity for a line it never held)."""
+    if "held_from" not in r:
+        return r
+    return {k: v for k, v in r.items() if k not in ("held_from", "held_reason")} | r["held_from"]
+
+
 def held_line(r: dict, side: str, reason: str) -> dict:
     """A share line hl/ holds, as the fund page shows it (build.hold's shape): no trade in $, out of the counted
     totals and weights, change unknown (null) unless new, exited or disclosed_later, and why in held_reason."""
-    r = r | {"unreliable": side, "held_reason": reason, "value_delta": 0, "delta_pct_of_book": 0.0,
-             "value_delta_basis": None}
+    # held_from: the line as built, which moves.py restores (unheld) before it judges the line again. Without it the
+    # next run read its own page holds as filed flags and wrote page_holds.json {} (Nov 21, 13ddc8dc -> 078f3a77).
+    r = r | {"held_from": {k: r.get(k) for k in HELD_FIELDS}, "unreliable": side, "held_reason": reason,
+             "value_delta": 0, "delta_pct_of_book": 0.0, "value_delta_basis": None}
     if side == "value":
         return r
     r["share_change"] = None
