@@ -76,6 +76,20 @@ export const flagOf = (h: Flaggable): Flag | null =>
 /** A flagged row: never in a page's dollar totals or biggest-moves lists. */
 export const unreliable = (h: Flaggable) => flagOf(h) != null
 export const NOT_COUNTED = 'Share count unreliable in this filing'
+/** Why ingest held a line (held_reason), as ingest words it for display (class-level holds, Nov 21). */
+const HELD_REASON: Record<string, string> = {
+  units: 'share count or value looks mis-scaled in the filing',
+  zero_shares: 'filed with a value but no shares',
+  cusip_check_digit: 'filed CUSIP is invalid',
+  option_cusip_no_putcall: 'option CUSIP filed without put or call',
+  cross_filer: 'price per share is far from other filers’ for this stock',
+  class_swap: 'share classes swapped between quarters',
+  possible_cusip_change: 'CUSIP may have changed; not matched to last quarter',
+  class_sum_mismatch: 'share classes don’t add up to the filed line',
+  cross_filer_prior: 'last quarter’s price was far from other filers’',
+  own_prior: 'share count jumped more than 5x against the filer’s last quarter',
+  sign_mismatch: 'shares and value moved in opposite directions',
+}
 /** The line a flagged row shows in place of its trade or dollar figure. One format for
  *  every held row (PM, Nov 11): the filed facts, then the reason, never a computed trade: "As filed: 646,216 → 1,304
  *  shares; $121.6M → $6.7M; share counts don't reconcile". */
@@ -86,8 +100,8 @@ export function flagNote(h: Flaggable): string | null {
   const fresh = h.change === 'new' || !h.prev_shares
   const shares = h.shares == null ? null : fresh ? `${sharesFmt(h.shares)} shares (new)` : `${sharesFmt(h.prev_shares!)} → ${sharesFmt(h.shares)} shares`
   const value = h.value == null ? null : fresh || h.prev_value == null ? money(h.value) : `${money(h.prev_value)} → ${money(h.value)}`
-  // Ingest's own reason wins, in plain words: "possible_cusip_change" reads "possible CUSIP change" (PM, Nov 11).
-  const held = h.held_reason ? h.held_reason.replace(/_/g, ' ').replace(/\bcusip\b/i, 'CUSIP') : null
+  // Ingest's own reason wins, in its words (ingest, Nov 21); an unknown code reads plainly: "possible CUSIP change".
+  const held = h.held_reason ? HELD_REASON[h.held_reason] ?? h.held_reason.replace(/_/g, ' ').replace(/\bcusip\b/i, 'CUSIP') : null
   const reason = held ?? (f === 'value' ? 'this filing’s dollar value looks wrong; share change only' : f === 'shares' ? 'share counts don’t reconcile' : reissue ? 'a pre-split count kept under the new CUSIP' : 'share count and value both unreliable')
   const facts = [shares, value].filter(Boolean).join('; ')
   return facts ? `As filed: ${facts}; ${reason}` : reason.charAt(0).toUpperCase() + reason.slice(1)
