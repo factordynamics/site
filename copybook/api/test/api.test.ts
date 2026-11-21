@@ -2674,6 +2674,20 @@ describe('copybook api', () => {
     const br = { 'user-agent': chrome, 'sec-fetch-mode': 'cors', 'sec-fetch-site': 'cross-site' };
     for (const [host, hd] of [['www.google.co.uk', br], ['www.bing.com', br], ['www.google.com', { 'user-agent': 'Googlebot/2.1' }], ['news.ycombinator.com', br], ['notgoogle.example', br]] as const) await vis(host, hd);
     expect((await (await handleRequest(new Request('https://api.test/ops/funnel?days=1', { headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), env)).json()).track_by_search).toEqual({ visit: { google: 1, bing: 1 } });
+    // Checkouts: Copybook's (metadata.copybook, a Payment Link, a test) count; another app's on the same account never do.
+    const real0 = globalThis.fetch;
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => (String(u).startsWith('https://api.stripe.com/v1/checkout/sessions?') ? Response.json({ has_more: false, data: [
+      { id: 'cs_1', status: 'open', metadata: { copybook: 'checkout', utm_source: 'x', utm_content: 'fd-recap-final' } },
+      { id: 'cs_2', status: 'complete', payment_link: 'plink_1', client_reference_id: 'season' },
+      { id: 'cs_3', status: 'open', metadata: { app: 'creo', creo_visitor: 'v' } },
+      { id: 'cs_4', status: 'open', client_reference_id: 'key-abc', metadata: { api_key_id: 'abc', plan: 'builder' } },
+    ] }) : real0(u, init)));
+    try {
+      const co = await (await handleRequest(new Request('https://api.test/ops/funnel?days=1', { headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), env)).json();
+      expect([co.checkouts, co.checkouts_other_app]).toEqual([{ real: { open: { 'x|fd-recap-final': 1 }, complete: { season: 1 } } }, { creo: 1, untagged: 1 }]);
+    } finally {
+      vi.stubGlobal('fetch', real0);
+    }
 
     // A trial that runs out cancelled: one short note offering monthly, whose link opens a monthly Checkout.
     sent = [];

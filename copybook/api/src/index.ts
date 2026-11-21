@@ -839,8 +839,9 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       for (let page = 0; page < 5; page++) {
         const r = await stripe(env, 'GET', 'checkout/sessions', { 'created[gte]': Math.floor(Date.now() / 1000) - days * 86400, limit: 100, ...(after ? { starting_after: after } : {}) });
         for (const cs of (r.data ?? []) as { id: string; status: string; payment_link?: string | null; client_reference_id?: string | null; metadata?: Record<string, string>; customer_details?: { email?: string } | null }[]) {
-          // Another app's sessions on the same Stripe account (metadata.app, such as creo) are not Copybook's.
-          if (cs.metadata?.app && cs.metadata.app !== 'copybook') { other_app[cs.metadata.app] = (other_app[cs.metadata.app] ?? 0) + 1; continue; }
+          // Another app's sessions on the same Stripe account (Creo's, tagged app=creo or not at all) are not Copybook's:
+          // ours always carry metadata.copybook (POST /checkout, resume) or come from a Payment Link.
+          if (!cs.payment_link && !cs.metadata?.copybook && cs.metadata?.test !== 'true') { const a = cs.metadata?.app ?? 'untagged'; other_app[a] = (other_app[a] ?? 0) + 1; continue; }
           const email = cs.customer_details?.email ?? '';
           const test = cs.metadata?.test === 'true' || /^test/i.test(cs.client_reference_id ?? '') || testAddress(email) || /^copybook-gate-/.test(email);
           const utm = cs.metadata?.utm_source ? `${cs.metadata.utm_source}|${cs.metadata.utm_content ?? '-'}` : (cs.client_reference_id ?? 'direct');
