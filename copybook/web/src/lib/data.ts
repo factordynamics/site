@@ -97,7 +97,8 @@ export function flagNote(h: Flaggable): string | null {
   const f = flagOf(h)
   if (!f) return null
   const reissue = h.suspect_reason === 'reissue_ratio_not_applied'
-  const fresh = h.change === 'new' || !h.prev_shares
+  // A prior line filed with a value but no shares (zero_shares) isn't a new position: show it as filed, 0 → 4.4K shares.
+  const fresh = h.change === 'new' || (!h.prev_shares && !h.prev_value)
   const shares = h.shares == null ? null : fresh ? `${sharesFmt(h.shares)} shares (new)` : `${sharesFmt(h.prev_shares!)} → ${sharesFmt(h.shares)} shares`
   const value = h.value == null ? null : fresh || h.prev_value == null ? money(h.value) : `${money(h.prev_value)} → ${money(h.value)}`
   // Ingest's own reason wins, in its words (ingest, Nov 21); an unknown code reads plainly: "possible CUSIP change".
