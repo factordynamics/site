@@ -205,6 +205,70 @@ class PageHoldsTest(unittest.TestCase):
                 build.DATA, build.HIST = saved
 
 
+class PerClassFilesTest(unittest.TestCase):
+    def test_hlc_rows_sum_to_the_hl_row_per_filer(self):
+        import gzip
+        import tempfile
+        from pathlib import Path as P
+        from ingest import moves
+        line = lambda cusip, t, title, issuer, sh, ps, v, pv, ch: {
+            "cusip": cusip, "ticker": t, "title": title, "issuer": issuer, "put_call": None, "shares_type": "SH",
+            "shares": sh, "prev_shares": ps, "value": v, "prev_value": pv, "change": ch,
+            "value_delta": (sh - ps) * v / sh if sh else -pv, "value_delta_basis": "trade"}
+        a = lambda sh, ps: line("084670108", "BRK.A", "CL A", "BERKSHIRE", sh, ps, sh * 747005, ps * 700000,
+                                "trimmed" if sh < ps else "added")
+        b = lambda sh, ps, ch: line("084670702", "BRK.B", "CL B NEW", "BERKSHIRE", sh, ps, sh * 497.95, ps * 466.0, ch)
+        smh = line("92189F676", "SMH", "SEMICONDUCTR ETF", "VANECK ETF TRUST", 200, 100, 60000, 25000, "added")
+        gdx = line("92189F106", "GDX", "GOLD MINERS ETF", "VANECK ETF TRUST", 50, 80, 4000, 5600, "trimmed")
+        books = {"0000315066": [a(6959, 14533), b(9597287, 10400007, "trimmed"), smh, gdx],
+                 "0000000002": [b(1000, 0, "new"), gdx | {"shares": 10, "value": 800, "value_delta": -4800}]}
+        saved = (moves.DATA, dict(moves.LATEST), dict(moves.PERIOD), dict(moves.FILING), set(moves.MF_TICKERS))
+        with tempfile.TemporaryDirectory() as d:
+            moves.DATA = P(d)
+            try:
+                moves.MF_TICKERS.clear()
+                moves.MF_TICKERS.add("ZZZZX")  # no network: neither code is on SEC's mutual fund list
+                moves.LATEST.clear()
+                moves.LATEST.update(books)
+                moves.PERIOD.update({c: "2026Q3" for c in books})
+                shards = [{"cik": c, "name": c, "quarter": "2026Q3", "accession": "x", "filing_date": "2026-11-10"}
+                          for c in books]
+                moves.write_holders(shards, {}, {}, {})
+                self.assertEqual(moves.CLASS_PARITY_OFF, [])
+                ix = json.loads((P(d) / "hl" / "index.json").read_text())
+                self.assertEqual(ix["classes"], {"084670": [{"cusip": "084670108", "ticker": "BRK.A"},
+                                                            {"cusip": "084670702", "ticker": "BRK.B"}]})
+                self.assertEqual(sorted(ix["funds"]), ["92189F"])
+                full = lambda c: json.loads((P(d) / "hlcf" / f"{c}.json").read_text())
+                hl = json.loads((P(d) / "hlf" / "084670.json").read_text())
+                for code, cusips in (("084670", ("084670108", "084670702")), ("92189F", ("92189F676", "92189F106"))):
+                    hl = json.loads((P(d) / "hlf" / f"{code}.json").read_text())
+                    for r in hl["rows"]:
+                        row = dict(zip(hl["columns"], r))
+                        parts = [dict(zip(f["columns"], x)) for c in cusips for f in [full(c)] for x in f["rows"]
+                                 if x[0] == row["cik"]]
+                        for f in ("value", "prev_value", "value_delta"):
+                            self.assertAlmostEqual(sum(p[f] or 0 for p in parts), row[f] or 0, delta=1, msg=(code, f))
+                brk_a, brk_b, g = full("084670108"), full("084670702"), full("92189F106")
+                self.assertEqual((brk_a["counts"]["holders"], brk_b["counts"]["holders"], brk_b["counts"]["new"]), (1, 2, 1))
+                self.assertNotIn("classes", brk_b["columns"])
+                a_row = dict(zip(brk_a["columns"], brk_a["rows"][0]))
+                self.assertEqual((a_row["cusip"], a_row["shares"], a_row["change"]), ("084670108", 6959, "trimmed"))
+                self.assertAlmostEqual(a_row["value_delta"], -7574 * 747005, delta=2)
+                self.assertEqual((g["ticker"], g["fund"], g["counts"]["holders"], g["counts"]["trimmed"]), ("GDX", True, 2, 2))
+                self.assertEqual(g["counts"]["net"], round(-30 * 4000 / 50) - 4800)
+                site = {}
+                for part in json.loads((P(d) / "hlr" / "index.json").read_text())["parts"]:
+                    site |= json.loads(gzip.decompress((P(d) / "hlr" / part["file"]).read_bytes()))["issuers"]
+                self.assertEqual(sorted(r[0] for r in site["92189F676"]), ["0000315066"])
+                self.assertEqual(len(site["084670702"]), 2)
+            finally:
+                moves.DATA = saved[0]
+                for g, v in zip((moves.LATEST, moves.PERIOD, moves.FILING, moves.MF_TICKERS), saved[1:]):
+                    g.clear()
+                    g.update(v)
+
+
 if __name__ == "__main__":
     unittest.main()
 

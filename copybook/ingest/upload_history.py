@@ -61,10 +61,10 @@ HL_BUILD = HIST.parent / "hlf" / "BUILD"  # moves.py: the full run whose all-fil
 
 KEY = re.compile(r"^h/[a-z0-9][a-z0-9-]*/(\d{4}Q[1-4](\.json|\.csv|\.v1\.json)|index\.json)$"
                  r"|^fb/\d{4}Q[1-4]/\d{10}\.json$|^s/[0-9A-Z]{6}\.json$|^bulk/\d{4}Q[1-4](\.part\d+)?\.csv\.gz$"
-                 r"|^changes/\d{4}Q[1-4]\.json$|^v/\d{10}/\d{10}-\d{2}-\d{6}\.json$|^hl/[0-9A-Z]{6}\.json$")
+                 r"|^changes/\d{4}Q[1-4]\.json$|^v/\d{10}/\d{10}-\d{2}-\d{6}\.json$|^hl/[0-9A-Z]{6}\.json$|^hlc/[0-9A-Z]{9}\.json$")
 # Keys the Worker may not accept yet: a failure warns instead of failing the run,
 # and the rest of that kind are skipped until the next run.
-OPTIONAL = re.compile(r"/index\.json$|\.v1\.json$|^fb/|^s/|^bulk/|^changes/|^v/|^hl/")
+OPTIONAL = re.compile(r"/index\.json$|\.v1\.json$|^fb/|^s/|^bulk/|^changes/|^v/|^hl/|^hlc/")
 # Small writes, one bundle at a time: gene's disk is shared with other software, and on Nov 11 one 100-file bundle
 # held the API for 60 s (the API allows up to 100 entries or 20 MB per bundle).
 BUNDLE_ENTRIES = 20
@@ -216,6 +216,10 @@ def main() -> int:
         sources["hl/" + p.name] = p
     if refused:
         print(f"::warning::upload: {refused} hl/ files without a value_delta column refused", flush=True)
+    # Schema 6 preview: every holder per CUSIP (moves.py hlcf/) as hlc/{cusip9}.json. Not in the gated hl store yet
+    # (store_of), so a refused hlc/ key never holds back meta/builds.json for hl/.
+    for p in sorted(root.glob("hlcf/*.json")):
+        sources["hlc/" + p.name] = p
     files = list(sources.values())
     todo, digests = [], {}
     stamps = manifest.setdefault("_at", {})  # key -> x-copybook-built-at it was uploaded with (meta/builds.json)
