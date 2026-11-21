@@ -540,98 +540,6 @@ def sec_mf_tickers() -> set[str]:
 
 
 FUNDS_NOW: set[str] = set()  # this run's fund-series issuer codes (fund_codes), set once CLS is built
-SPLIT: dict[str, dict[str, str | None]] = {}  # schema 6: issuer code -> {cusip9: ticker} served per CUSIP from hlc/
-CLASS_DROP = ("classes", "classes_held", "shares_unit", "shares_ratio", "ratio_source", "net_direction")
-CLASS_PARITY_OFF: list[tuple] = []  # (issuer6, cik, field, hl/ row, sum of hlc/ rows)
-
-
-def class_rows(row: list, cls: dict, cols: list, known: bool, many: bool, cik: str, kind, q, book, top10c,
-               per_class: dict) -> None:
-    """One filer's hlc/ rows, one per CUSIP it holds under a SPLIT issuer: the hl/ row's fields at that CUSIP's own
-    shares, values and change. value_delta and the hold are COUNTED's per-CUSIP split, the one changes/ uses, so the
-    filer's hlc/ value, prev_value and value_delta sum to its hl/ row (checked here: CLASS_PARITY_OFF)."""
-    at = {c: i for i, c in enumerate(cols)}
-    sums = {"value": 0, "prev_value": 0, "value_delta": 0}
-    any_delta = False
-    for k in cls.values():
-        got = COUNTED.get((cik, k["cusip"]))
-        vd, side, reason = got if got else (None, k["side"] or row[at["unreliable"]],
-                                            k["reason"] or row[at["held_reason"]])
-        if vd is not None:
-            side = reason = None
-        if many:
-            change = k.get("change") or class_change(k, known)
-            if known and side in ("shares", "both") and change not in ("new", "exited"):
-                change = "unknown"
-            change = change or ("unknown" if known else None)
-        else:
-            change = row[at["change"]]
-        r = dict(zip(cols, row)) | {
-            "cusip": k["cusip"], "shares": round(k["shares"]),
-            "prev_shares": build.shares_out(float(k["prev_shares"])) if known else None,
-            "value": round(k["value"]), "prev_value": round(k["prev_value"]) if known else None, "change": change,
-            "weight": round(k["value"] / book, 6) if book else None, "unreliable": side, "value_delta": vd,
-            "value_delta_basis": (row[at["value_delta_basis"]] or "trade") if vd is not None else None,
-            "held_reason": reason if side else None, "prev_cusip": k["prev_cusip"],
-            "price_outlier": k["price_outlier"], "shares_basis": "as_filed"}
-        # a list in hlc/ column order, not a dict: full runs hold one per fund holder line (moves.py peaks near 16 GB)
-        per_class.setdefault(k["cusip"], []).append(([r.get(c) for c in cols if c not in CLASS_DROP], kind, q,
-                                                     k["cusip"] in top10c, known))
-        sums["value"] += r["value"]
-        sums["prev_value"] += r["prev_value"] or 0
-        sums["value_delta"] += vd or 0
-        any_delta = any_delta or vd is not None
-    for f in sums:
-        want = row[at[f]]
-        if (want is None and f == "value_delta" and any_delta) or (want is not None and abs(sums[f] - want) > 1):
-            CLASS_PARITY_OFF.append((row[at["issuer_cusip6"]], cik, f, want, sums[f]))
-
-
-def write_classes(per_class: dict, cols: list, site: dict) -> set[str]:
-    """hlc/{cusip9}.json (public: counts and the HOLDERS_TOP largest rows) and hlcf/{cusip9}.json (every holder, R2
-    hlc/) for each CUSIP of a SPLIT issuer, with counts and lenses over that CUSIP alone, as hl/ per issuer. hlr/ gets
-    the same rows under the 9-character key. Returns the hlc/ file names written."""
-    ccols = [c for c in cols if c not in CLASS_DROP]
-    blank = lambda: {"holders": 0, "new": 0, "added": 0, "trimmed": 0, "exited": 0, "unchanged": 0, "mixed": 0,
-                     "unknown": 0, "no_prior": 0, "top10": 0, "over5pct": 0, "net": 0, "net_by_period": {},
-                     "by_period": {}}
-    names = set()
-    for cusip, entries in list(per_class.items()):
-        entries = [(dict(zip(ccols, r)), *rest) for r, *rest in per_class.pop(cusip)]
-        counts, lenses = blank(), {n: blank() for n in LENSES}
-        for r, kind, q, top, known in entries:
-            for c in [counts] + [lenses[n] for n, kinds in LENSES.items() if kind in kinds]:
-                if r["shares"] > 0:
-                    c["holders"] += 1
-                    c["by_period"][q] = c["by_period"].get(q, 0) + 1
-                    c["top10"] += top
-                    c["over5pct"] += bool(r["weight"] and r["weight"] > 0.05)
-                c[r["change"] or ("unknown" if known else "no_prior")] += 1
-                if r["value_delta"] is not None:
-                    c["net_by_period"][q] = c["net_by_period"].get(q, 0) + r["value_delta"]
-        nq = max((q or "" for _, _, q, _, _ in entries), default=None)
-        for c in [counts] + list(lenses.values()):
-            c["net_quarter"], c["net"] = nq, c["net_by_period"].get(nq, 0)
-        rows = sorted((r for r, *_ in entries), key=lambda r: -(r["value"] or r["prev_value"] or 0))
-        code, ticker = cusip[:6], SPLIT[cusip[:6]].get(cusip)
-        body = {"cusip": cusip, "ticker": ticker, "issuer": code, "fund": code in FUNDS_NOW, "counts": counts,
-                **lenses, "columns": ccols, "rows_total": len(rows)}
-        name = f"{cusip}.json"
-        names.add(name)
-        write(DATA / "hlcf" / name, body | {"rows": [[r[c] for c in ccols] for r in rows]})
-        write(DATA / "hlc" / name, body | {"rows": [[r[c] for c in ccols] for r in rows[:HOLDERS_TOP]]})
-        if ticker:
-            live = [r for r in rows if r["shares"] > 0][:SITE_TOP]
-            top = {r["cik"] for r in live}
-            site[cusip] = [[r["cik"], r["period"], r["shares"], r["value"], r["weight"], r["change"], r["value_delta"],
-                            int(next(t for x, _, _, t, _ in entries if x is r))]
-                           for r in rows if r["cik"] in top or r["type"] in LENSES["smart"]]
-    for folder in ("hlc", "hlcf"):
-        for p in (DATA / folder).glob("*.json"):
-            if p.name not in names:
-                p.unlink()
-    return names
-
 LISTS: dict[str, dict] = {}  # quarter -> SEC 13(f) list rows read this run (write_links), for live share classes
 
 
@@ -1015,11 +923,9 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
     tick: dict[str, dict[str, float]] = {}
     book: dict[str, float] = {}  # cik -> value of its share positions (the weight denominator)
     top10: dict[str, set] = {}  # cik -> issuer codes among its ten largest share positions
-    top10c: dict[str, set] = {}  # cik -> CUSIPs among its ten largest share lines (hlc/ counts)
     held_codes = {c for o, v in build.HELD_LINKS.items() for c in (o, v["new"])}
     for cik, rows in LATEST.items():
         by_issuer: dict[str, float] = {}
-        by_cusip: dict[str, float] = {}
         for r in rows:
             c = linked(r.get("cusip"))
             if r.get("suspect_duplicate"):  # the filer is counted once, on the new code; its row says so
@@ -1073,7 +979,6 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
             a[4] = a[4] or r.get("change") is not None or r.get("prev_shares") is not None  # held: unknown, not no prior
             a[5] += r.get("value_delta") or 0
             by_issuer[c[:6]] = by_issuer.get(c[:6], 0) + (r.get("value") or 0)
-            by_cusip[c] = by_cusip.get(c, 0) + (r.get("value") or 0)
             t = r.get("ticker") or (SECS.get(c) or {}).get("ticker")
             k = CLS.setdefault((c[:6], cik), {}).setdefault(c, {
                 "cusip": c, "ticker": t, "shares": 0, "prev_shares": 0, "value": 0, "prev_value": 0, "value_delta": 0,
@@ -1094,26 +999,10 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                 tick.setdefault(c[:6], {})[t] = tick.setdefault(c[:6], {}).get(t, 0) + (r.get("value") or 0)
         book[cik] = EQUITY.get(cik) or sum(by_issuer.values())  # the SH book, as on stock pages
         top10[cik] = {k for k, v in sorted(by_issuer.items(), key=lambda kv: -kv[1])[:10] if v > 0}
-        top10c[cik] = {k for k, v in sorted(by_cusip.items(), key=lambda kv: -kv[1])[:10] if v > 0}
     if not MF_TICKERS:
         sec_mf_tickers()
     FUNDS_NOW.clear()
     FUNDS_NOW.update(fund_codes())
-    # Schema 6 (lead, Nov 19-20): issuers served per CUSIP from hlc/{cusip9}.json: funds (separate funds under one
-    # code) and share-class issuers (two or more CUSIPs whose title, issuer name or 13(f) list entry reads as a class).
-    # Every CUSIP any filer holds under the code is listed, so a filer's hlc/ rows sum to its hl/ row.
-    SPLIT.clear()
-    share_cls: dict[str, set] = {}
-    for (code, _), cl in CLS.items():
-        for k in cl.values():
-            d = SPLIT.setdefault(code, {})
-            d[k["cusip"]] = d.get(k["cusip"]) or k["ticker"]
-            if code not in FUNDS_NOW and share_class(k):
-                share_cls.setdefault(code, set()).add(k["cusip"])
-    for code in [c for c in SPLIT if c not in FUNDS_NOW and len(share_cls.get(c, ())) < 2]:
-        del SPLIT[code]
-    CLASS_PARITY_OFF.clear()
-    per_class: dict[str, list] = {}  # cusip9 -> [(hlc/ row, filer type, period, in its top 10, prior known)]
     pending, worth = [], {}  # every hl/ and hlf/ file, written only once the class-sum ceiling passes
     out, full = DATA / "hl", DATA / "hlf"
     out.mkdir(exist_ok=True)
@@ -1266,9 +1155,6 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                          *((PAIRS.get((code, cik)) or {}).get(f) for f in ("cusip_pair", "filed_cusip", "filed_price", "matched_cusip")),
                          # shares as filed; summed over classes through a filed ratio: converted; else null (no shares)
                          None if out_sh is None else "converted" if unit else "as_filed"])
-            if code in SPLIT:
-                class_rows(rows[-1], cls, cols, known, multi or reissue, cik, kind, q, book.get(cik), top10c.get(cik, ()),
-                           per_class)
         # Hard gates (lead, Nov 11): net is exactly the sum of the counted rows, per quarter (a held row and its
         # classes add nothing), and the change counts are the rows' own tallies. Either off: hl/ is not rewritten.
         vi, ci = cols.index("value_delta"), cols.index("change")
@@ -1355,23 +1241,9 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
         n_tick[c] = n_tick.get(c, 0) + 1
     funds = {code: [{"cusip": c, "ticker": t} for c, t in sorted(f.items())] for code, f in sorted(funds.items())
              if len(f) > 1 or n_tick.get(code, 0) > 1}
-    # Schema 6 per-CUSIP files (hlc/), written only when every filer's hlc/ rows sum to its hl/ row; otherwise the
-    # previous hlc/ and `classes` stay and the run logs why (hl/ itself is unaffected).
-    if CLASS_PARITY_OFF:
-        print(f"::warning::moves: class parity: {len(CLASS_PARITY_OFF)} filer rows' hlc/ sums differ from hl/ "
-              f"(first {CLASS_PARITY_OFF[:5]}): hlc/ not rewritten", flush=True)
-        classes = (read(out / "index.json") or {}).get("classes") or {}
-    else:
-        n_files = len(write_classes(per_class, cols, site))
-        classes = {code: [{"cusip": c, "ticker": t} for c, t in sorted(d.items())]
-                   for code, d in sorted(SPLIT.items()) if code not in FUNDS_NOW}
-        print(f"moves: class parity: every filer's hlc/ value, prev_value and value_delta sum to its hl/ row; "
-              f"{n_files} hlc/ files for {len(SPLIT)} issuers ({len(classes)} share-class, "
-              f"{len(SPLIT) - len(classes)} fund); BRK 084670: {classes.get('084670')}", flush=True)
     write(out / "index.json", {"note": "ticker -> issuer code (first 6 of the CUSIP); one file per issuer in hl/",
                                "schema": HL_SCHEMA,
-                               "types_sig": signature(types), "tickers": dict(sorted(index.items())), "funds": funds,
-                               "classes": classes})
+                               "types_sig": signature(types), "tickers": dict(sorted(index.items())), "funds": funds})
     write_site_holders(site, signature(types))
     return len(keep)
 
