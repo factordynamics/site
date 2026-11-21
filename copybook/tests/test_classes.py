@@ -135,7 +135,7 @@ class FundSeries(unittest.TestCase):
         saved = set(moves.MF_TICKERS)
         try:
             moves.MF_TICKERS.clear()
-            moves.MF_TICKERS.add("PMYAX")  # Putnam Core Equity Fund A, on company_tickers_mf.json
+            moves.MF_TICKERS.add("PMYAX")  # a stand-in symbol: PMYAX itself is not on company_tickers_mf.json (Nov 21)
             lines = [{"cusip": "74676P104", "ticker": "PMYAX", "title": "COM", "issuer": "PUTNAM"}]
             self.assertTrue(moves.fund_series(lines))
             moves.MF_TICKERS.clear()
