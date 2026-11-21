@@ -56,25 +56,31 @@ def main() -> int:
     cache = load()
     shards: dict[Path, dict] = {}
     need: dict[str, set[str]] = {}  # cik -> accessions
+    quarter_of: dict[str, str | None] = {}  # accession -> its report quarter, for the S6 count
+    quarters: set[str] = set()  # every quarter a shard or full book covers
     for p in sorted((DATA / "f").glob("*.json")):
         try:
             s = json.loads(p.read_text())
         except ValueError:
             continue
         acc = s.get("accession")
+        quarters.add(s.get("quarter") or "")
         if not (s.get("ok") and acc) or s.get("accepted_at"):
             continue
         shards[p] = s
         if acc not in cache:
             need.setdefault(s.get("cik") or p.stem, set()).add(acc)
+            quarter_of[acc] = s.get("quarter")
     for p in full_books():  # full books' own filings and amendments
         try:
             b = json.loads(p.read_text())
         except ValueError:
             continue
+        quarters.add(b.get("quarter") or (p.parent.name if p.parent.parent.name == "fq" else ""))
         for a in [b.get("accession")] + list(b.get("amendments") or []):
             if a and isinstance(a, str) and a not in cache:
                 need.setdefault(b.get("cik") or p.stem, set()).add(a)
+                quarter_of[a] = quarter_of.get(a) or b.get("quarter") or (p.parent.name if p.parent.parent.name == "fq" else None)
     started, looked = time.monotonic(), 0
     try:
         for cik, accs in sorted(need.items()):
@@ -104,6 +110,10 @@ def main() -> int:
             p.write_text(json.dumps(s, separators=(",", ":")) + "\n")
             patched += 1
     blank = len(shards) - patched
+    # S6 (Jan 4-6) publishes available_at for ownership momentum: each filer's latest quarter against the one before.
+    qs = sorted(q for q in quarters if re.fullmatch(r"\d{4}Q[1-4]", q))[-2:]
+    s6 = {cik for cik, accs in need.items() if any(quarter_of.get(a) in qs and not cache.get(a) for a in accs)}
+    print(f"accepted: S6 needs acceptance times still missing for {len(s6)} filers in {', '.join(qs) or 'no quarter'}")
     print(f"accepted: {len(cache)} acceptance times on file; {patched} shards updated, {blank} still without one")
     books, rows_blank = fill_rows(cache, started)
     print(f"accepted: per-row provenance written on {books} full books; first_disclosed_at blank on {rows_blank} rows")
