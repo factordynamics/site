@@ -141,6 +141,11 @@ def cached_quarters() -> dict[str, dict]:
             # Drop what write_history derives (prior-quarter fields, exits): a cached quarter is the filing only.
             for k in ("slug", "manager", "cik", "prev_quarter", "prev_combined_with", "exited"):
                 q.pop(k, None)
+            # hl/'s page holds (hold_page) are reapplied from page_holds.json each run, never kept from the cache:
+            # a row read back with held_reason and weight 0 showed its trade beside a hold (JPM 2026Q3, Nov 21).
+            if any("held_reason" in h for h in q.get("holdings") or []):
+                q["holdings"] = [{k: v for k, v in h.items() if k != "held_reason"} for h in q["holdings"]]
+                apply_weights(q)
             out[q.get("filing_key") or q["accession"]] = q
     recent = expected_report_date((datetime.now(timezone.utc) - timedelta(days=92)).isoformat())
     stale_recent = any((q.get("format") or 0) < CACHE_FORMAT and (q.get("report_date") or "") >= recent

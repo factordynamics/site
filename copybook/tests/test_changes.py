@@ -173,7 +173,8 @@ class PageHoldsTest(unittest.TestCase):
                         {**row("OK", 40, 400), "prev_shares": 50, "prev_value": 500, "change": "trimmed",
                          "share_change": -10, "value_delta": -100, "weight": 0.4, "pct_of_book": 0.4},
                         {**row("OK", 1, 50, "Put"), "change": "new", "value_delta": 50}]
-                page = {"slug": "f", "quarter": "2026Q3", "prev_quarter": "2026Q2", "holdings": rows,
+                page = {"slug": "f", "quarter": "2026Q3", "prev_quarter": "2026Q2", "holdings": rows, "accession": "A1",
+                        "format": build.CACHE_FORMAT, "report_date": "2026-09-30",
                         "total_value_counted": 1050, "equity_value_counted": 1000}
                 (build.DATA / "f.json").write_text(json.dumps(page))
                 (build.HIST / "f").mkdir(parents=True)
@@ -193,6 +194,12 @@ class PageHoldsTest(unittest.TestCase):
                 self.assertEqual([(p["cusip"], p.get("held_reason")) for p in v1["holdings"]],
                                  [("BAD", "cusip_check_digit"), ("OK", None), ("OK", None)])
                 self.assertEqual(build.hold_page(holds), 0)  # already held: nothing rewritten
+                # h/ is also build.py's cache: a cached quarter comes back without the holds, weights recomputed, so a
+                # run without page_holds.json never shows a trade beside a stale held_reason.
+                cached = build.cached_quarters()["A1"]["holdings"]
+                self.assertFalse(any("held_reason" in h for h in cached))
+                self.assertEqual({h["cusip"]: h["weight"] for h in cached if not h.get("put_call")},
+                                 {"BAD": 0.6, "OK": 0.4})
                 self.assertEqual(build.hold_page(holds | {"quarter": "2026Q2"}), 0)  # another quarter's holds
             finally:
                 build.DATA, build.HIST = saved
