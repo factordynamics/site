@@ -5582,7 +5582,7 @@ describe('copybook api', () => {
     // FMR, which has since filed Q3): refused until the per-quarter index ships, on /changes and holders alike.
     for (const path of ['/v1/changes/2026Q2?ticker=NVDA', '/v1/stocks/NVDA/holders?quarter=2026Q2']) {
       const past = await v1(path);
-      expect([past.status, past.body.error.code, /\/v1\/bulk\/2026Q2/.test(past.body.error.message), /Nov 30/.test(past.body.error.message)]).toEqual([400, 'quarter_incomplete_by_ticker', true, true]);
+      expect([past.status, past.body.error.code, /\/v1\/bulk\/2026Q2/.test(past.body.error.message), /2026Q1 from Mon Nov 30; 2025Q4 and 2025Q1 in early December/.test(past.body.error.message)]).toEqual([400, 'quarter_incomplete_by_ticker', true, true]);
     }
     expect((await v1('/v1/changes/2026Q2?filer=0001387322')).status).not.toBe(400);
 

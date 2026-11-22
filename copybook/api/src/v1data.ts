@@ -846,7 +846,7 @@ function legacyMark(h: any): any {
 /** The latest quarter any holder row reports. */
 const latestPeriod = (rows: { period: string | null }[]): string | null => rows.reduce<string | null>((a, r) => (r.period && (!a || r.period > a) ? r.period : a), null);
 /** 400 for a past quarter by ticker (the holder index has each filer's latest book only). */
-const incomplete = (q: string, latest: string) => v1error('quarter_incomplete_by_ticker', 400, `${q} by ticker would list only filers whose latest 13F is ${q}. Past quarters by ticker aren't complete yet; use /v1/bulk/${q} or per-filer /v1/changes/${q}?filer=. By ticker, ${latest} is served now; full coverage is due Mon Nov 30, 2026.`);
+const incomplete = (q: string, latest: string) => v1error('quarter_incomplete_by_ticker', 400, `${q} by ticker would list only filers whose latest 13F is ${q}. Past quarters by ticker aren't complete yet; use /v1/bulk/${q} or per-filer /v1/changes/${q}?filer=. By ticker, ${latest} is served now; past quarters open 2026Q1 from Mon Nov 30; 2025Q4 and 2025Q1 in early December; 2026Q2 once SEC publishes its late filings.`);
 
 /** Shares traded in USD (tradeUsd) per quarter, over every row whose quarter it is: each a quarter's /v1/changes sum. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
