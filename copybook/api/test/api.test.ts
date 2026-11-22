@@ -825,6 +825,8 @@ describe('copybook api', () => {
     expect(await put('hl/82993.json', tok)).toBe(400);
     // Past quarters by ticker (ingest's hq/, Nov 23): one file per issuer per quarter, and the quarter's ticker index.
     expect([await put('hq/2025Q1/084670.json', tok), await put('hq/2025Q1/index.json', tok), await put('hq/2025Q5/084670.json', tok)]).toEqual([200, 200, 400]);
+    // Per-class holder books (schema 6): a 9-character CUSIP, letters included; anything else under hlc/ is refused.
+    expect([await put('hlc/78467Y10W.json', tok), await put('hlc/084670108.json', tok), await put('hlc/084670.json', tok)]).toEqual([200, 200, 400]);
     // Many objects in one request: a manifest line, then their bytes back to back, each with its build.
     const batch = (objects: { key: string; body: string; build_id?: string }[], token = tok, sizes?: number[]) => {
       const enc = new TextEncoder();
