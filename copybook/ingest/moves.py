@@ -1084,19 +1084,26 @@ def write_quarters(types: dict, curated: dict, filers: dict, newest: str | None)
     shutil.rmtree(check, ignore_errors=True)
     got = quarter_holders(newest, types, curated, filers, check, {})
     n, off = hq_parity(newest, check, curated) if got >= 0 else (0, {"gate": [got]})
-    shutil.rmtree(check, ignore_errors=True)
-    if off:
-        for cik in sorted({x[1] for k, v in off.items() for x in v if k.startswith("missing")})[:10]:
-            rec, sh = read(DATA / "fb" / newest / f"{cik}.json"), read(DATA / "f" / f"{cik}.json") or {}
-            print(f"moves: hq/ parity: {cik}: fb/{newest} " + (f"ok={rec.get('ok')} rows={len(rec.get('rows') or [])} "
-                  f"quarter={rec.get('quarter')} accession={rec.get('accession')} filing_date={rec.get('filing_date')}"
-                  if rec else "none") + f"; f/ quarter={sh.get('quarter')} truncated={sh.get('truncated')} "
-                  f"accession={sh.get('accession')} rows={len(sh.get('rows') or [])}; LATEST was {PERIOD.get(cik)}",
-                  flush=True)
+    if off:  # why a row is missing: each such row's hl/ change and shares, and whether the hq/ build wrote the issuer
+        why: dict[tuple, int] = {}
+        for k, v in off.items():
+            if not k.startswith("missing_in_hq"):
+                continue
+            for code, cik in v:
+                b = read(DATA / "hlf" / f"{code}.json") or {}
+                c = b.get("columns") or []
+                r = next((r for r in b.get("rows") or [] if r[0] == cik), None)
+                key = (r[c.index("change")] if r else None, bool(r and r[c.index("shares")]),
+                       (check / f"{code}.json").exists(), tuple(sorted((b.get("counts") or {}).get("by_period") or {})))
+                why[key] = why.get(key, 0) + 1
+        print("moves: hq/ parity: missing rows by (hl/ change, shares > 0, hq/ file written, hl/ holder periods): "
+              + "; ".join(f"{k} {n}" for k, n in sorted(why.items(), key=lambda kv: -kv[1])), flush=True)
     if off:
         print(f"::warning::moves: hq/ parity with hl/ for {newest}: {sum(map(len, off.values()))} of {n} rows differ, "
               + "; ".join(f"{k} {len(v)} (e.g. {v[:3]})" for k, v in off.items()) + ": hq/ not rewritten", flush=True)
+        shutil.rmtree(check, ignore_errors=True)
         return {}
+    shutil.rmtree(check, ignore_errors=True)
     print(f"moves: hq/ parity: {newest} built the hq/ way equals hl/ on all {n} non-curated rows", flush=True)
     out = {}
     for q in past:
