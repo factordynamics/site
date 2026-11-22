@@ -336,16 +336,17 @@ def write(path: Path, body: dict) -> bool:
     return True
 
 
-def changes(shard: dict) -> tuple[dict, list[dict]] | None:
-    """(public summary, full change rows) for one shard, or None without a prior quarter."""
+def changes(shard: dict, prior_rec: dict | None = None, cur_rec: dict | None = None) -> tuple[dict, list[dict]] | None:
+    """(public summary, full change rows) for one shard, or None without a prior quarter. write_quarters passes the
+    book it already read (cur_rec) and, when fb/ has no quarter before, the SEC data set's book (prior_rec)."""
     q = shard.get("quarter")
     if not (shard.get("ok") and q):
         return None
     pq = prev_quarter(q)
-    cur = book(read(DATA / "fb" / q / f"{shard['cik']}.json") or (None if shard.get("truncated") else shard))
+    cur = book(cur_rec or read(DATA / "fb" / q / f"{shard['cik']}.json") or (None if shard.get("truncated") else shard))
     if cur is not None and cur.get("equity_value"):
         EQUITY[shard["cik"]] = round(cur["equity_value"])
-    prev = book(read(DATA / "fb" / pq / f"{shard['cik']}.json"))
+    prev = book(read(DATA / "fb" / pq / f"{shard['cik']}.json") or prior_rec)
     if cur is None:  # latest book only as a truncated public shard: its newest full book stands in
         if prev is not None:
             LATEST[shard["cik"]] = build.with_changes(prev, None)  # the units guard runs here too
@@ -998,11 +999,117 @@ def older_changes(shards: list[dict], curated: dict, per_quarter: dict[str, list
     return n
 
 
-def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) -> int:
+HQ = DATA / "hq"  # hq/{quarter}/{issuer6}.json and index.json: every holder per issuer, per past quarter (R2 hq/, paid)
+HQ_FORMAT = "1"  # bump with a change to hq/'s layout: the uploader then re-sends every past quarter once
+HQ_MIN_BOOKS = 5000  # a quarter folder with fewer books is live-EDGAR stragglers, not a quarter (export.py's rule)
+QUARTER_INDEX: dict[str, str] = {}  # ticker -> issuer6 of the quarter write_holders built last (quarter_dir mode)
+HQ_COMPARE = ("shares", "prev_shares", "value", "prev_value", "change", "value_delta")
+
+
+def quarter_holders(q: str, types: dict, curated: dict, filers: dict, dest: Path, prior: dict) -> int:
+    """One quarter's holder index (write_holders' rows, counts and gates) from every filer's fb/{q} book against its
+    fb/ book of the quarter before (or prior, the SEC data set's, for the oldest stored quarter). Returns the issuers
+    written to dest, or -1 when a gate refused the quarter."""
+    for d in (LATEST, PERIOD, FILING, EQUITY, NO_PRIOR, LINES, BASIS, REPRICED):
+        d.clear()
+    DEBT_LINES.clear()
+    shards = []
+    for p in sorted((DATA / "fb" / q).glob("*.json")):
+        rec = read(p)
+        if not rec or not rec.get("ok"):
+            continue
+        rec = rec | {"cik": p.stem, "quarter": q}
+        shard = {k: rec.get(k) for k in ("name", "accession", "filing_date", "accepted_at")} | {
+            "cik": p.stem, "quarter": q, "ok": True}
+        shards.append(shard)
+        changes(shard, prior.get(p.stem), rec)
+    return write_holders(shards, types, curated, filers, dest)
+
+
+def hq_parity(q: str, check: Path, curated: dict) -> tuple[int, dict]:
+    """hl/ parity for the newest quarter (lead, Nov 22): every non-curated filer's row in check (built the hq/ way)
+    equals its hl/ row (hlf/) where that row is of quarter q, in shares, prices, change and value_delta, and no such
+    hl/ row is missing from check. Curated funds are left out: hl/ reads their own pages (with page holds)."""
+    off: dict[str, list] = {}
+    n = 0
+    names = {p.name for p in check.glob("*.json")} | {p.name for p in (DATA / "hlf").glob("*.json")}
+    for name in sorted(names - {"index.json"}):
+        a, b = read(check / name) or {}, read(DATA / "hlf" / name) or {}
+        ia = {r[0]: r for r in a.get("rows") or [] if r[0] not in curated}
+        cb = b.get("columns") or []
+        ib = {r[0]: r for r in b.get("rows") or [] if r[0] not in curated and r[cb.index("period")] == q} if cb else {}
+        ca = a.get("columns") or []
+        for cik in set(ia) | set(ib):
+            n += 1
+            ra, rb = ia.get(cik), ib.get(cik)
+            if ra is None or rb is None:
+                off.setdefault("missing_in_" + ("hq" if ra is None else "hl"), []).append((name[:6], cik))
+                continue
+            for f in HQ_COMPARE:
+                if ra[ca.index(f)] != rb[cb.index(f)]:
+                    off.setdefault(f, []).append((name[:6], cik, ra[ca.index(f)], rb[cb.index(f)]))
+    return n, off
+
+
+def write_quarters(types: dict, curated: dict, filers: dict, newest: str | None) -> dict:
+    """Full runs: hq/{q}/ for every stored quarter before newest (hl/'s quarter) with a quarter's worth of books, each
+    behind write_holders' gates, after the newest quarter built the same way matches hl/ (hq_parity). index.json
+    marks a quarter complete only once SEC's data set and its late-filing window are both out (fb/{q}/.complete);
+    upload_history.py lists only complete quarters in meta/builds.json. Returns {quarter: issuers written}."""
+    import hashlib
+    import shutil
+    folders = sorted(p for p in (DATA / "fb").glob("*Q?") if p.is_dir())
+    past = [p.name for p in folders if newest and p.name < newest
+            and sum(1 for _ in p.glob("*.json")) >= HQ_MIN_BOOKS]
+    if not newest or not past:
+        print(f"moves: hq/: no past quarter to build (hl/ quarter {newest}, fb/ {[p.name for p in folders]})", flush=True)
+        return {}
+    prior = {}
+    if folders and past[0] == folders[0].name:
+        try:
+            prior = prior_books(prev_quarter(past[0]))
+        except Exception as e:  # noqa: BLE001 - the oldest quarter then has no changes, as in older_changes
+            print(f"::warning::moves: hq/: prior quarter {prev_quarter(past[0])}: {e}", flush=True)
+    check = HQ / "_check"
+    shutil.rmtree(check, ignore_errors=True)
+    got = quarter_holders(newest, types, curated, filers, check, {})
+    n, off = hq_parity(newest, check, curated) if got >= 0 else (0, {"gate": [got]})
+    shutil.rmtree(check, ignore_errors=True)
+    if off:
+        print(f"::warning::moves: hq/ parity with hl/ for {newest}: {sum(map(len, off.values()))} of {n} rows differ, "
+              + "; ".join(f"{k} {len(v)} (e.g. {v[:3]})" for k, v in off.items()) + ": hq/ not rewritten", flush=True)
+        return {}
+    print(f"moves: hq/ parity: {newest} built the hq/ way equals hl/ on all {n} non-curated rows", flush=True)
+    out = {}
+    for q in past:
+        dest = HQ / q
+        marker = DATA / "fb" / q / ".complete"
+        done = marker.read_text() if marker.exists() else ""
+        got = quarter_holders(q, types, curated, filers, dest, prior if q == folders[0].name else {})
+        if got < 0:
+            shutil.rmtree(dest, ignore_errors=True)
+            continue
+        write(dest / "index.json", {
+            "note": "ticker -> issuer code for this quarter; one file per issuer with every 13F holder of the quarter",
+            "quarter": q, "format": HQ_FORMAT, "schema": HL_SCHEMA, "complete": bool(done), "issuers": got,
+            "sig": hashlib.sha1(f"{HQ_FORMAT}|{HL_SCHEMA}|{done}".encode()).hexdigest()[:12],
+            "tickers": dict(sorted(QUARTER_INDEX.items()))})
+        out[q] = got
+    for p in HQ.glob("*Q?"):
+        if p.name not in out:
+            shutil.rmtree(p, ignore_errors=True)
+    print(f"moves: hq/: " + ", ".join(f"{q} {k} issuers" for q, k in out.items()), flush=True)
+    return out
+
+
+def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict, quarter_dir: Path | None = None) -> int:
     """hl/{issuer6}.json: every 13F filer holding the stock in its latest full book (never the top-500
     public shard), with the period of that book and its change against the filer's prior quarter.
     Public (Pages): hl/{issuer6}.json with counts over all holders and the HOLDERS_TOP largest rows, for
-    issuers with a ticker; hl/index.json maps tickers. Paid: hlf/{issuer6}.json, every holder (R2 hl/)."""
+    issuers with a ticker; hl/index.json maps tickers. Paid: hlf/{issuer6}.json, every holder (R2 hl/).
+    quarter_dir (write_quarters): LATEST holds one quarter's books; only the every-holder files go there, with the
+    same rows, counts and gates, and nothing public (hl/, hlc/, hlr/, index, holders_refused.json) is touched.
+    Returns the issuers written, or -1 when a gate refused the quarter."""
     meta = {s["cik"]: s for s in shards}
     per: dict[str, dict[str, list]] = {}
     CLS.clear()
@@ -1116,9 +1223,10 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
     CLASS_PARITY_OFF.clear()
     per_class: dict[str, list] = {}  # cusip9 -> [(hlc/ row, filer type, period, in its top 10, prior known)]
     pending, worth = [], {}  # every hl/ and hlf/ file, written only once the class-sum ceiling passes
-    out, full = DATA / "hl", DATA / "hlf"
-    out.mkdir(exist_ok=True)
-    full.mkdir(exist_ok=True)
+    out, full = (None, quarter_dir) if quarter_dir else (DATA / "hl", DATA / "hlf")
+    if out:
+        out.mkdir(exist_ok=True)
+    full.mkdir(parents=True, exist_ok=True)
     index, keep, written, site = {}, set(), set(), {}
     cols = ["cik", "name", "slug", "type", "curated", "period", "shares", "prev_shares", "value", "prev_value", "change",
             "weight", "accession", "filing_date", "accepted_at", "original_accession", "prev_cusip", "suspect_duplicate",
@@ -1267,7 +1375,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                          *((PAIRS.get((code, cik)) or {}).get(f) for f in ("cusip_pair", "filed_cusip", "filed_price", "matched_cusip")),
                          # shares as filed; summed over classes through a filed ratio: converted; else null (no shares)
                          None if out_sh is None else "converted" if unit else "as_filed"])
-            if code in SPLIT:
+            if code in SPLIT and not quarter_dir:
                 class_rows(rows[-1], cls, cols, known, multi or reissue, cik, kind, q, book.get(cik), top10c.get(cik, ()),
                            per_class)
         # Hard gates (lead, Nov 11): net is exactly the sum of the counted rows, per quarter (a held row and its
@@ -1302,7 +1410,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
         written.add(name)
         worth[code] = sum(r[8] or 0 for r in rows)
         pending.append((full / name, {**body, "rows": rows}))
-        if tickers:
+        if tickers and out:
             keep.add(name)
             pending.append((out / name, {**body, "rows": rows[:HOLDERS_TOP]}))
             top = {r[0] for r in [r for r in rows if raw[r[0]] > 0][:SITE_TOP]}
@@ -1318,6 +1426,11 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
     top100 = set(sorted(worth, key=lambda c: -worth[c])[:100])
     bad_top = [x for x in CLASS_SUM_OFF if x["issuer6"] in top100]
     refused = DATA / "holders_refused.json"
+    if quarter_dir and (GATE_OFF or len(CLASS_SUM_OFF) > CLASS_SUM_MAX or bad_top):
+        print(f"::error::moves: {quarter_dir.name}: {len(GATE_OFF)} issuers' net or counts differ from their rows "
+              f"(first {GATE_OFF[:1]}); {len(CLASS_SUM_OFF)} class-sum mismatches ({len(bad_top)} in top-100): "
+              f"quarter not written", flush=True)
+        return -1
     if GATE_OFF:
         write(refused, {"reason": "net or counts differ from the rows", "issuers": GATE_OFF[:200]})
         print(f"::error::moves: {len(GATE_OFF)} issuers' net or counts differ from their rows "
@@ -1329,15 +1442,20 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
         print(f"::error::moves: {len(CLASS_SUM_OFF)} multi-class rows' value_delta differ from their classes "
               f"({len(bad_top)} in top-100 stocks): hl/ not rewritten; gate.py fails this run", flush=True)
         return 0
-    refused.unlink(missing_ok=True)
+    if not quarter_dir:
+        refused.unlink(missing_ok=True)
     for path, body in pending:
         write(path, body)
-    for p in out.glob("*.json"):
+    for p in out.glob("*.json") if out else ():
         if p.name not in keep and p.name != "index.json":
             p.unlink()
     for p in full.glob("*.json"):
-        if p.name not in written:
+        if p.name not in written and p.name != "index.json":
             p.unlink()
+    if quarter_dir:
+        QUARTER_INDEX.clear()
+        QUARTER_INDEX.update(index)
+        return len(written)
     if os.environ.get("SCOPE", "full") == "full":  # hlf/BUILD: the full run whose all-filer books built this index;
         # curated rebuilds keep it. upload_history.py publishes it as meta/builds.json stores.hl.data_built_at.
         write(full / "BUILD", read(DATA / "build.json") or {})
@@ -1699,6 +1817,9 @@ def main() -> int:
     print(f"moves: {with_prev}/{n} filers have a prior quarter on file; {FIXED[0]} lines rescaled by the "
           f"cross-filer unit check; changes for "
           + ", ".join(f"{q} {len(v)} rows" for q, v in sorted(per_quarter.items())))
+    # Last: it reuses this run's per-filer state (LATEST, CLS, HLQ...) for each past quarter.
+    if os.environ.get("SCOPE", "full") == "full" and os.environ.get("COPYBOOK_HQ", "1") == "1":
+        write_quarters(types, curated, filers, PARITY.get("quarter"))
     return 0
 
 

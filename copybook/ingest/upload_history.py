@@ -61,10 +61,11 @@ HL_BUILD = HIST.parent / "hlf" / "BUILD"  # moves.py: the full run whose all-fil
 
 KEY = re.compile(r"^h/[a-z0-9][a-z0-9-]*/(\d{4}Q[1-4](\.json|\.csv|\.v1\.json)|index\.json)$"
                  r"|^fb/\d{4}Q[1-4]/\d{10}\.json$|^s/[0-9A-Z]{6}\.json$|^bulk/\d{4}Q[1-4](\.part\d+)?\.csv\.gz$"
-                 r"|^changes/\d{4}Q[1-4]\.json$|^v/\d{10}/\d{10}-\d{2}-\d{6}\.json$|^hl/[0-9A-Z]{6}\.json$|^hlc/[0-9A-Z]{9}\.json$")
+                 r"|^changes/\d{4}Q[1-4]\.json$|^v/\d{10}/\d{10}-\d{2}-\d{6}\.json$|^hl/[0-9A-Z]{6}\.json$|^hlc/[0-9A-Z]{9}\.json$"
+                 r"|^hq/\d{4}Q[1-4]/([0-9A-Z]{6}|index)\.json$")
 # Keys the Worker may not accept yet: a failure warns instead of failing the run,
 # and the rest of that kind are skipped until the next run.
-OPTIONAL = re.compile(r"/index\.json$|\.v1\.json$|^fb/|^s/|^bulk/|^changes/|^v/|^hl/|^hlc/")
+OPTIONAL = re.compile(r"/index\.json$|\.v1\.json$|^fb/|^s/|^bulk/|^changes/|^v/|^hl/|^hlc/|^hq/")
 # Small writes, one bundle at a time: gene's disk is shared with other software, and on Nov 11 one 100-file bundle
 # held the API for 60 s (the API allows up to 100 entries or 20 MB per bundle).
 BUNDLE_ENTRIES = 20
@@ -73,7 +74,7 @@ BUNDLE_RAW_BYTES = 2_000_000  # uncompressed; about 0.5 MB gzipped on the wire
 GZIP = [os.environ.get("COPYBOOK_UPLOAD_GZIP", "1") != "0"]  # cleared when the API refuses a gzipped bundle
 # Sent first, in this order: new filings' h/ books (fresh_only), then the holder index (what /v1 ticker views and net
 # read: on Nov 11 a reshape of every h/ book queued 26k files ahead of it), then the rest (bulk early: few, large files).
-ORDER = ("hl/", "h/", "bulk/", "fb/")
+ORDER = ("hl/", "h/", "bulk/", "fb/", "hq/")
 PROBE_MAX_S = 1.0  # gene's /health?probe=1 (ms when idle) slower than this: members are waiting, so the backlog backs off
 FRESH_MAX = 60  # files per run in EDGAR hours: a few new filings' h/ books, never the backlog
 QUIET_LEAD_S = 90  # no bundle starts this close to a COPYBOOK_UPLOAD_QUIET window (one bundle takes 3-30 s)
@@ -220,6 +221,13 @@ def main() -> int:
     # (store_of), so a refused hlc/ key never holds back meta/builds.json for hl/.
     for p in sorted(root.glob("hlcf/*.json")):
         sources["hlc/" + p.name] = p
+    # Past quarters by ticker (moves.py hq/): complete quarters only (SEC's data set and its late window both out), each
+    # sent once per index sig (format and schema); a quarter already in R2 with that sig is not re-sent (R2 writes).
+    for d in sorted(root.glob("hq/*Q?")):
+        idx = json.loads((d / "index.json").read_text()) if (d / "index.json").exists() else {}
+        if idx.get("complete") and (manifest.get("_hq") or {}).get(d.name, {}).get("sig") != idx.get("sig"):
+            for p in sorted(d.glob("*.json")):
+                sources[f"hq/{d.name}/{p.name}"] = p
     files = list(sources.values())
     todo, digests = [], {}
     stamps = manifest.setdefault("_at", {})  # key -> x-copybook-built-at it was uploaded with (meta/builds.json)
@@ -319,6 +327,8 @@ def store_of(key: str) -> tuple[str, str | None] | None:
     """The /v1 store a key belongs to (meta/builds.json): hl, changes/{q}, or a filer view (h/ or fb/) of {q}."""
     if key.startswith("hl/"):
         return "hl", None
+    if (m := re.match(r"^hq/(\d{4}Q[1-4])/", key)):
+        return "hq", m[1]
     if (m := re.match(r"^changes/(\d{4}Q[1-4])\.json$", key)):
         return "changes", m[1]
     if (m := re.match(r"^(?:h/[^/]+/|fb/)(\d{4}Q[1-4])[./]", key)):
@@ -347,6 +357,15 @@ def publish_builds(sources: dict, digests: dict, manifest: dict, token) -> None:
         gated = manifest.get("_hl_gated") or {}
         if gated.get("data_built_at") and gated.get("build_id") == hl_build().get("build_id"):
             stores["hl"] |= {"data_built_at": gated["data_built_at"], "data_build_id": gated["build_id"]}
+    # hq/: a past quarter is listed once every one of its keys is in R2 as built here; then it stays listed (its keys
+    # aren't sent again until its sig changes), in curated runs too, which build no hq/.
+    hq = manifest.setdefault("_hq", {})
+    for (a, q), at in ok.items():
+        if a == "hq":
+            idx = json.loads((HIST.parent / "hq" / q / "index.json").read_text())
+            hq[q] = {"sig": idx["sig"], "built_at": at, "issuers": idx["issuers"]}
+    if hq:
+        stores["hq"] = {"quarters": {q: {"built_at": v["built_at"], "issuers": v["issuers"]} for q, v in sorted(hq.items())}}
     for name in ("changes", "filer_view"):
         if quarters:
             stores[name] = {"build_id": BUILD.get("build_id"), "built_at": min(ok[(name, q)] for q in quarters)}
