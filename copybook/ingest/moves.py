@@ -1113,6 +1113,8 @@ def write_quarters(types: dict, curated: dict, filers: dict, newest: str | None)
         dest = HQ / q
         marker = DATA / "fb" / q / ".complete"
         done = marker.read_text()
+        pm = DATA / "fb" / prev_quarter(q) / ".complete"
+        before = pm.read_text() if pm.exists() else ""
         got = quarter_holders(q, types, curated, filers, dest, prior if q == folders[0].name else {})
         if got < 0:
             shutil.rmtree(dest, ignore_errors=True)
@@ -1120,7 +1122,8 @@ def write_quarters(types: dict, curated: dict, filers: dict, newest: str | None)
         write(dest / "index.json", {
             "note": "ticker -> issuer code for this quarter; one file per issuer with every 13F holder of the quarter",
             "quarter": q, "format": HQ_FORMAT, "schema": HL_SCHEMA, "complete": True, "issuers": got,
-            "sig": hashlib.sha1(f"{HQ_FORMAT}|{HL_SCHEMA}|{done}".encode()).hexdigest()[:12],
+            # the prior quarter's books are this quarter's changes: a re-seed of it re-sends this one too (Nov 22)
+            "sig": hashlib.sha1(f"{HQ_FORMAT}|{HL_SCHEMA}|{done}|{before}".encode()).hexdigest()[:12],
             **QUARTER_INDEX})
         out[q] = got
     for p in HQ.glob("*Q?"):

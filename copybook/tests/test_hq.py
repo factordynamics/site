@@ -111,6 +111,17 @@ class PastQuarters(unittest.TestCase):
                                                     {"cusip": "084670702", "ticker": "BRK.B"}]})
         self.assertEqual((q2["funds"], q2["classes"]), ({}, {}))  # the next quarter has neither: its own lists
 
+    def test_a_reseeded_prior_quarter_changes_the_next_quarters_sig(self):
+        self.hl_now()
+        moves.write_quarters({}, {}, {}, "2026Q3")
+        sig = lambda q: json.loads((self.data / "hq" / q / "index.json").read_text())["sig"]
+        before = (sig("2026Q1"), sig("2026Q2"))
+        (self.data / "fb" / "2025Q4" / ".complete").write_text('{"format": "4", "sets": 2}\n')  # 2025Q4 re-seeded
+        self.hl_now()
+        moves.write_quarters({}, {}, {}, "2026Q3")
+        self.assertNotEqual(sig("2026Q1"), before[0])  # its prior's books changed: re-sent
+        self.assertEqual(sig("2026Q2"), before[1])
+
     def test_nothing_is_written_when_the_newest_quarter_differs_from_hl(self):
         self.hl_now()
         path = self.data / "hlf" / "037833.json"
