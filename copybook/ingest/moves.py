@@ -63,9 +63,10 @@ def filing(b: dict) -> dict:
             "accepted_at": b.get("accepted_at") or ACCEPTED.get(acc or ""), "original_accession": original(b) or acc}
 # Count blocks next to `counts` in hl/: smart = hedge funds and long-only managers, hedge_fund alone.
 LENSES = {"smart": {"hedge_fund", "long_only", "active"}, "hedge_fund": {"hedge_fund"}}
-HL_SCHEMA = 5  # bump when hl/ rows change shape or rules: a curated run then rebuilds hl/ (--schema-stale). 4: Nov 11 P1
+HL_SCHEMA = 6  # bump when hl/ rows change shape or rules: a curated run then rebuilds hl/ (--schema-stale). 4: Nov 11 P1
 # rules (options band, split sides, sign_mismatch, debt CUSIPs out of holder rows). 5: per-class trades, classes[],
-# shares_unit, shares null across classes with no conversion ratio
+# shares_unit, shares null across classes with no conversion ratio. 6: hl/ rows unchanged; per-class hlc/{cusip9}.json
+# on Pages and in R2 and hl/index.json classes are complete (payments serves per class on schema >= 6)
 HOLDERS_TOP = 25  # public rows per stock in hl/; the full list (hlf/, R2 hl/) is paid
 SITE_TOP = 500  # hlr/: rows per stock for the site's d/h pages (as before, now from full books), plus every
 SITE_PARTS = 4  # hedge-fund and long-only holder, so the lens lists and counts are complete
