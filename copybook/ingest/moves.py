@@ -1086,6 +1086,14 @@ def write_quarters(types: dict, curated: dict, filers: dict, newest: str | None)
     n, off = hq_parity(newest, check, curated) if got >= 0 else (0, {"gate": [got]})
     shutil.rmtree(check, ignore_errors=True)
     if off:
+        for cik in sorted({x[1] for k, v in off.items() for x in v if k.startswith("missing")})[:10]:
+            rec, sh = read(DATA / "fb" / newest / f"{cik}.json"), read(DATA / "f" / f"{cik}.json") or {}
+            print(f"moves: hq/ parity: {cik}: fb/{newest} " + (f"ok={rec.get('ok')} rows={len(rec.get('rows') or [])} "
+                  f"quarter={rec.get('quarter')} accession={rec.get('accession')} filing_date={rec.get('filing_date')}"
+                  if rec else "none") + f"; f/ quarter={sh.get('quarter')} truncated={sh.get('truncated')} "
+                  f"accession={sh.get('accession')} rows={len(sh.get('rows') or [])}; LATEST was {PERIOD.get(cik)}",
+                  flush=True)
+    if off:
         print(f"::warning::moves: hq/ parity with hl/ for {newest}: {sum(map(len, off.values()))} of {n} rows differ, "
               + "; ".join(f"{k} {len(v)} (e.g. {v[:3]})" for k, v in off.items()) + ": hq/ not rewritten", flush=True)
         return {}
