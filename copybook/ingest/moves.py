@@ -1038,12 +1038,15 @@ def quarter_holders(q: str, types: dict, curated: dict, filers: dict, dest: Path
 def hq_parity(q: str, check: Path, curated: dict) -> tuple[int, dict]:
     """hl/ parity for the newest quarter (lead, Nov 22): every non-curated filer's row in check (built the hq/ way)
     equals its hl/ row (hlf/) where that row is of quarter q, in shares, prices, change and value_delta, and no such
-    hl/ row is missing from check. Curated funds are left out: hl/ reads their own pages (with page holds)."""
+    hl/ row is missing from check. Curated funds are left out: hl/ reads their own pages (with page holds). An issuer
+    with no holder left (only exits) is in hq/ and never in hl/; one hl/ lacks that does have holders still fails."""
     off: dict[str, list] = {}
     n = 0
     names = {p.name for p in check.glob("*.json")} | {p.name for p in (DATA / "hlf").glob("*.json")}
     for name in sorted(names - {"index.json"}):
         a, b = read(check / name) or {}, read(DATA / "hlf" / name) or {}
+        if not b and a and not (a.get("counts") or {}).get("holders"):
+            continue  # every filer left it: hq/ keeps it for its exits, hl/ (current holders) never writes it
         ia = {r[0]: r for r in a.get("rows") or [] if r[0] not in curated}
         cb = b.get("columns") or []
         ib = {r[0]: r for r in b.get("rows") or [] if r[0] not in curated and r[cb.index("period")] == q} if cb else {}

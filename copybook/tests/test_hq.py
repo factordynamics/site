@@ -8,7 +8,7 @@ from pathlib import Path
 from ingest import moves
 from ingest.bulk import FB_COLUMNS
 
-AAPL, MSFT, NVDA = "037833100", "594918104", "67066G104"
+AAPL, MSFT, NVDA, TSLA = "037833100", "594918104", "67066G104", "88160R101"
 
 
 def fb(data: Path, q: str, cik: str, *lines):
@@ -33,7 +33,7 @@ class PastQuarters(unittest.TestCase):
         fb(self.data, "2026Q1", A, (AAPL, "AAPL", 100, 1000))
         fb(self.data, "2026Q1", B, (AAPL, "AAPL", 40, 400), (MSFT, "MSFT", 10, 300), (NVDA, "NVDA", 3, 60))
         # 2026Q2: A adds 50 AAPL at $12; B sells all AAPL, keeps MSFT; C (first book) buys 5 MSFT.
-        fb(self.data, "2026Q2", A, (AAPL, "AAPL", 150, 1800))
+        fb(self.data, "2026Q2", A, (AAPL, "AAPL", 150, 1800), (TSLA, "TSLA", 2, 800))
         fb(self.data, "2026Q2", B, (MSFT, "MSFT", 10, 330))
         fb(self.data, "2026Q2", C, (MSFT, "MSFT", 5, 165))
         for q in ("2026Q1", "2026Q2"):
@@ -53,8 +53,10 @@ class PastQuarters(unittest.TestCase):
         self.tmp.cleanup()
 
     def hl_now(self):
-        """hlf/ as the run's hl/ build left it: the newest quarter, from the same books and D's f/ shard."""
+        """hlf/ as the run's hl/ build left it: the newest quarter, from the same books and D's f/ shard. A sold all its
+        TSLA in 2026Q3 and nobody else holds it, so hl/ (current holders) has no TSLA file."""
         assert moves.quarter_holders("2026Q3", {}, {}, {}, self.data / "hlf", {}) > 0
+        (self.data / "hlf" / "88160R.json").unlink()
         assert any(r[0] == "0000000004" for r in json.loads((self.data / "hlf" / "037833.json").read_text())["rows"])
 
     def rows(self, q, cusip):
@@ -89,7 +91,7 @@ class PastQuarters(unittest.TestCase):
         self.assertEqual((body["counts"]["holders"], body["counts"]["exited"], nv["2"]["change"], nv["2"]["value_delta"]),
                          (0, 1, "exited", -60))
         idx = json.loads((self.data / "hq" / "2026Q2" / "index.json").read_text())
-        self.assertEqual((idx["tickers"], idx["complete"]), ({"AAPL": "037833", "MSFT": "594918", "NVDA": "67066G"}, True))
+        self.assertEqual((idx["tickers"], idx["complete"]), ({"AAPL": "037833", "MSFT": "594918", "NVDA": "67066G", "TSLA": "88160R"}, True))
         self.assertFalse((self.data / "hq" / "_check").exists())
 
     def test_nothing_is_written_when_the_newest_quarter_differs_from_hl(self):
@@ -100,6 +102,11 @@ class PastQuarters(unittest.TestCase):
         path.write_text(json.dumps(body))
         self.assertEqual(moves.write_quarters({}, {}, {}, "2026Q3"), {})
         self.assertFalse(any((self.data / "hq").glob("*Q?")))
+
+    def test_an_issuer_hl_lacks_must_have_no_holders(self):
+        self.hl_now()
+        (self.data / "hlf" / "037833.json").unlink()  # AAPL still has holders: hl/ lacking it is a real miss
+        self.assertEqual(moves.write_quarters({}, {}, {}, "2026Q3"), {})
 
     def test_curated_funds_are_left_out_of_the_parity_check(self):
         self.hl_now()
