@@ -1,7 +1,7 @@
 import type { Alert13F, AlertEvent } from './alerts';
 import { channelFailMail, chatText, feedItems, sendMail, teamDuplicateMail, type FeedItem } from './email';
 import { isPro, type Env, type Member } from './env';
-import { perClassNotice, SCHEMA_VERSION, SUMMED_PIN } from './v1';
+import { PER_CLASS, perClassNotice, SCHEMA_VERSION, SUMMED_PIN } from './v1';
 import { PUBLIC_V1_BASE } from './env';
 import { getMember, type Follows } from './members';
 import { listSeats } from './seats';
@@ -492,13 +492,14 @@ function hookMoves(m: Moves): Moves {
 }
 
 /**
- * An endpoint pinned to the summed rows (webhook_schema_version 2026-11-09, until Mar 3, 2027): the class lines of one
+ * An endpoint pinned to the summed rows (webhook_schema_version 2026-11-09, until Mar 3, 2027), and every endpoint before
+ * per-class rows become the default (PER_CLASS.at, Wed Dec 2 00:00Z, as the public changelog says): the class lines of one
  * issuer (tagged issuer_cusip6) as one row, as pinned /v1 rows: cusip null, the issuer's change (mixed when the classes
  * went opposite ways, listed under added or trimmed by its net), dollar sums, shares null, each class in classes[].
  * Bodies without class lines are unchanged.
  */
-export function pinnedMoves(c: Channels, body: string): string {
-  if (c.webhook?.schema_version !== SUMMED_PIN.version || !body.includes('"issuer_cusip6"')) return body;
+export function pinnedMoves(c: Channels, body: string, now: number): string {
+  if ((c.webhook?.schema_version !== SUMMED_PIN.version && now >= PER_CLASS.at) || !body.includes('"issuer_cusip6"')) return body;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const b = JSON.parse(body) as { moves?: Record<string, any> };
   const m = b.moves;
@@ -619,7 +620,7 @@ export async function sendWebhooks(env: Env, m: Member, c: Channels, filings: Al
     // The same endpoint gets each alert once, however many members (a Fund team) connected it.
     if (posted.has(`${c.webhook.url}|${p.id}`)) continue;
     posted.add(`${c.webhook.url}|${p.id}`);
-    const body = withNotice(c, pinnedMoves(c, p.body), now);
+    const body = withNotice(c, pinnedMoves(c, p.body, now), now);
     const r = await sendWebhook(c, p.id, body);
     if (!r) continue;
     if (/^2\d\d$/.test(r.status)) noteDelivered('webhook', filings.filter((a) => p.id.startsWith(a.accession)), events.filter((e) => p.id.startsWith(e.id)));

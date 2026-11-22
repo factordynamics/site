@@ -4341,12 +4341,18 @@ describe('copybook api', () => {
     const a = { slug: 'x', slugs: ['x'], manager: 'Test', name: 'Test LP', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-12', accession: '0000000001-26-000001', sec_url: 'https://www.sec.gov/x', accepted: '2026-11-12T20:05:04Z', moves: r.moves, tickers: [] };
     const mail = alertMail(env, 'x@example.com', [a], [], { investors: [], stocks: [], owned: [] } as never);
     expect([mail.text.match(/mixed: GOOGL sold, GOOG bought/g)?.length, mail.text.match(/mixed: BRK\.A sold, BRK\.B bought/g)?.length, mail.html!.includes('mixed: BRK.A sold, BRK.B bought')]).toEqual([2, 2, true]);
-    // The webhook: keyed by class, tagged; an endpoint pinned to 2026-11-09 gets each issuer as one summed row.
+    // The webhook: keyed by class, tagged; an endpoint pinned to 2026-11-09 gets each issuer as one summed row, and so
+    // does an unpinned one until per-class rows become the default (Wed Dec 2 00:00Z, the public changelog).
     const body = webhookPayloads(env, [a as never], [], Date.now())[0].body;
     const hook = JSON.parse(body).moves;
     expect([hook.new[0].cusip, hook.new[0].issuer_cusip6, hook.new[0].issuer_change, 'class_switch' in hook.new[0]]).toEqual([GC, '02079K', 'mixed', false]);
-    expect(pinnedMoves({ webhook: { url: 'https://h', secret: 's' } } as never, body)).toBe(body);
-    const pinned = JSON.parse(pinnedMoves({ webhook: { url: 'https://h', secret: 's', schema_version: '2026-11-09' } } as never, body)).moves;
+    const dec2 = Date.UTC(2026, 11, 2);
+    const unpinned = { webhook: { url: 'https://h', secret: 's' } } as never;
+    expect(pinnedMoves(unpinned, body, dec2)).toBe(body);
+    const early = JSON.parse(pinnedMoves(unpinned, body, dec2 - 1000)).moves;
+    expect(early.trimmed.map((x: Record<string, unknown>) => [x.issuer_cusip6, x.cusip])).toEqual([['02079K', null], ['084670', null]]);
+    const pinned = JSON.parse(pinnedMoves({ webhook: { url: 'https://h', secret: 's', schema_version: '2026-11-09' } } as never, body, dec2 + 1000)).moves;
+    expect(early).toEqual(pinned);
     expect([pinned.new, pinned.added, pinned.exited]).toEqual([[], [], []]);
     expect(pinned.trimmed.map((x: Record<string, unknown>) => [x.issuer_cusip6, x.cusip, x.change, x.net_direction, x.value_delta, x.shares, (x.classes as { cusip: string }[]).map((c) => c.cusip)])).toEqual([
       ['02079K', null, 'mixed', 'sell', -3_340_000, null, [GC, GL]],
