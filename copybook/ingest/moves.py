@@ -1837,6 +1837,13 @@ def main() -> int:
           + ", ".join(f"{q} {len(v)} rows" for q, v in sorted(per_quarter.items())))
     # Last: it reuses this run's per-filer state (LATEST, CLS, HLQ...) for each past quarter.
     if os.environ.get("SCOPE", "full") == "full" and os.environ.get("COPYBOOK_HQ", "1") == "1":
+        # Free this run's ~8M change rows and per-filer state first: a full run already peaks near the runner's 16 GB
+        # (dry run 45022740537 lost its runner during this step, Nov 22).
+        import gc
+        per_quarter.clear()
+        recs.clear()
+        shards.clear()
+        gc.collect()
         write_quarters(types, curated, filers, PARITY.get("quarter"))
     return 0
 
