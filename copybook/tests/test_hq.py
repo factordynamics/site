@@ -8,7 +8,7 @@ from pathlib import Path
 from ingest import moves
 from ingest.bulk import FB_COLUMNS
 
-AAPL, MSFT = "037833100", "594918104"
+AAPL, MSFT, NVDA = "037833100", "594918104", "67066G104"
 
 
 def fb(data: Path, q: str, cik: str, *lines):
@@ -31,7 +31,7 @@ class PastQuarters(unittest.TestCase):
         A, B, C = "0000000001", "0000000002", "0000000003"
         # 2026Q1: A 100 AAPL; B 40 AAPL and 10 MSFT.
         fb(self.data, "2026Q1", A, (AAPL, "AAPL", 100, 1000))
-        fb(self.data, "2026Q1", B, (AAPL, "AAPL", 40, 400), (MSFT, "MSFT", 10, 300))
+        fb(self.data, "2026Q1", B, (AAPL, "AAPL", 40, 400), (MSFT, "MSFT", 10, 300), (NVDA, "NVDA", 3, 60))
         # 2026Q2: A adds 50 AAPL at $12; B sells all AAPL, keeps MSFT; C (first book) buys 5 MSFT.
         fb(self.data, "2026Q2", A, (AAPL, "AAPL", 150, 1800))
         fb(self.data, "2026Q2", B, (MSFT, "MSFT", 10, 330))
@@ -84,8 +84,12 @@ class PastQuarters(unittest.TestCase):
         _, q1 = self.rows("2026Q1", AAPL)
         self.assertEqual((q1["1"]["change"], q1["1"]["prev_shares"], q1["1"]["shares"]), ("added", 90, 100))
         self.assertFalse((self.data / "hq" / "2025Q4").exists())
+        # B left NVDA in 2026Q2 and nobody holds it: the quarter still has the file, with the exit.
+        body, nv = self.rows("2026Q2", NVDA)
+        self.assertEqual((body["counts"]["holders"], body["counts"]["exited"], nv["2"]["change"], nv["2"]["value_delta"]),
+                         (0, 1, "exited", -60))
         idx = json.loads((self.data / "hq" / "2026Q2" / "index.json").read_text())
-        self.assertEqual((idx["tickers"], idx["complete"]), ({"AAPL": "037833", "MSFT": "594918"}, True))
+        self.assertEqual((idx["tickers"], idx["complete"]), ({"AAPL": "037833", "MSFT": "594918", "NVDA": "67066G"}, True))
         self.assertFalse((self.data / "hq" / "_check").exists())
 
     def test_nothing_is_written_when_the_newest_quarter_differs_from_hl(self):

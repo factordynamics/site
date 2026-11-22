@@ -1417,7 +1417,9 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict, 
                 or any(counts[k] != n for k, n in tally.items()):
             GATE_OFF.append({"issuer6": code, "net_by_period": counts["net_by_period"], "rows_sum": by_q,
                              "counts": {k: counts[k] for k in tally}, "rows": tally})
-        if not counts["holders"]:
+        # A past quarter keeps an issuer every filer left that quarter: its exits are that quarter's trades (dry run
+        # Nov 22: 721 2026Q3 exits had no hq/ file because the issuer's other holders' latest books are older).
+        if not counts["holders"] and not quarter_dir:
             continue
         NETQ[code] = {k: v for k, v in counts["net_by_period"].items() if v}
         # net is one quarter's trades, as /v1: the latest quarter any holder reports (net_quarter); net_by_period
