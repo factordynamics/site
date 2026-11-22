@@ -1002,7 +1002,7 @@ def older_changes(shards: list[dict], curated: dict, per_quarter: dict[str, list
 HQ = DATA / "hq"  # hq/{quarter}/{issuer6}.json and index.json: every holder per issuer, per past quarter (R2 hq/, paid)
 HQ_FORMAT = "1"  # bump with a change to hq/'s layout: the uploader then re-sends every past quarter once
 HQ_MIN_BOOKS = 5000  # a quarter folder with fewer books is live-EDGAR stragglers, not a quarter (export.py's rule)
-QUARTER_INDEX: dict[str, str] = {}  # ticker -> issuer6 of the quarter write_holders built last (quarter_dir mode)
+QUARTER_INDEX: dict[str, dict] = {}  # tickers, funds and classes of the quarter write_holders built last (quarter_dir)
 HQ_COMPARE = ("shares", "prev_shares", "value", "prev_value", "change", "value_delta")
 
 
@@ -1121,7 +1121,7 @@ def write_quarters(types: dict, curated: dict, filers: dict, newest: str | None)
             "note": "ticker -> issuer code for this quarter; one file per issuer with every 13F holder of the quarter",
             "quarter": q, "format": HQ_FORMAT, "schema": HL_SCHEMA, "complete": True, "issuers": got,
             "sig": hashlib.sha1(f"{HQ_FORMAT}|{HL_SCHEMA}|{done}".encode()).hexdigest()[:12],
-            "tickers": dict(sorted(QUARTER_INDEX.items()))})
+            **QUARTER_INDEX})
         out[q] = got
     for p in HQ.glob("*Q?"):
         if p.name not in out:
@@ -1482,11 +1482,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict, 
     for p in full.glob("*.json"):
         if p.name not in written and p.name != "index.json":
             p.unlink()
-    if quarter_dir:
-        QUARTER_INDEX.clear()
-        QUARTER_INDEX.update(index)
-        return len(written)
-    if os.environ.get("SCOPE", "full") == "full":  # hlf/BUILD: the full run whose all-filer books built this index;
+    if os.environ.get("SCOPE", "full") == "full" and not quarter_dir:  # hlf/BUILD: the full run whose all-filer books built this index;
         # curated rebuilds keep it. upload_history.py publishes it as meta/builds.json stores.hl.data_built_at.
         write(full / "BUILD", read(DATA / "build.json") or {})
     # Issuer codes whose lines are separate funds (VanEck ETF Trust 92189F: SMH, GDX, MOAT), never one issuer's share
@@ -1504,6 +1500,12 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict, 
         n_tick[c] = n_tick.get(c, 0) + 1
     funds = {code: [{"cusip": c, "ticker": t} for c, t in sorted(f.items())] for code, f in sorted(funds.items())
              if len(f) > 1 or n_tick.get(code, 0) > 1}
+    if quarter_dir:  # the quarter's own funds and classes (payments, Nov 22: a series closed since is in no later list)
+        QUARTER_INDEX.clear()
+        QUARTER_INDEX.update({"tickers": dict(sorted(index.items())), "funds": funds, "classes": {
+            code: [{"cusip": c, "ticker": t} for c, t in sorted(d.items())]
+            for code, d in sorted(SPLIT.items()) if code not in FUNDS_NOW}})
+        return len(written)
     # Schema 6 per-CUSIP files (hlc/), written only when every filer's hlc/ rows sum to its hl/ row; otherwise the
     # previous hlc/ and `classes` stay and the run logs why (hl/ itself is unaffected).
     if CLASS_PARITY_OFF:

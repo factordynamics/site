@@ -12,8 +12,9 @@ AAPL, MSFT, NVDA, TSLA = "037833100", "594918104", "67066G104", "88160R101"
 
 
 def fb(data: Path, q: str, cik: str, *lines):
-    """lines: (cusip, ticker, shares, value)."""
-    rows = [[t, "ISSUER " + t, "COM", c, None, sh, v, "SH", f"{cik}-{q}", None, None, None, None] for c, t, sh, v in lines]
+    """lines: (cusip, ticker, shares, value[, title])."""
+    rows = [[x[1], "ISSUER " + x[1], (x[4:] or ("COM",))[0], x[0], None, x[2], x[3], "SH", f"{cik}-{q}", None, None, None, None]
+            for x in lines]
     (data / "fb" / q).mkdir(parents=True, exist_ok=True)
     (data / "fb" / q / f"{cik}.json").write_text(json.dumps({
         "ok": True, "name": f"Filer {cik[-1]}", "accession": f"{cik}-{q}", "filing_date": "2026-01-01",
@@ -91,8 +92,24 @@ class PastQuarters(unittest.TestCase):
         self.assertEqual((body["counts"]["holders"], body["counts"]["exited"], nv["2"]["change"], nv["2"]["value_delta"]),
                          (0, 1, "exited", -60))
         idx = json.loads((self.data / "hq" / "2026Q2" / "index.json").read_text())
+        self.assertEqual((idx["funds"], idx["classes"]), ({}, {}))
         self.assertEqual((idx["tickers"], idx["complete"]), ({"AAPL": "037833", "MSFT": "594918", "NVDA": "67066G", "TSLA": "88160R"}, True))
         self.assertFalse((self.data / "hq" / "_check").exists())
+
+    def test_a_quarter_lists_its_own_funds_and_share_classes(self):
+        # Only in 2026Q1: two VanEck ETFs under one code (since gone from every book) and Berkshire's two classes.
+        fb(self.data, "2026Q1", "0000000005", ("92189F676", "SMH", 10, 3000, "SEMICONDUCTR ETF"),
+           ("92189F106", "GDX", 20, 1000, "GOLD MINERS ETF"), ("084670108", "BRK.A", 1, 700000, "CL A"),
+           ("084670702", "BRK.B", 100, 50000, "CL B NEW"))
+        self.hl_now()
+        moves.write_quarters({}, {}, {}, "2026Q3")
+        q1 = json.loads((self.data / "hq" / "2026Q1" / "index.json").read_text())
+        q2 = json.loads((self.data / "hq" / "2026Q2" / "index.json").read_text())
+        self.assertEqual(q1["funds"], {"92189F": [{"cusip": "92189F106", "ticker": "GDX"},
+                                                  {"cusip": "92189F676", "ticker": "SMH"}]})
+        self.assertEqual(q1["classes"], {"084670": [{"cusip": "084670108", "ticker": "BRK.A"},
+                                                    {"cusip": "084670702", "ticker": "BRK.B"}]})
+        self.assertEqual((q2["funds"], q2["classes"]), ({}, {}))  # the next quarter has neither: its own lists
 
     def test_nothing_is_written_when_the_newest_quarter_differs_from_hl(self):
         self.hl_now()

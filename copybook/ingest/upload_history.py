@@ -75,6 +75,9 @@ GZIP = [os.environ.get("COPYBOOK_UPLOAD_GZIP", "1") != "0"]  # cleared when the 
 # Sent first, in this order: new filings' h/ books (fresh_only), then the holder index (what /v1 ticker views and net
 # read: on Nov 11 a reshape of every h/ book queued 26k files ahead of it), then the rest (bulk early: few, large files).
 ORDER = ("hl/", "h/", "bulk/", "fb/", "hq/")
+# hq/ objects stored gzip-compressed (~4x smaller): on only if R2's projected total with hq/ passes 7 GB (lead, Nov 22).
+# Turning it on or off changes every hq/ key's bytes: bump moves.HQ_FORMAT with it so each quarter is re-sent once.
+HQ_GZIP = False
 PROBE_MAX_S = 1.0  # gene's /health?probe=1 (ms when idle) slower than this: members are waiting, so the backlog backs off
 FRESH_MAX = 60  # files per run in EDGAR hours: a few new filings' h/ books, never the backlog
 QUIET_LEAD_S = 90  # no bundle starts this close to a COPYBOOK_UPLOAD_QUIET window (one bundle takes 3-30 s)
@@ -421,6 +424,8 @@ def put_bundle(batch: list[tuple[str, Path, str]], token: Token) -> tuple[set[st
     with tarfile.open(fileobj=buf, mode="w", format=tarfile.PAX_FORMAT) as tar:
         for key, path, _ in batch:
             body = path.read_bytes()
+            if HQ_GZIP and key.startswith("hq/"):  # stored gzipped (R2 free tier, lead Nov 22); the reader gunzips
+                body = gzip.compress(body, 9, mtime=0)
             info = tarfile.TarInfo(key)
             info.size, info.mtime = len(body), 0
             tar.addfile(info, io.BytesIO(body))
