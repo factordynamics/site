@@ -343,7 +343,67 @@ def seed(periods: list[str]) -> int:
     return done
 
 
+def reseed_diff(q: str, books: dict[str, dict]) -> dict:
+    """What re-reading q from SEC's data sets would change in fb/{q}: books a late filer adds, and existing books whose
+    filing, total value or position count would change (a live EDGAR book write_period keeps is never changed)."""
+    folder = FB / q
+    added, changed, same = [], [], 0
+    for cik, b in sorted(books.items()):
+        if not b["ok"]:
+            continue
+        path = folder / f"{cik}.json"
+        try:
+            old = json.loads(path.read_text()) if path.exists() else None
+        except ValueError:
+            old = None
+        if not old or not old.get("ok"):
+            added.append(cik)
+            continue
+        if old.get("source") != b["source"] and old.get("filing_date", "") >= b["filing_date"]:
+            same += 1  # write_period keeps the newer live EDGAR book
+            continue
+        before = (old.get("accession"), round(old.get("total_value") or 0), old.get("position_count"))
+        after = (b["accession"], b["total_value"], b["position_count"])
+        if before != after:
+            changed.append({"cik": cik, "name": b["name"], "accession": [before[0], after[0]],
+                            "total_value": [before[1], after[1]], "positions": [before[2], after[2]],
+                            "dollars": abs(after[1] - before[1])})
+        else:
+            same += 1
+    changed.sort(key=lambda c: -c["dollars"])
+    return {"quarter": q, "added": len(added), "unchanged": same, "changed": changed}
+
+
+def reseed(q: str) -> int:
+    """Re-read q with its late-filing window (lead, Nov 22: one quarter per night, alone in its full run). Books may
+    only be added; if any existing book's filing, total or position count would change, nothing is written, the diff is
+    reported and the run fails before anything publishes. Otherwise the books are written and q marked complete."""
+    urls = sets_for(q, windows())
+    if not urls or len(urls) < 2:
+        print(f"::error::datasets: re-seed {q}: SEC's data set and its late window aren't both out ({urls})")
+        return 1
+    books = read_period(q, [fetch_set(u) for u in urls])
+    d = reseed_diff(q, books)
+    lines = [f"- {c['name']} {c['cik']}: accession {c['accession'][0]} -> {c['accession'][1]}, total "
+             f"${c['total_value'][0]:,} -> ${c['total_value'][1]:,}, positions {c['positions'][0]} -> {c['positions'][1]}"
+             for c in d["changed"]]
+    head = (f"datasets: re-seed {q} from {len(urls)} data sets: {d['added']} books added, {d['unchanged']} unchanged, "
+            f"{len(d['changed'])} existing books would change")
+    print(head + "".join("\n" + x for x in lines[:20]), flush=True)
+    if os.environ.get("GITHUB_STEP_SUMMARY"):
+        with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+            f.write(f"### Re-seed {q}\n\n{head}\n\n" + "".join(x + "\n" for x in lines[:200]) + "\n")
+    if d["changed"]:
+        print(f"::error::datasets: re-seed {q} held: {len(d['changed'])} existing books would change; nothing written")
+        return 1
+    write_period(q, books)
+    (FB / q / ".complete").write_text(json.dumps({"sets": urls, "filers": len(books), "format": FORMAT}) + "\n")
+    return 0
+
+
 def main(argv: list[str]) -> int:
+    if argv[:1] == ["--reseed"]:
+        return reseed(argv[1])
     periods = argv or [(p := stock_period(date.today())), prev_quarter(p)]
     seed(periods)
     return 0

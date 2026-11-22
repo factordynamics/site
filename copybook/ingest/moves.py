@@ -1077,12 +1077,15 @@ def write_quarters(types: dict, curated: dict, filers: dict, newest: str | None)
     if not newest or not past:
         print(f"moves: hq/: no past quarter to build (hl/ quarter {newest}, fb/ {[p.name for p in folders]})", flush=True)
         return {}
-    prior = {}
-    if folders and past[0] == folders[0].name:
+    def prior_of(q: str) -> dict:
+        """The quarter before q from SEC's data set when fb/ doesn't have it (2025Q4's 2025Q3, the oldest's)."""
+        if (DATA / "fb" / prev_quarter(q)).is_dir():
+            return {}
         try:
-            prior = prior_books(prev_quarter(past[0]))
-        except Exception as e:  # noqa: BLE001 - the oldest quarter then has no changes, as in older_changes
-            print(f"::warning::moves: hq/: prior quarter {prev_quarter(past[0])}: {e}", flush=True)
+            return prior_books(prev_quarter(q))
+        except Exception as e:  # noqa: BLE001 - the quarter then has no changes, as in older_changes
+            print(f"::warning::moves: hq/: prior quarter {prev_quarter(q)}: {e}", flush=True)
+            return {}
     check = HQ / "_check"
     shutil.rmtree(check, ignore_errors=True)
     got = quarter_holders(newest, types, curated, filers, check, {})
@@ -1115,7 +1118,7 @@ def write_quarters(types: dict, curated: dict, filers: dict, newest: str | None)
         done = marker.read_text()
         pm = DATA / "fb" / prev_quarter(q) / ".complete"
         before = pm.read_text() if pm.exists() else ""
-        got = quarter_holders(q, types, curated, filers, dest, prior if q == folders[0].name else {})
+        got = quarter_holders(q, types, curated, filers, dest, prior_of(q))
         if got < 0:
             shutil.rmtree(dest, ignore_errors=True)
             continue
