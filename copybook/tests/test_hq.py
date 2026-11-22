@@ -36,17 +36,26 @@ class PastQuarters(unittest.TestCase):
         fb(self.data, "2026Q2", A, (AAPL, "AAPL", 150, 1800))
         fb(self.data, "2026Q2", B, (MSFT, "MSFT", 10, 330))
         fb(self.data, "2026Q2", C, (MSFT, "MSFT", 5, 165))
-        (self.data / "fb" / "2026Q2" / ".complete").write_text('{"format": "4"}\n')
+        for q in ("2026Q1", "2026Q2"):
+            (self.data / "fb" / q / ".complete").write_text('{"format": "4"}\n')
+        # 2025Q4: a few books, no .complete (SEC's late window not read): never built.
+        fb(self.data, "2025Q4", A, (AAPL, "AAPL", 90, 900))
         # 2026Q3, the newest (hl/'s quarter): A trims to 120.
         fb(self.data, "2026Q3", A, (AAPL, "AAPL", 120, 1560))
+        # D's 2026Q3 book is only a public f/ shard (no fb/ book yet): hl/ reads it, so the parity build must too.
+        (self.data / "f").mkdir()
+        (self.data / "f" / "0000000004.json").write_text(json.dumps({
+            "ok": True, "quarter": "2026Q3", "name": "Filer 4", "accession": "4-q3", "columns": list(FB_COLUMNS),
+            "rows": [["AAPL", "ISSUER AAPL", "COM", AAPL, None, 7, 91, "SH", "4-q3", None, None, None, None]]}))
 
     def tearDown(self):
         moves.DATA, moves.HQ, moves.HQ_MIN_BOOKS, moves.prior_books = self.saved
         self.tmp.cleanup()
 
     def hl_now(self):
-        """hlf/ as the run's hl/ build left it: the newest quarter, built from the same books."""
+        """hlf/ as the run's hl/ build left it: the newest quarter, from the same books and D's f/ shard."""
         assert moves.quarter_holders("2026Q3", {}, {}, {}, self.data / "hlf", {}) > 0
+        assert any(r[0] == "0000000004" for r in json.loads((self.data / "hlf" / "037833.json").read_text())["rows"])
 
     def rows(self, q, cusip):
         body = json.loads((self.data / "hq" / q / f"{cusip[:6]}.json").read_text())
@@ -57,7 +66,7 @@ class PastQuarters(unittest.TestCase):
     def test_each_past_quarter_is_built_from_its_own_books(self):
         self.hl_now()
         got = moves.write_quarters({}, {}, {}, "2026Q3")
-        self.assertEqual(sorted(got), ["2026Q1", "2026Q2"])  # never the newest: hl/ serves it
+        self.assertEqual(sorted(got), ["2026Q1", "2026Q2"])  # complete ones only, never the newest: hl/ serves it
         body, rows = self.rows("2026Q2", AAPL)
         # A: +50 shares at Q2's $12 = +600 (not the 800 value change); B's 40 shares are gone: -400 at Q1's value.
         self.assertEqual(rows["1"], {"period": "2026Q2", "change": "added", "shares": 150, "prev_shares": 100,
@@ -71,12 +80,12 @@ class PastQuarters(unittest.TestCase):
         _, ms = self.rows("2026Q2", MSFT)
         # C's first book: no prior on file, as in hl/ (counted no_prior, never "new").
         self.assertEqual((ms["2"]["change"], ms["3"]["change"]), ("unchanged", None))
-        # The oldest stored quarter has no quarter before it here: holders, no changes.
+        # 2025Q4 is never built (not complete), but its books are still 2026Q1's prior quarter.
         _, q1 = self.rows("2026Q1", AAPL)
-        self.assertEqual((q1["1"]["change"], q1["1"]["shares"]), (None, 100))
+        self.assertEqual((q1["1"]["change"], q1["1"]["prev_shares"], q1["1"]["shares"]), ("added", 90, 100))
+        self.assertFalse((self.data / "hq" / "2025Q4").exists())
         idx = json.loads((self.data / "hq" / "2026Q2" / "index.json").read_text())
         self.assertEqual((idx["tickers"], idx["complete"]), ({"AAPL": "037833", "MSFT": "594918"}, True))
-        self.assertFalse(json.loads((self.data / "hq" / "2026Q1" / "index.json").read_text())["complete"])
         self.assertFalse((self.data / "hq" / "_check").exists())
 
     def test_nothing_is_written_when_the_newest_quarter_differs_from_hl(self):

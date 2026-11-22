@@ -1023,6 +1023,15 @@ def quarter_holders(q: str, types: dict, curated: dict, filers: dict, dest: Path
             "cik": p.stem, "quarter": q, "ok": True}
         shards.append(shard)
         changes(shard, prior.get(p.stem), rec)
+    # As hl/ does (changes()): a filer of q with no fb/ book is read from its public f/ shard unless that is truncated
+    # (dry run Nov 22: 723 hl/ 2026Q3 rows missing otherwise). f/ holds latest quarters only, so past quarters get none.
+    have = {s["cik"] for s in shards}
+    for p in sorted((DATA / "f").glob("*.json")):
+        if p.stem not in have and (shard := read(p)) and shard.get("ok") and shard.get("quarter") == q \
+                and not shard.get("truncated"):
+            shard = shard | {"cik": p.stem}
+            shards.append(shard)
+            changes(shard, prior.get(p.stem))
     return write_holders(shards, types, curated, filers, dest)
 
 
@@ -1059,7 +1068,8 @@ def write_quarters(types: dict, curated: dict, filers: dict, newest: str | None)
     import hashlib
     import shutil
     folders = sorted(p for p in (DATA / "fb").glob("*Q?") if p.is_dir())
-    past = [p.name for p in folders if newest and p.name < newest
+    # Complete quarters only (fb/{q}/.complete: SEC's data set and its late window both read): the only ones uploaded.
+    past = [p.name for p in folders if newest and p.name < newest and (p / ".complete").exists()
             and sum(1 for _ in p.glob("*.json")) >= HQ_MIN_BOOKS]
     if not newest or not past:
         print(f"moves: hq/: no past quarter to build (hl/ quarter {newest}, fb/ {[p.name for p in folders]})", flush=True)
@@ -1084,14 +1094,14 @@ def write_quarters(types: dict, curated: dict, filers: dict, newest: str | None)
     for q in past:
         dest = HQ / q
         marker = DATA / "fb" / q / ".complete"
-        done = marker.read_text() if marker.exists() else ""
+        done = marker.read_text()
         got = quarter_holders(q, types, curated, filers, dest, prior if q == folders[0].name else {})
         if got < 0:
             shutil.rmtree(dest, ignore_errors=True)
             continue
         write(dest / "index.json", {
             "note": "ticker -> issuer code for this quarter; one file per issuer with every 13F holder of the quarter",
-            "quarter": q, "format": HQ_FORMAT, "schema": HL_SCHEMA, "complete": bool(done), "issuers": got,
+            "quarter": q, "format": HQ_FORMAT, "schema": HL_SCHEMA, "complete": True, "issuers": got,
             "sig": hashlib.sha1(f"{HQ_FORMAT}|{HL_SCHEMA}|{done}".encode()).hexdigest()[:12],
             "tickers": dict(sorted(QUARTER_INDEX.items()))})
         out[q] = got
