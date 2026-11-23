@@ -69,7 +69,7 @@ jobs:
       run:
         working-directory: copybook/web
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Deploy freeze
@@ -87,7 +87,7 @@ jobs:
           echo "::notice::Deploy freeze (window from ${start}): copybook/web from ${ref:0:7}${p0:+ (P0)}"
           rm -rf copybook/web && git checkout "$ref" -- copybook/web
           echo "COPYBOOK_BUILD_SHA=$(git log -1 --format=%H "$ref" -- copybook/web)" >> "$GITHUB_ENV"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -130,7 +130,7 @@ jobs:
       - name: IndexNow changed pages
         continue-on-error: true
         run: node scripts/indexnow.mjs prep dist "${RUNNER_TEMP}/indexnow-urls.txt"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         continue-on-error: true
         with:
           name: indexnow-urls
@@ -148,7 +148,7 @@ jobs:
             echo "::notice::GitHub Pages is not enabled for this repo yet; build checked, deploy skipped."
           fi
       - if: steps.pages.outputs.enabled == 'true'
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: copybook/web/dist
 
@@ -161,7 +161,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
 
   # IndexNow, part 2: once the deploy is live, submit the changed pages. A failure here never fails the run.
   indexnow:
@@ -169,10 +169,10 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           sparse-checkout: copybook/web
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: indexnow-urls
           path: ${{ runner.temp }}
