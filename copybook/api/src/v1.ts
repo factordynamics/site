@@ -40,6 +40,16 @@ export function perClassNotice(pinned: boolean, base: string, now = Date.now()):
 /** Changes to /v1, newest first. Served at /v1/changelog and summarised in the spec. */
 export const CHANGELOG: { id: string; date: string; shipped_at?: string; schema_version: string; breaking: boolean; status: 'shipped' | 'announced'; changes: string[] }[] = [
   {
+    id: '2026-11-25-plan-names',
+    date: '2026-11-25',
+    schema_version: SCHEMA_VERSION,
+    breaking: false,
+    status: 'shipped',
+    changes: [
+      'Plan names: Copy Pro is now Pro and Copy Fund is now Fund (and Copy is Plus). Only display text changed: the descriptions and error messages in this API and its OpenAPI spec. Plan ids (`copy`, `pro`, `fund`), error codes and every field value are unchanged, so code that matches on them needs no change.',
+    ],
+  },
+  {
     id: '2026-11-25-no-book-reason',
     date: '2026-11-25',
     schema_version: SCHEMA_VERSION,
@@ -205,7 +215,7 @@ export const CHANGELOG: { id: string; date: string; shipped_at?: string; schema_
       'Holders `counts.net` is the shares traded in USD (shares bought or sold x each filing\'s price) over `counts.net_quarter`, the latest quarter (or ?quarter=, the same latest quarter), and equals that quarter\'s /v1/changes?ticker= sum. `counts.net_by_period` sums the same by each filer\'s latest filing period: not quarterly flow for any quarter but the latest.',
       'Holder rows add `suspect_duplicate` {cusip, shares, value} when the same quarter\'s book also lists the security under a reissue\'s other CUSIP (IFP Advisors\' TEVA): one position is kept on the new code, and the stale line is out of every sum. Present only when the holder index carries such a line.',
       'Holders of a reissue merged at read time (TEVA until the data run publishes its merged index): a prior-quarter holder whose filer has since filed a newer 13F, and is in neither CUSIP\'s current rows, is listed apart in `data.pending[]` with `reason: "filed_newer_not_indexed"` and `counts.pending`, out of holders, the counts and net; `counts.exits_pending` stays true meanwhile. `counts.holders` counts share positions only, like `count`; calls and puts are `counts.option_rows`.',
-      'Rate limits are per account (Copy Pro: 60 a minute and 20,000 a day across all its API keys; Copy Fund: the same per seat, the owner being one seat), not per key; a 429 says which (`scope`: account or seat) with `retry_after_seconds`. A bulk file download isn\'t metered, only the listing. Limits were briefly per key (each of up to 10 keys had its own); no member was affected.',
+      'Rate limits are per account (Pro: 60 a minute and 20,000 a day across all its API keys; Fund: the same per seat, the owner being one seat), not per key; a 429 says which (`scope`: account or seat) with `retry_after_seconds`. A bulk file download isn\'t metered, only the listing. Limits were briefly per key (each of up to 10 keys had its own); no member was affected.',
       'Nov 19, 2026: date moved. Full past-quarter coverage by ticker is now due Mon Nov 30, 2026 (was Nov 23). Until a past quarter is covered, by-ticker requests for it keep answering 400 quarter_incomplete_by_ticker; quarters open one at a time as their builds complete.',
       'Nov 22, 2026: coverage by quarter, replacing "full coverage by Nov 30": 2026Q1 from Mon Nov 30; 2025Q4 and 2025Q1 in early December; 2026Q2 once SEC publishes its late filings. Each quarter opens on its own once its build is complete; until then by-ticker requests for it answer 400 quarter_incomplete_by_ticker.',
     ],
@@ -501,9 +511,9 @@ let build: { data_built_at: string | null; build_id: string | null } = { data_bu
 export const ERRORS = {
   unauthorized: 'No API key was sent.',
   invalid_key: 'The API key is malformed, unknown or revoked.',
-  subscription_inactive: 'The Copy Pro subscription behind this key is not active.',
-  pro_required: 'API access is part of Copy Pro.',
-  rate_limited: 'Rate limit reached for this account (Copy Fund: this seat), across all its API keys; see the RateLimit headers and retry_after_seconds.',
+  subscription_inactive: 'The Pro or Fund subscription behind this key is not active.',
+  pro_required: 'API access is part of Pro and Fund.',
+  rate_limited: 'Rate limit reached for this account (Fund: this seat), across all its API keys; see the RateLimit headers and retry_after_seconds.',
   not_found: 'No such resource.',
   bad_request: 'A parameter is missing or invalid.',
   not_yet_available: 'This option is documented but not served yet.',
@@ -605,7 +615,7 @@ async function routeV1(req: Request, env: Env, url: URL, path: string): Promise<
   const dl = await import('./download');
   const auth: KeyAuth = await authKey(env, req.headers.get('authorization'));
   if (!auth.ok) return v1error(auth.code as ErrorCode, auth.status, auth.message);
-  // Limits are per account (Copy Pro: every key together) or per seat (Copy Fund: the owner is one seat), never per key;
+  // Limits are per account (Pro: every key together) or per seat (Fund: the owner is one seat), never per key;
   // each key still counts its own use for the keys list. A bulk file download (its redirect to R2) isn't metered: only
   // the listing is. Nor is /v1/meta/builds, which clients poll to see a rebuild coming.
   const scope = auth.member.plan === 'fund' ? 'seat' : 'account';
