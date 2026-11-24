@@ -70,7 +70,7 @@ export function cardSvg(c, sans = 'Geist', mono = 'Geist Mono') {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
 <rect width="1200" height="630" fill="#fbfaf7"/>${grid}
 <g transform="translate(72 58) scale(1.75)"><rect x="1.5" y="5" width="14" height="17.5" rx="3.2" fill="#0c0e13"/><rect x="8" y="1.5" width="14.5" height="17.5" rx="3.2" fill="#2b44d6" stroke="#fbfaf7" stroke-width="1.4"/><rect x="11" y="6" width="8.5" height="1.8" rx=".9" fill="#fff"/><rect x="11" y="9.6" width="6" height="1.8" rx=".9" fill="#fff" opacity=".85"/><rect x="11" y="13.2" width="3.6" height="1.8" rx=".9" fill="#fff" opacity=".7"/></g>
-<text x="124" y="94" font-family="${sans}" font-weight="600" font-size="32" letter-spacing="-0.8" fill="#0c0e13">Copybook</text>
+<text x="124" y="94" font-family="${sans}" font-weight="600" font-size="32" letter-spacing="-0.8" fill="#0c0e13">Factor Dynamics</text>
 <text x="1128" y="92" text-anchor="end" font-family="${sans}" font-weight="500" font-size="22" fill="#5f6572">${x(`${qLabel(c.quarter)} 13F · filed ${dLabel(c.filing_date)}`)}</text>
 <text x="72" y="186" font-family="${sans}" font-weight="600" font-size="58" letter-spacing="-2" fill="#0c0e13">${x(cut(c.manager, 30))}</text>
 <text x="72" y="228" font-family="${sans}" font-size="24" fill="#5f6572">${x(cut(c.manager === c.firm ? `Top moves since ${qLabel(c.prev_quarter)}` : `${c.firm} · top moves since ${qLabel(c.prev_quarter)}`, 70))}</text>

@@ -303,7 +303,7 @@ export function Status() {
     <div className="container-x pt-12 md:pt-16">
       <header className="max-w-2xl">
         <p className="text-[13px] font-medium text-accent">Status</p>
-        <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-h1">Copybook status.</h1>
+        <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-h1">Factor Dynamics status.</h1>
         <p className="mt-4 text-[17px] leading-relaxed text-ink-2">
           Checked live from your browser against the same public sources the site uses, and rechecked every minute. Alert timings are on the{' '}
           <Link to="/speed/" className="font-medium text-accent hover:text-accent-2">

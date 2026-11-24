@@ -13,7 +13,7 @@ export function NotFound() {
         <SearchBox size="lg" />
       </div>
       <Button to="/" variant="ghost" className="mt-6">
-        Back to Copybook
+        Back to Factor Dynamics
       </Button>
     </div>
   )

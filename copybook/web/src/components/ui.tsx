@@ -18,7 +18,7 @@ export function Wordmark({ className = '', dark = false }: { className?: string;
   return (
     <span className={`inline-flex items-center gap-2 ${className}`}>
       <Mark />
-      <span className={`text-[17px] font-semibold tracking-[-0.035em] ${dark ? 'text-white' : 'text-ink'}`}>Copybook</span>
+      <span className={`text-[17px] font-semibold tracking-[-0.035em] ${dark ? 'text-white' : 'text-ink'}`}>Factor Dynamics</span>
     </span>
   )
 }

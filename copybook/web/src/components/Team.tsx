@@ -10,7 +10,7 @@ type Seats = { max: number; active?: number; revoke_available?: boolean; seats: 
 const ERR: Record<string, string> = {
   seat_exists: 'That address already has a seat.',
   seat_limit: 'All your seats are in use. Remove one to invite someone else.',
-  email_taken: 'That address has its own Copybook account, so it can’t join as a seat. Ask them to cancel it first, or use another address.',
+  email_taken: 'That address has its own Factor Dynamics account, so it can’t join as a seat. Ask them to cancel it first, or use another address.',
 }
 const when = (t?: number | string | null) => {
   const d = typeof t === 'number' ? new Date(t < 1e12 ? t * 1000 : t) : t ? new Date(t) : null

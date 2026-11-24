@@ -1,18 +1,20 @@
 import { Suspense, useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { getToken, isPaying, useMemberState } from '../lib/account'
-import { quarterLabel } from '../lib/data'
-import { seasonNow } from '../lib/stocks'
 import { SearchBox } from './Search'
 import { Boundary, Button, Wordmark } from './ui'
 import { UpdatePrompt } from './UpdatePrompt'
 
-const NAV = [
+// The Factor Dynamics sections (S1): labels over today's paths, no new URLs. Stocks opens on Consensus (every stock
+// page is reached by search); Insiders is Coming with no page; Terminal is Holdterm until S2 builds /terminal/.
+type NavItem = { to: string; label: string; end?: boolean; soon?: boolean; external?: boolean }
+const NAV: NavItem[] = [
+  { to: '/', label: 'Today', end: true },
   { to: '/investors/', label: 'Investors' },
-  { to: '/flow/', label: 'Flow' },
-  { to: '/consensus/', label: 'Consensus' },
-  { to: '/pricing/', label: 'Pricing' },
-  { to: '/about/', label: 'About' },
+  { to: '/consensus/', label: 'Stocks' },
+  { to: '', label: 'Insiders', soon: true },
+  { to: '/my-book/', label: 'My book' },
+  { to: 'https://holdterm.factordynamics.com/', label: 'Terminal', external: true },
 ]
 
 export function Layout() {
@@ -26,10 +28,7 @@ export function Layout() {
   const paying = signedIn && isPaying(member)
   // While a stored session's /me loads, show neither: a trialing or paid member never sees "Try Copy free" flash.
   const cta = !(getToken() && member === undefined)
-  const sn = seasonNow()
-  // During a 13F season the tracker sits after Flow.
-  const base = sn.live ? [...NAV.slice(0, 2), { to: '/season/', label: `${quarterLabel(sn.quarter).split(' ')[0]} season` }, ...NAV.slice(2)] : NAV
-  const nav = signedIn ? [...base.slice(0, base.length - 2), { to: '/my-book/', label: 'My book' }, ...base.slice(-2)] : base
+  const nav = NAV
   const [menu, setMenu] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   useEffect(() => {
@@ -86,26 +85,23 @@ export function Layout() {
       </a>
       <header className={`sticky top-0 z-40 transition-[background,box-shadow] ${scrolled || menu ? 'bg-paper/85 shadow-[0_1px_0_var(--color-line)] backdrop-blur-xl' : 'bg-transparent'}`}>
         <div className="container-x flex h-16 items-center gap-6">
-          <Link to="/" aria-label="Copybook home" className="shrink-0">
+          <Link to="/" aria-label="Factor Dynamics home" className="shrink-0">
             <Wordmark />
           </Link>
-          <nav className="hidden items-center gap-1 whitespace-nowrap md:flex" aria-label="Main">
+          <nav className="hidden items-center gap-0.5 whitespace-nowrap lg:flex" aria-label="Main">
             {nav.map((n) => (
-              <NavLink
-                key={n.to}
-                to={n.to}
-                className={({ isActive }) => `rounded-full px-3 py-1.5 text-[14px] transition-colors ${isActive ? 'text-ink font-medium' : 'text-ink-2 hover:text-ink'}`}
-              >
-                {n.label}
-              </NavLink>
+              <NavItemLink key={n.label} n={n} className={(on) => `rounded-full px-3 py-1.5 text-[14px] transition-colors ${on ? 'text-ink font-medium' : 'text-ink-2 hover:text-ink'}`} />
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-2">
             {!home && (
-              <div className={`hidden lg:block ${signedIn && !paying ? 'w-44 xl:w-52' : 'w-64'}`}>
+              <div className={`hidden xl:block ${signedIn && !paying ? 'w-44 2xl:w-52' : 'w-56'}`}>
                 <SearchBox />
               </div>
             )}
+            <NavLink to="/pricing/" className={({ isActive }) => `hidden h-8 items-center rounded-full px-3 text-[13px] font-medium lg:inline-flex ${isActive ? 'text-ink' : 'text-ink-2 hover:text-ink'}`}>
+              Pricing
+            </NavLink>
             {signedIn && !paying && (
               <Link to="/account/" className="hidden h-8 items-center rounded-full px-3 text-[13px] font-medium text-ink-2 hover:bg-ink/5 hover:text-ink sm:inline-flex">
                 Account
@@ -118,7 +114,7 @@ export function Layout() {
             )}
             <button
               type="button"
-              className="-mr-2 inline-flex size-10 items-center justify-center rounded-full text-ink md:hidden"
+              className="-mr-2 inline-flex size-10 items-center justify-center rounded-full text-ink lg:hidden"
               aria-label={menu ? 'Close menu' : 'Open menu'}
               aria-expanded={menu}
               onClick={() => setMenu((m) => !m)}
@@ -130,14 +126,15 @@ export function Layout() {
           </div>
         </div>
         {menu && (
-          <div className="container-x border-t border-line pb-5 pt-3 md:hidden">
+          <div className="container-x border-t border-line pb-5 pt-3 lg:hidden">
             <SearchBox />
             <nav className="mt-3 grid" aria-label="Mobile">
               {nav.map((n) => (
-                <NavLink key={n.to} to={n.to} className={({ isActive }) => `border-b border-line py-3 text-[16px] ${isActive ? 'font-medium text-ink' : 'text-ink-2'}`}>
-                  {n.label}
-                </NavLink>
+                <NavItemLink key={n.label} n={n} className={(on) => `border-b border-line py-3 text-[16px] ${on ? 'font-medium text-ink' : 'text-ink-2'}`} />
               ))}
+              <NavLink to="/pricing/" className={({ isActive }) => `border-b border-line py-3 text-[16px] ${isActive ? 'font-medium text-ink' : 'text-ink-2'}`}>
+                Pricing
+              </NavLink>
             </nav>
             {cta && (
               <Button to={paying ? '/account/' : '/pricing/'} variant="dark" className="mt-4 w-full">
@@ -165,6 +162,27 @@ export function Layout() {
   )
 }
 
+function NavItemLink({ n, className }: { n: NavItem; className: (active: boolean) => string }) {
+  if (n.soon)
+    return (
+      <span className={`${className(false)} inline-flex cursor-default items-center gap-1.5`} aria-disabled="true">
+        {n.label}
+        <span className="rounded-full bg-ink/[0.06] px-1.5 py-px text-[10.5px] font-medium uppercase tracking-wide text-ink-3">Coming</span>
+      </span>
+    )
+  if (n.external)
+    return (
+      <a href={n.to} className={className(false)}>
+        {n.label}
+      </a>
+    )
+  return (
+    <NavLink to={n.to} end={n.end} className={({ isActive }) => className(isActive)}>
+      {n.label}
+    </NavLink>
+  )
+}
+
 function Footer() {
   return (
     <footer className="mt-24 bg-night text-white/70">
@@ -174,11 +192,15 @@ function Footer() {
           <p className="mt-4 text-[14px] leading-relaxed text-white/60">
             Portfolios of the world’s great investors, read straight from their SEC filings.
           </p>
+          <p className="mt-3 text-[13.5px] text-white/80">Copybook is now Factor Dynamics.</p>
+          <a href="https://itscreo.com/" className="mt-2 block text-[13.5px] text-white/60 hover:text-white">
+            creo, our factor exposure API
+          </a>
           <a href="mailto:hello@factordynamics.com" className="mt-4 inline-block text-[14px] text-white/80 hover:text-white">
             hello@factordynamics.com
           </a>
         </div>
-        <FooterCol title="Product" links={[['Investors', '/investors/'], ['Flow', '/flow/'], ['Pricing', '/pricing/'], ['For funds', '/for-funds/'], ['For quants', '/for-quants/'], ['API', '/api/']]} />
+        <FooterCol title="Product" links={[['Today', '/'], ['Investors', '/investors/'], ['Stocks', '/consensus/'], ['My book', '/my-book/'], ['Flow', '/flow/'], ['Pricing', '/pricing/'], ['For funds', '/for-funds/'], ['For quants', '/for-quants/'], ['API', '/api/']]} />
         <FooterCol title="Company" links={[['About', '/about/'], ['Methodology', '/methodology/'], ['Data quality', '/data-quality/'], ['Contact', '/contact/'], ['Terms', '/terms/'], ['Privacy', '/privacy/'], ['Security', '/security/'], ['Status', '/status/']]} />
         <FooterCol title="Popular" links={[['Berkshire Hathaway', '/investors/warren-buffett/'], ['Bill Ackman', '/investors/bill-ackman/'], ['Stanley Druckenmiller', '/investors/stanley-druckenmiller/']]} />
       </div>

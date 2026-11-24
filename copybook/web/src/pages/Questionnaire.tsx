@@ -24,8 +24,8 @@ const SECTIONS: [string, [string, ReactNode][]][] = [
   [
     'Company and service',
     [
-      ['What is the service?', 'Copybook shows SEC 13F, Form 4 and Schedule 13D/G filings as they’re filed, with email, chat and webhook alerts, and a member API. Fund adds your own book next to every 13F, for a team.'],
-      ['Who runs it?', 'Factor Dynamics. Copybook is run by its founder with AI coding agents that maintain and deploy it. There is no security team or on-call rotation.'],
+      ['What is the service?', 'Factor Dynamics shows SEC 13F, Form 4 and Schedule 13D/G filings as they’re filed, with email, chat and webhook alerts, and a member API. Fund adds your own book next to every 13F, for a team.'],
+      ['Who runs it?', 'Factor Dynamics. Factor Dynamics is run by its founder with AI coding agents that maintain and deploy it. There is no security team or on-call rotation.'],
       ['Security contact', <>hello@factordynamics.com, or the {a('/contact/', 'contact form')}. We acknowledge security reports quickly; please report before disclosing.</>],
       ['Certifications and audits', VENDOR.noCert],
       ['Legal entity', 'Pending; shown on invoices once registered.'],
@@ -84,7 +84,7 @@ const SECTIONS: [string, [string, ReactNode][]][] = [
   [
     'Subprocessors',
     [
-      ['Who processes data for Copybook?', ul(SUBPROCESSORS.map(([w, t]) => `${w}: ${t}`))],
+      ['Who processes data for Factor Dynamics?', ul(SUBPROCESSORS.map(([w, t]) => `${w}: ${t}`))],
       ['Payments', 'Stripe handles cards, invoices and the billing portal. Card details go straight to Stripe. Pay by invoice (net 30) on request.'],
     ],
   ],

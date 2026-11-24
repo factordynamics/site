@@ -1,7 +1,7 @@
 import { Signup } from '../components/Signup'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { dayET, edgarClosed, shortDay, loadCoverage, loadExpected, loadSeason, nextFiler, nextUp, seasonNow, timeLeft } from '../lib/stocks'
+import { recapPath, stockPath, dayET, edgarClosed, shortDay, loadCoverage, loadExpected, loadSeason, nextFiler, nextUp, seasonNow, timeLeft } from '../lib/stocks'
 import { EdgarClosed } from '../components/EdgarClosed'
 import { getToken, loadLatency } from '../lib/account'
 import { FAMOUS, FridayBox } from '../components/FridayBox'
@@ -18,12 +18,13 @@ const DEMO = ['warren-buffett', 'bill-ackman', 'stanley-druckenmiller', 'david-t
 
 export function Home() {
   const idx = useAsync(loadIndex, [])
-  useTitle('Copybook: see what the world’s best investors own')
+  useTitle('Factor Dynamics: see what the world’s best investors own')
   // One filer count everywhere: the way GET /v1/filers counts them (scripts/stocks.mjs).
   const cov = useAsync(loadCoverage, [])
   return (
     <>
       <Hero managers={idx.data?.managers} failed={idx.error ? idx.retry : undefined} />
+      <Today />
       <ProofStrip total={idx.data?.totalValue} filers={cov.data?.filers} updated={idx.data?.generated_at} />
       <ConsensusSection featured={idx.data?.featured} />
       <FeaturedSection featured={idx.data?.featured} />
@@ -33,6 +34,69 @@ export function Home() {
       <HowSection />
       <CTABand />
     </>
+  )
+}
+
+// Today (S1): the season's latest 13Fs and its most-bought names, from the season tracker's data, with Insiders as
+// Coming. No ranking yet: the fixed, documented order comes in S4 and lands on /methodology/.
+function Today() {
+  const d = useAsync(() => loadSeason(), [])
+  const s = d.data
+  const latest = (s?.latest ?? []).filter((x) => x.featured).slice(0, 6)
+  const bought = (s?.featured_flow.bought ?? []).filter((r) => r.ticker).slice(0, 6)
+  const q = s ? quarterLabel(s.quarter) : null
+  return (
+    <section className="container-x mt-16 md:mt-20" aria-labelledby="today">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 id="today" className="text-[28px] font-semibold tracking-[-0.035em] md:text-[34px]">Today</h2>
+          <p className="mt-1 text-[14.5px] text-ink-2">{q ? `${q} 13F season: ${s!.featured.filed} of ${s!.featured.total} superinvestors filed. Every figure links to its SEC filing.` : 'The latest filings from the investors we track.'}</p>
+        </div>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-[13.5px] font-medium">
+          <Link to="/season/" className="text-accent hover:text-accent-2">Season tracker</Link>
+          {s && <Link to={recapPath(s.quarter)} className="text-accent hover:text-accent-2">{q} recap</Link>}
+          <Link to="/flow/" className="text-accent hover:text-accent-2">Flow</Link>
+          <Link to="/weekly/" className="text-accent hover:text-accent-2">Friday email</Link>
+        </div>
+      </div>
+      <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <Panel title="Latest 13Fs" sub="Superinvestors, newest first">
+          {d.error && <LoadFailed what="today’s filings" onRetry={d.retry} />}
+          <ul className="divide-y divide-line">
+            {!s && !d.error && Array.from({ length: 5 }, (_, i) => <li key={i} className="py-2.5"><Skeleton className="h-7 w-full" /></li>)}
+            {latest.map((m) => (
+              <li key={m.slug}>
+                <Link to={`/investors/${m.slug}/`} className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-ink/[0.035]">
+                  <Monogram name={m.manager} size={28} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[14px] font-medium">{m.manager}</span>
+                    <span className="block truncate text-[12.5px] text-ink-3">{m.filing_date ? `Filed ${dateLabel(m.filing_date)}` : 'Filed'}{m.changes ? ` · ${(m.changes.new ?? 0) + (m.changes.added ?? 0)} buys, ${(m.changes.trimmed ?? 0) + (m.changes.exited ?? 0)} sells` : ''}</span>
+                  </span>
+                  {m.total_value != null && <span className="num text-[13px] font-medium">{money(m.total_value)}</span>}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+        <Panel title="Most bought" sub={q ? `By superinvestors, ${q} so far` : 'By superinvestors this season'}>
+          <ul className="divide-y divide-line">
+            {!s && !d.error && Array.from({ length: 5 }, (_, i) => <li key={i} className="py-2.5"><Skeleton className="h-7 w-full" /></li>)}
+            {bought.map((r) => (
+              <li key={r.ticker}>
+                <Link to={stockPath(r.ticker!)} className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-ink/[0.035]">
+                  <Ticker t={r.ticker} />
+                  <span className="min-w-0 flex-1 truncate text-[13.5px] text-ink-2">{r.name}</span>
+                  <span className="num text-[13px] font-medium text-up">+{money(r.net_value)}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+        <Panel title="Insiders" sub="Form 4 open-market buys" right={<span className="rounded-full bg-ink/[0.06] px-2.5 py-0.5 text-[12px] font-medium text-ink-2">Coming</span>}>
+          <p className="text-[14px] leading-relaxed text-ink-2">Insider buys from Form 4 filings get their own section here, with clusters of three or more insiders buying the same stock. Until then, Plus alerts you to insider buys in the stocks you own or watch.</p>
+        </Panel>
+      </div>
+    </section>
   )
 }
 
@@ -58,7 +122,7 @@ function Hero({ managers, failed }: { managers?: Manager[]; failed?: () => void 
                 <span className="font-serif font-normal italic tracking-[-0.025em] text-accent">straight from the filing.</span>
               </h1>
               <p className="mt-5 max-w-xl text-[17px] leading-relaxed text-ink-2 md:text-[18px]">
-                Copybook turns SEC 13F filings into clear portfolios: top positions, sector mix and conviction, for the managers worth following.
+                Factor Dynamics turns SEC 13F filings into clear portfolios: top positions, sector mix and conviction, for the managers worth following.
               </p>
             </>
           )}
@@ -468,7 +532,7 @@ function HowSection() {
   return (
     <section className="container-x mt-24 md:mt-32">
       <div className="mb-10 max-w-2xl">
-        <p className="text-[13px] font-medium text-accent">Why Copybook</p>
+        <p className="text-[13px] font-medium text-accent">Why Factor Dynamics</p>
         <h2 className="mt-3 text-[32px] font-semibold leading-[1.08] tracking-[-0.035em] md:text-h2">The filing, made readable.</h2>
       </div>
       <div className="grid gap-4 md:grid-cols-3">

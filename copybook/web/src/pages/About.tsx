@@ -11,7 +11,7 @@ export function About() {
           Portfolios, as filed. <span className="font-serif font-normal italic text-accent">Nothing invented.</span>
         </h1>
         <p className="mt-5 text-[18px] leading-relaxed text-ink-2">
-          Every quarter, investment managers with more than $100 million in US equities tell the SEC what they own. Those filings are public, precise and nearly unreadable. Copybook makes them easy to read for anyone who wants to learn from the best investors.
+          Every quarter, investment managers with more than $100 million in US equities tell the SEC what they own. Those filings are public, precise and nearly unreadable. Factor Dynamics makes them easy to read for anyone who wants to learn from the best investors.
         </p>
       </header>
 
@@ -49,7 +49,7 @@ export function About() {
       <section className="mt-20 max-w-3xl rounded-[18px] bg-paper-2 p-8">
         <h2 className="text-[20px] font-semibold tracking-[-0.02em]">Made by Factor Dynamics</h2>
         <p className="mt-2 text-[15px] leading-relaxed text-ink-2">
-          Copybook is built by Factor Dynamics, a small team that makes research tools for investors. Copybook is not investment advice, and Factor Dynamics is not a registered investment adviser.
+          Factor Dynamics is built by Factor Dynamics, a small team that makes research tools for investors. Factor Dynamics is not investment advice, and Factor Dynamics is not a registered investment adviser.
         </p>
         <div className="mt-5 flex flex-wrap gap-3">
           <Button to="/investors/">Browse investors</Button>

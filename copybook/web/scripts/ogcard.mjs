@@ -49,7 +49,7 @@ export function ogCard(dist, name, c) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
 <rect width="1200" height="630" fill="#fbfaf7"/>
 ${LOGO}
-<text x="124" y="94" font-family="Geist" font-weight="600" font-size="32" letter-spacing="-0.8" fill="#0c0e13">Copybook</text>
+<text x="124" y="94" font-family="Geist" font-weight="600" font-size="32" letter-spacing="-0.8" fill="#0c0e13">Factor Dynamics</text>
 <text x="1128" y="92" text-anchor="end" font-family="Geist" font-weight="700" font-size="18" letter-spacing="1.6" fill="#2b44d6">${x(c.kicker.toUpperCase())}</text>
 ${title}
 ${c.sub ? `<text x="72" y="${subY}" font-family="Geist" font-weight="500" font-size="28" fill="#393e49">${x(cut(c.sub, 70))}</text>` : ''}

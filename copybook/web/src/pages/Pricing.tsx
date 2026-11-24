@@ -22,7 +22,7 @@ const tiers = (filers: string, curated: string): Tier[] => [
       { t: 'Stock pages', d: 'Who holds a ticker, and who bought or sold it.' },
       { t: 'Top buys and sells', d: 'The four biggest moves per fund, and the top of each season’s flow.' },
       { t: 'Search and consensus', d: 'Find any fund or ticker; see where great investors agree.' },
-      { t: 'Free account', d: 'Save 5 names and get the Friday email of the week’s top moves.' },
+      { t: 'Free account', d: 'Save 5 names, follow up to 10 investors, and get the Friday email of the week’s top moves.' },
     ],
   },
   {
@@ -85,8 +85,8 @@ const compare = (filers: string): [string, ...(boolean | string)[]][] => [
   [`Latest 13F of ${filers} filers`, true, true, true, true],
   ['Stock pages and search', true, true, true, true],
   ['Top 4 buys and sells per fund', true, true, true, true],
-  ['Free account: save 5 names, Friday email', true, true, true, true],
-  ['Follow investors and stocks', false, true, true, true],
+  ['Free account: 5 saved names, 10 followed investors, Friday email', true, true, true, true],
+  ['Follow investors and stocks', 'Up to 10 investors', true, true, true],
   ['Filing alerts, moves inside', false, true, true, true],
   ['Form 4 and 13D moves between 13Fs', 'Top 2 per fund', true, true, true],
   ['Every move and full flow', false, true, true, true],
@@ -358,7 +358,7 @@ export function Pricing() {
                 )}
                 {/* Pro and Fund checkout show the same line (payments, Nov 11). */}
                 {plan && FOUNDING[tier.id as PlanId] && (
-                  <p className={`mt-2 text-[11.5px] leading-snug ${dark ? 'text-white/55' : 'text-ink-3'}`}>Prices exclude applicable taxes. Copybook does not currently collect sales tax.</p>
+                  <p className={`mt-2 text-[11.5px] leading-snug ${dark ? 'text-white/55' : 'text-ink-3'}`}>Prices exclude applicable taxes. Factor Dynamics does not currently collect sales tax.</p>
                 )}
               </div>
               <div className={`relative mt-5 border-t pt-5 ${dark ? 'border-white/10' : 'border-line'}`}>
@@ -482,7 +482,7 @@ export function Pricing() {
               ['Do you show live prices or returns?', 'No. Values are what the fund reported at quarter end. We don’t re-price holdings or estimate performance.'],
               ['How are options shown?', 'Calls and puts are listed apart from shares. A 13F reports options at the value of the underlying shares, so we label them as notional and leave them out of portfolio weights and holder counts.'],
               ['Can I cancel?', 'Yes, any time from Manage billing on your account page. After a paid period starts, you keep access until the end of the period you paid for. Monthly plans with a card can also pause instead: once a year, for up to 3 months, and keep your price.'],
-              ['Is this investment advice?', 'No. Copybook shows public filings. 13F omits short positions, most non-US holdings and cash, so a portfolio here is never the whole picture.'],
+              ['Is this investment advice?', 'No. Factor Dynamics shows public filings. 13F omits short positions, most non-US holdings and cash, so a portfolio here is never the whole picture.'],
             ] as [string, ReactNode][]
           ).map(([q, a]) => (
             <div key={q} className="py-5">

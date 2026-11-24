@@ -15,8 +15,8 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
     title: 'Sources',
     body: (
       <>
-        <p>Everything on Copybook comes from SEC EDGAR: Form 13F-HR and 13F-HR/A for holdings, Form 13F-NT for funds whose holdings another manager reports, Form 4 for insider trades, and Schedule 13D and 13G for stakes of 5% or more. Each page links to the filing it was read from.</p>
-        <p>Holdings values are as filed, except the unit fixes below. Copybook uses no market prices, never re-prices a position and never estimates returns.</p>
+        <p>Everything on Factor Dynamics comes from SEC EDGAR: Form 13F-HR and 13F-HR/A for holdings, Form 13F-NT for funds whose holdings another manager reports, Form 4 for insider trades, and Schedule 13D and 13G for stakes of 5% or more. Each page links to the filing it was read from.</p>
+        <p>Holdings values are as filed, except the unit fixes below. Factor Dynamics uses no market prices, never re-prices a position and never estimates returns.</p>
       </>
     ),
   },
@@ -97,7 +97,7 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
     title: 'Tickers, names and sectors',
     body: (
       <>
-        <p>13F filings identify securities by CUSIP. Copybook maps each CUSIP to a ticker from, in order:</p>
+        <p>13F filings identify securities by CUSIP. Factor Dynamics maps each CUSIP to a ticker from, in order:</p>
         <ol>
           <li>A hand-checked override file.</li>
           <li>OpenFIGI’s CUSIP mapping (identifiers only, no prices).</li>
@@ -204,7 +204,7 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
     title: 'What a 13F leaves out',
     body: (
       <p>
-        A 13F covers US-listed equities, ETFs, certain convertibles and listed options held at quarter end. It omits short positions, most non-US holdings, cash, bonds and private investments, and it’s filed up to 45 days after the quarter ends. A portfolio on Copybook is never the whole picture. Nothing here is investment advice.
+        A 13F covers US-listed equities, ETFs, certain convertibles and listed options held at quarter end. It omits short positions, most non-US holdings, cash, bonds and private investments, and it’s filed up to 45 days after the quarter ends. A portfolio on Factor Dynamics is never the whole picture. Nothing here is investment advice.
       </p>
     ),
   },
@@ -270,7 +270,7 @@ export function Methodology() {
     <div className="container-x pt-12 md:pt-16">
       <header className="max-w-2xl">
         <p className="text-[13px] font-medium text-accent">Methodology</p>
-        <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-h1">How Copybook reads the filings.</h1>
+        <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-h1">How Factor Dynamics reads the filings.</h1>
         <p className="mt-4 text-[17px] leading-relaxed text-ink-2">The rules we apply between EDGAR and this site, and a log of every change to them and to the data.</p>
       </header>
 

@@ -18,7 +18,7 @@ export const CAP_MSG = 'Free accounts follow up to 10 investors. Remove one, or 
 // Account mail Resend refused (payments sends it after the 00:00 UTC reset).
 const queuedLine = (at?: string) => `Your sign-in link arrives after ${at ? localTime(at) : '00:00 UTC (7 pm ET)'}.`
 // What /signup emails, by subject as payments sends them (copybook/api free.ts), so a reader knows what to look for.
-const SUBJECT = { first: "You're on the Copybook weekly", follow: 'Follow saved. Your Copybook sign-in link', link: 'Your Copybook sign-in link' }
+const SUBJECT = { first: "You're on the Factor Dynamics weekly", follow: 'Follow saved. Your Factor Dynamics sign-in link', link: 'Your Factor Dynamics sign-in link' }
 // The reader's own clock, with its zone ("6:37 AM EST").
 const localTime = (t: number | string) => new Date(t).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
 export const inboxLine = (subject: string) => `Check your inbox: your sign-in link is in the email “${subject}”.`

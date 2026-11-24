@@ -8,8 +8,9 @@ const UPDATED = 'November 9, 2026'
 // Material changes to /privacy/ and /security/, newest first. Every material edit adds a line here, and the
 // newest date is the page's "Last updated".
 const CHANGES: Partial<Record<'terms' | 'privacy' | 'security', [string, string][]>> = {
-  terms: [['November 19, 2026', 'Copy Fund has no founding offer for new subscriptions: the price is $1,990 a year for up to 10 seats. A subscription that started at a founding price keeps it.'], ['November 11, 2026', 'Copy Fund: the founding price kept while subscribed, up to 10 seats at a flat price, net 30 invoicing on request, an uploaded book kept confidential and deleted on request with written confirmation, 60 days’ notice of price changes and a reminder 30 days before an annual renewal.'], ['November 11, 2026', 'Accounts and plans: if we discontinue a paid plan during a prepaid period, we refund the unused part pro rata.']],
+  terms: [['November 25, 2026', 'Copybook is now Factor Dynamics: the service’s name changes, and its plans are Free, Plus (was Copy), Pro and Fund. The operator, prices, governing law and every other term are unchanged.'], ['November 19, 2026', 'Copy Fund has no founding offer for new subscriptions: the price is $1,990 a year for up to 10 seats. A subscription that started at a founding price keeps it.'], ['November 11, 2026', 'Copy Fund: the founding price kept while subscribed, up to 10 seats at a flat price, net 30 invoicing on request, an uploaded book kept confidential and deleted on request with written confirmation, 60 days’ notice of price changes and a reminder 30 days before an annual renewal.'], ['November 11, 2026', 'Accounts and plans: if we discontinue a paid plan during a prepaid period, we refund the unused part pro rata.']],
   security: [
+    ['November 25, 2026', 'Copybook is now Factor Dynamics: the service’s name changes. Where data is kept and how it is protected are unchanged.'],
     ['November 19, 2026', 'Correction: the service account, rotated signing secrets, restricted Stripe key, offline backup key and logged shell reads described for November 17 did not happen on that date. They are planned, not done, with no date, and the maintenance agents still hold the backup key. MFA on admin accounts is not confirmed. No move to another API hostname is planned.'],
     ['November 11, 2026', 'Backups: the monthly decrypt drill runs on a separate machine of the owner’s; the private backup key never touches the self-hosted machine, not even in memory.'],
     ['November 11, 2026', 'Failover, from today’s rehearsals (16:01 and 16:48 UTC): detecting an outage takes about 2 minutes, switching members to the backup under 25 seconds and back up to a minute; a revoked key or removed seat stops working within 3 seconds on whichever server is answering, the backup included.'],
@@ -32,6 +33,7 @@ const CHANGES: Partial<Record<'terms' | 'privacy' | 'security', [string, string]
     ['November 9, 2026', 'Where the API runs, encryption at rest, access, backups, physical risk and deletion described.'],
   ],
   privacy: [
+    ['November 25, 2026', 'Copybook is now Factor Dynamics: the service’s name changes. What we store, why, and who processes it are unchanged.'],
     ['November 11, 2026', 'The encrypted waitlist is retired and its key deleted; the waitlist line is removed from What we store.'],
     ['November 11, 2026', 'Subprocessors: Amp (AI coding agents) and its model providers, Anthropic and SpaceXAI via personal subscriptions on consumer terms, and Amp’s session-log storage on Google Cloud in the US.'],
     ['November 11, 2026', 'What we store now lists everything: your book, peers and team, imported 13F and broker CSV contents, and channel settings including webhook URLs and signing secrets.'],
@@ -52,10 +54,10 @@ const contact = (
 const PAGES: Record<'terms' | 'privacy' | 'security', { title: string; lead: string; sections: [string, ReactNode][] }> = {
   terms: {
     title: 'Terms of use',
-    lead: 'The rules for using Copybook, its paid plans and its API. Copybook is operated by Factor Dynamics.',
+    lead: 'The rules for using Factor Dynamics (formerly Copybook), its paid plans and its API. The service is operated by Factor Dynamics.',
     sections: [
-      ['The data', 'Copybook shows information from public SEC EDGAR filings (Forms 13F-HR, 13F-NT, 4 and Schedules 13D and 13G), as filed, with the processing described on our methodology page. Filings can be late, amended or wrong, and our processing can be wrong too. Everything is provided as is, with no warranty of accuracy, completeness or timeliness.'],
-      ['Not investment advice', 'Nothing on Copybook is a recommendation to buy or sell a security. A 13F leaves out short positions, most non-US holdings, cash and more, and is filed up to 45 days after the quarter ends. Make your own decisions.'],
+      ['The data', 'Factor Dynamics shows information from public SEC EDGAR filings (Forms 13F-HR, 13F-NT, 4 and Schedules 13D and 13G), as filed, with the processing described on our methodology page. Filings can be late, amended or wrong, and our processing can be wrong too. Everything is provided as is, with no warranty of accuracy, completeness or timeliness.'],
+      ['Not investment advice', 'Nothing on Factor Dynamics is a recommendation to buy or sell a security. A 13F leaves out short positions, most non-US holdings, cash and more, and is filed up to 45 days after the quarter ends. Make your own decisions.'],
       ['Accounts and plans', 'Paid plans renew automatically until you cancel from Manage billing. A Plus trial started without a card ends on its own at day 14 and nothing is charged; if you add a card, it continues as a paid plan. A Pro or Fund trial converts to a paid plan at its end unless you cancel before then; a Fund trial billed by invoice is invoiced on day 14, net 30. After a paid period starts, you keep access until it ends; we don’t refund partial periods unless the law requires it. If we discontinue a paid plan during a prepaid period, we refund the unused part pro rata.'],
       [
         'Fund',
@@ -74,16 +76,16 @@ const PAGES: Record<'terms' | 'privacy' | 'security', { title: string; lead: str
       ['API use', 'API keys are for you, or for your organization’s internal research, models and tools. You may use the results in your own work and share individual findings with attribution. You may not resell, sublicense or redistribute the API’s data in bulk, build a competing data service from it, or share keys outside your plan’s seats. Respect the rate limits.'],
       ['Data after you cancel', 'Data you downloaded or fetched through the API while your subscription was active may be kept and used for your internal purposes after you cancel, under the same limits. New requests stop when the subscription ends.'],
       ['API changes', <>We version the API. Breaking changes are announced at least 90 days ahead on the <Link to="/api/#changelog" className="font-medium text-accent hover:text-accent-2">API changelog</Link>, and every API key owner gets an email about them; additive changes, such as new fields or endpoints, can ship at any time. A client can pin the schema it was built on with the <code className="font-mono text-[13px]">Copybook-Schema-Version</code> header: <code className="font-mono text-[13px]">2026-11-09</code> is served to clients that pin it until Feb 22, 2027.</>],
-      ['Availability and freshness', <>We aim to keep Copybook and its data current, but freshness is best-effort and there is no uptime or latency SLA. The refresh cadence is set out on the <Link to="/methodology/#refresh" className="font-medium text-accent hover:text-accent-2">methodology page</Link>.</>],
-      ['Site content', 'You can link to and quote Copybook pages and share individual charts. Don’t scrape the site in bulk; use the API instead.'],
-      ['Changes and termination', 'We may change or discontinue features, and we’ll give notice of material changes to paid plans. We may suspend accounts that break these terms. You can stop using Copybook and delete your data at any time.'],
-      ['Liability', 'To the extent the law allows, Factor Dynamics is not liable for indirect or consequential losses, or for losses from decisions made using Copybook, and our total liability is limited to what you paid us in the 12 months before the claim.'],
+      ['Availability and freshness', <>We aim to keep Factor Dynamics and its data current, but freshness is best-effort and there is no uptime or latency SLA. The refresh cadence is set out on the <Link to="/methodology/#refresh" className="font-medium text-accent hover:text-accent-2">methodology page</Link>.</>],
+      ['Site content', 'You can link to and quote Factor Dynamics pages and share individual charts. Don’t scrape the site in bulk; use the API instead.'],
+      ['Changes and termination', 'We may change or discontinue features, and we’ll give notice of material changes to paid plans. We may suspend accounts that break these terms. You can stop using Factor Dynamics and delete your data at any time.'],
+      ['Liability', 'To the extent the law allows, Factor Dynamics is not liable for indirect or consequential losses, or for losses from decisions made using Factor Dynamics, and our total liability is limited to what you paid us in the 12 months before the claim.'],
       ['Contact', <>Questions about these terms: use the {contact} or email {email}.</>],
     ],
   },
   privacy: {
     title: 'Privacy',
-    lead: 'What Copybook stores about you, why, and how to have it deleted. We never sell your data.',
+    lead: 'What Factor Dynamics stores about you, why, and how to have it deleted. We never sell your data.',
     sections: [
       [
         'What we store',
@@ -103,7 +105,7 @@ const PAGES: Record<'terms' | 'privacy' | 'security', { title: string; lead: str
       [
         'Who processes it',
         <>
-          <p>These companies process data for Copybook, each only to provide its service:</p>
+          <p>These companies process data for Factor Dynamics, each only to provide its service:</p>
           <ul className="mt-2 list-disc space-y-1.5 pl-5">
             {SUBPROCESSORS.map(([who, what]) => (
               <li key={who}>
@@ -121,7 +123,7 @@ const PAGES: Record<'terms' | 'privacy' | 'security', { title: string; lead: str
   },
   security: {
     title: 'Security',
-    lead: 'Where Copybook keeps data and how it’s protected.',
+    lead: 'Where Factor Dynamics keeps data and how it’s protected.',
     sections: [
       [
         'Who can see member data',
@@ -147,7 +149,7 @@ const PAGES: Record<'terms' | 'privacy' | 'security', { title: string; lead: str
       ['How credentials are stored', 'API keys are stored only as SHA-256 hashes and shown once; sign-in links and sessions are signed, expiring tokens we don’t store; private feed links are stored so your account page can show them, and you can rotate one anytime.'],
       ['Deleting data', <>Remove follows, owned stocks and keys yourself on your account page at any time, or ask us to delete everything through the {contact}. {HOSTING.deletion}</>],
       ['Breach notification', 'If a breach affects member data, we notify the affected members within 72 hours of finding it.'],
-      ['Subprocessors', <>The companies that process data for Copybook are listed on the <Link to="/privacy/" className="font-medium text-accent hover:text-accent-2">privacy page</Link>.</>],
+      ['Subprocessors', <>The companies that process data for Factor Dynamics are listed on the <Link to="/privacy/" className="font-medium text-accent hover:text-accent-2">privacy page</Link>.</>],
       ['Certifications and questionnaires', <>{HOSTING.soc2} The <Link to="/security/questionnaire/" className="font-medium text-accent hover:text-accent-2">security questionnaire</Link> is filled in and can be saved as a PDF. For anything it doesn’t answer, email {email} or use the {contact}.</>],
       ['Reporting a problem', <>If you find a security issue, please email {email} or use the {contact} before disclosing it. We’ll respond quickly.</>],
     ],

@@ -146,7 +146,7 @@ function Band({ title, sub, cta }: { title: string; sub: string; cta: ReactNode 
 }
 
 export function ForFunds() {
-  useTitle('Copybook for investment teams · Fund')
+  useTitle('Factor Dynamics for investment teams · Fund')
   const cov = useAsync(loadCoverage, [])
   const filers = cov.data?.filers ? cov.data.filers.toLocaleString('en-US') : '8,900+'
   // The speed claim shows the live median once real alerts have gone out, and links to the log.
@@ -172,7 +172,7 @@ export function ForFunds() {
         title="Know who owns what you own."
         sub={`Your book next to every 13F filer: who holds your names, how crowded they are, and how the funds you benchmark against are positioned. ${FUND_SEATS} seats, shared lists, one team channel in Slack, and an annual invoice.`}
         cta={cta}
-        note="$1,990/yr. Invoiced net 30; W-9 available once our entity details are published. Prepaid and protected: pro-rata refund if we ever discontinue the plan. Prices exclude applicable taxes. Copybook does not currently collect sales tax."
+        note="$1,990/yr. Invoiced net 30; W-9 available once our entity details are published. Prepaid and protected: pro-rata refund if we ever discontinue the plan. Prices exclude applicable taxes. Factor Dynamics does not currently collect sales tax."
       />
 
       <Facts items={[[`${filers}`, '13F filers covered, the latest filing of each'], median != null
@@ -276,7 +276,7 @@ export function ForFunds() {
 }
 
 export function ForQuants() {
-  useTitle('Copybook API for quants · Pro')
+  useTitle('Factor Dynamics API for quants · Pro')
   const cov = useAsync(loadCoverage, [])
   const filers = cov.data?.filers ? cov.data.filers.toLocaleString('en-US') : '8,900+'
   const sample = useAsync(() => fetch(`${BASE}api/sample-holdings.json`).then((r) => r.text()), [])
@@ -293,7 +293,7 @@ export function ForQuants() {
   return (
     <div className="container-x pt-12 md:pt-16">
       <Hero
-        kicker="Pro · the Copybook API"
+        kicker="Pro · the Factor Dynamics API"
         title="13F, Form 4 and 13D/G, as clean JSON."
         sub="Every 13F filer’s latest holdings, aggregated by CUSIP, with the EDGAR accession and acceptance time on every filing."
         cta={cta}

@@ -187,7 +187,7 @@ for (const st of stocks.values()) {
         h.change = h.shares === 0 ? 'exited' : h.shares > h.prev_shares ? 'added' : h.shares < h.prev_shares ? 'trimmed' : 'unchanged'
       }
     if (strong) (st.splits ??= {})[q] = { ratio: ratioLabel(k), adjusted: true }
-    splitLog.push({ ticker, name: st.name, quarter: q, ratio: ratioLabel(k), treatment: strong ? 'adjusted' : 'not treated', holders: r.length, share_ratio: +ms.toFixed(3), price_ratio: +mp.toFixed(3), xbrl_shares_ratio: null, source: strong ? 'Copybook holder check (CUSIP changed; not in ingest’s splits.json)' : 'Copybook holder check; not in ingest’s splits.json, so counted as trades' })
+    splitLog.push({ ticker, name: st.name, quarter: q, ratio: ratioLabel(k), treatment: strong ? 'adjusted' : 'not treated', holders: r.length, share_ratio: +ms.toFixed(3), price_ratio: +mp.toFixed(3), xbrl_shares_ratio: null, source: strong ? 'Factor Dynamics holder check (CUSIP changed; not in ingest’s splits.json)' : 'Factor Dynamics holder check; not in ingest’s splits.json, so counted as trades' })
   }
 }
 mkdirSync(join(out, 'd'), { recursive: true })

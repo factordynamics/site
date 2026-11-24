@@ -203,9 +203,9 @@ export function ApiDocs() {
     <div className="container-x pt-12 md:pt-16">
       <ApiStatus className="mb-6 max-w-3xl" />
       <header className="max-w-2xl">
-        <p className="text-[13px] font-medium text-accent">Copybook API · Pro and Fund</p>
+        <p className="text-[13px] font-medium text-accent">Factor Dynamics API · Pro and Fund</p>
         <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-h1">13F, Form 4 and 13D/G data, as JSON.</h1>
-        <p className="mt-4 text-[17px] leading-relaxed text-ink-2">The same SEC EDGAR data behind every Copybook page, for your own models and tools. Create a key on your account page and send it as a Bearer token.</p>
+        <p className="mt-4 text-[17px] leading-relaxed text-ink-2">The same SEC EDGAR data behind every Factor Dynamics page, for your own models and tools. Create a key on your account page and send it as a Bearer token.</p>
         <div className="mt-6 flex flex-wrap gap-3">
           <Button to="/account/#api-keys">Create an API key</Button>
           <Button href={SPEC} variant="outline">

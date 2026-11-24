@@ -37,7 +37,7 @@ export function Why() {
           <div role="status" className="mt-6">
             <p className="text-[17px] leading-relaxed text-ink-2">{sent === 'expired' ? 'This link has expired, so nothing was sent. You can reply to the email instead.' : `Thanks: “${reason}” is noted. We read every one.`}</p>
             <Link to="/" className="mt-6 inline-flex font-medium text-accent hover:text-accent-2">
-              Back to Copybook
+              Back to Factor Dynamics
             </Link>
           </div>
         ) : (
@@ -86,7 +86,7 @@ export function Why() {
               {err}
             </p>
           )}
-          <p className="mt-4 text-[14px] text-ink-3">Nothing is sent until you press Send. It goes to the person who runs Copybook, and changes nothing on your plan.</p>
+          <p className="mt-4 text-[14px] text-ink-3">Nothing is sent until you press Send. It goes to the person who runs Factor Dynamics, and changes nothing on your plan.</p>
         </form>
         )
       ) : (

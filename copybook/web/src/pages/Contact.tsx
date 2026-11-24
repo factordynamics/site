@@ -95,7 +95,7 @@ export function Contact() {
           'Your company has already had a Fund trial. We have your request and will email you to set up an invoice.'
         ) : j?.code === 'already_member' ? (
           <>
-            This address already has a Copybook subscription.{' '}
+            This address already has a Factor Dynamics subscription.{' '}
             <Link to="/account/" className="font-medium underline underline-offset-2">
               Sign in
             </Link>
@@ -121,12 +121,12 @@ export function Contact() {
       <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         <header className="max-w-md">
           <p className="text-[13px] font-medium text-accent">Contact</p>
-          <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-h1">{fund ? 'Copybook for your fund.' : 'Get in touch.'}</h1>
+          <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-h1">{fund ? 'Factor Dynamics for your fund.' : 'Get in touch.'}</h1>
           {fund ? (
             <>
               <p className="mt-4 text-[17px] leading-relaxed text-ink-2">Fund is everything in Pro for up to {FUND_SEATS} seats at a flat price: each seat signs in on its own, and the team shares one book, watchlist and peer list. The API, signed webhooks and Slack alerts are included.</p>
               <ul className="mt-6 space-y-2.5 text-[15px] text-ink-2">
-                {['$1,990/yr for up to 10 seats', 'Invoiced yearly, net 30', 'W-9 available once our entity details are published', 'Your uploaded book stays private to your team', 'Prices exclude applicable taxes. Copybook does not currently collect sales tax.'].map((x) => (
+                {['$1,990/yr for up to 10 seats', 'Invoiced yearly, net 30', 'W-9 available once our entity details are published', 'Your uploaded book stays private to your team', 'Prices exclude applicable taxes. Factor Dynamics does not currently collect sales tax.'].map((x) => (
                   <li key={x} className="flex gap-2.5">
                     <Check className="mt-1 shrink-0 text-accent" /> {x}
                   </li>
@@ -150,7 +150,7 @@ export function Contact() {
             . We aim to reply within one business day.
           </p>
           <p className="mt-3 text-[13.5px] text-ink-3">
-            Copybook is operated by Factor Dynamics. See our <Link to="/terms/" className="underline underline-offset-2 hover:text-ink">terms</Link>, <Link to="/privacy/" className="underline underline-offset-2 hover:text-ink">privacy</Link> and{' '}
+            Factor Dynamics is operated by Factor Dynamics. See our <Link to="/terms/" className="underline underline-offset-2 hover:text-ink">terms</Link>, <Link to="/privacy/" className="underline underline-offset-2 hover:text-ink">privacy</Link> and{' '}
             <Link to="/security/" className="underline underline-offset-2 hover:text-ink">security</Link> pages.
           </p>
         </header>
@@ -287,7 +287,7 @@ export function Contact() {
                       {hintFor('ap_email')}
                     </label>
                   </div>
-                  <p className="text-[12.5px] leading-relaxed text-ink-3">Both are printed on the invoice, and AP gets a copy. $1,990 a year, invoiced on day 14, Net 30, payable online by card or US bank account (ACH). Prices exclude applicable taxes. Copybook does not currently collect sales tax.</p>
+                  <p className="text-[12.5px] leading-relaxed text-ink-3">Both are printed on the invoice, and AP gets a copy. $1,990 a year, invoiced on day 14, Net 30, payable online by card or US bank account (ACH). Prices exclude applicable taxes. Factor Dynamics does not currently collect sales tax.</p>
                 </fieldset>
               )}
               {fund && !invoiceTrial && (

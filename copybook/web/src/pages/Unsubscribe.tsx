@@ -41,7 +41,7 @@ export function Unsubscribe() {
           <p className="mt-3 text-[17px] leading-relaxed text-ink-2">
             {s.paying
               ? `${s.email} won’t get tips or season notes any more. Your filing alerts stay on. We’ll still email you before any charge. Change alerts on `
-              : `${s.email} won’t get the Friday weekly or other Copybook emails any more.`}
+              : `${s.email} won’t get the Friday weekly or other Factor Dynamics emails any more.`}
             {s.paying && (
               <>
                 <Link to="/account/" className="font-medium text-accent hover:text-accent-2">
@@ -51,13 +51,13 @@ export function Unsubscribe() {
               </>
             )}
           </p>
-          <p className="mt-4 text-[14px] text-ink-3">Changed your mind? Reply to any Copybook email and we’ll turn it back on.</p>
+          <p className="mt-4 text-[14px] text-ink-3">Changed your mind? Reply to any Factor Dynamics email and we’ll turn it back on.</p>
         </>
       ) : expired ? (
         <p className="mt-3 text-[17px] leading-relaxed text-ink-2">Reply to the email and we’ll unsubscribe you.</p>
       ) : (
         <>
-          <p className="mt-3 text-[17px] leading-relaxed text-ink-2">Unsubscribe from Copybook’s weekly email and tips?</p>
+          <p className="mt-3 text-[17px] leading-relaxed text-ink-2">Unsubscribe from Factor Dynamics’ weekly email and tips?</p>
           <p className="mt-2 text-[15px] leading-relaxed text-ink-3">On a paid plan: your filing alerts stay on. We’ll still email you before any charge.</p>
           <button
             type="button"

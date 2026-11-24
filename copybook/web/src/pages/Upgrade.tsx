@@ -61,7 +61,7 @@ function Body({ member, target }: { member: Member | null; target: 'pro' | 'fund
       />
     ) : (
       <Paths
-        left={['New to Copybook', `Start Pro free for ${TRIAL_DAYS} days.`, <Button to="/pricing/" className="mt-3 w-full">Start {TRIAL_DAYS}-day free trial</Button>]}
+        left={['New to Factor Dynamics', `Start Pro free for ${TRIAL_DAYS} days.`, <Button to="/pricing/" className="mt-3 w-full">Start {TRIAL_DAYS}-day free trial</Button>]}
         right={['Already on Plus', 'Sign in with the email on your plan to switch it to Pro, prorated.', <Button to="/account/" variant="outline" className="mt-3 w-full">Sign in to switch</Button>]}
       />
     )
@@ -78,7 +78,7 @@ function Body({ member, target }: { member: Member | null; target: 'pro' | 'fund
         Your seat is part of your team’s Fund plan. {member.owner ? (
           <>
             Ask{' '}
-            <a href={`mailto:${member.owner}?subject=${encodeURIComponent('Copybook plan change')}`} className="font-medium text-accent hover:text-accent-2">
+            <a href={`mailto:${member.owner}?subject=${encodeURIComponent('Factor Dynamics plan change')}`} className="font-medium text-accent hover:text-accent-2">
               {member.owner}
             </a>{' '}
             (plan owner) to change it.

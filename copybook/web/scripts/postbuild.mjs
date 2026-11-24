@@ -38,7 +38,7 @@ function page(path, title, desc, extra = '', image = null, body = '', alt = null
 }
 // Structured data for search: one JSON-LD block per page (`<` escaped so a name can't close the script).
 const ld = (o) => `\n    <script type="application/ld+json">${JSON.stringify({ '@context': 'https://schema.org', ...o }).replace(/</g, '\\u003c')}</script>`
-const ORG = { '@type': 'Organization', name: 'Copybook', url: SITE, logo: `${SITE}apple-touch-icon.png` }
+const ORG = { '@type': 'Organization', name: 'Factor Dynamics', url: SITE, logo: `${SITE}apple-touch-icon.png` }
 // Prerendered page bodies: the h1, the summary line, and up to 10 rows, as plain HTML.
 const ht = (v) => esc(String(v ?? ''))
 const link = (path, text) => `<a href="${SITE}${path}">${ht(text)}</a>`
@@ -85,15 +85,15 @@ const feed = []
 function redirect(file, to) {
   writeFileSync(
     join(dist, file),
-    `<!doctype html><meta charset="utf-8"><title>Copybook</title><link rel="canonical" href="${SITE}${to}"><meta http-equiv="refresh" content="0; url=${SITE}${to}"><script>location.replace(${JSON.stringify(SITE + to)})</script>`,
+    `<!doctype html><meta charset="utf-8"><title>Factor Dynamics</title><link rel="canonical" href="${SITE}${to}"><meta http-equiv="refresh" content="0; url=${SITE}${to}"><script>location.replace(${JSON.stringify(SITE + to)})</script>`,
   )
 }
 
 page(
   '',
-  'Copybook: see what the world’s best investors own',
+  'Factor Dynamics: see what the world’s best investors own',
   'Portfolios of the world’s great investors, read straight from their SEC 13F filings. Top positions, sector mix and where they agree.',
-  ld({ '@graph': [ORG, { '@type': 'WebSite', name: 'Copybook', url: SITE, description: 'Superinvestor and hedge fund portfolios from SEC 13F filings.', publisher: { '@type': 'Organization', name: 'Copybook' } }] }),
+  ld({ '@graph': [ORG, { '@type': 'WebSite', name: 'Factor Dynamics', url: SITE, description: 'Superinvestor and hedge fund portfolios from SEC 13F filings.', publisher: { '@type': 'Organization', name: 'Factor Dynamics' } }] }),
 )
 const tc = displayName
 page('investors/', 'Investors · Factor Dynamics', 'Latest 13F portfolios of legendary value investors, hedge-fund founders, activists and the largest institutions.')
@@ -105,15 +105,15 @@ page('account/', 'Account · Factor Dynamics', 'Manage your Plus subscription.')
   try {
     sp = JSON.parse(readFileSync(join(dist, 'og', 'speed.json'), 'utf8'))
   } catch {}
-  page('speed/', 'Alert speed: EDGAR to inbox, every alert timed · Factor Dynamics', 'How fast Copybook alerts arrive: the median and 90th percentile from SEC EDGAR acceptance to delivery for 13F, Form 4 and 13D/G filings, and every live alert this season.', '', sp?.url)
+  page('speed/', 'Alert speed: EDGAR to inbox, every alert timed · Factor Dynamics', 'How fast Factor Dynamics alerts arrive: the median and 90th percentile from SEC EDGAR acceptance to delivery for 13F, Form 4 and 13D/G filings, and every live alert this season.', '', sp?.url)
 }
 page('upgrade/', 'Upgrade · Factor Dynamics', 'Switch your Plus plan to Pro or Fund, prorated, on the same billing interval.')
-page('resume/', 'Keep your plan · Factor Dynamics', 'Resume a paused or cancelled Copybook plan.', '\n    <meta name="robots" content="noindex" />')
-page('unsubscribe/', 'Unsubscribe · Factor Dynamics', 'Unsubscribe from Copybook’s weekly email and tips.', '\n    <meta name="robots" content="noindex" />')
-page('data-quality/', 'Data quality: the gates every publish passes · Factor Dynamics', 'The publish gates every Copybook data run passes, the 13F lines held as unreliable by reason, and the build each part of the data comes from.')
-page('status/', 'Status · Factor Dynamics', 'Live status of Copybook’s member API, EDGAR poller and filing pages, and the incident log.')
+page('resume/', 'Keep your plan · Factor Dynamics', 'Resume a paused or cancelled Factor Dynamics plan.', '\n    <meta name="robots" content="noindex" />')
+page('unsubscribe/', 'Unsubscribe · Factor Dynamics', 'Unsubscribe from Factor Dynamics’ weekly email and tips.', '\n    <meta name="robots" content="noindex" />')
+page('data-quality/', 'Data quality: the gates every publish passes · Factor Dynamics', 'The publish gates every Factor Dynamics data run passes, the 13F lines held as unreliable by reason, and the build each part of the data comes from.')
+page('status/', 'Status · Factor Dynamics', 'Live status of Factor Dynamics’ member API, EDGAR poller and filing pages, and the incident log.')
 page('weekly/', 'The free Friday email: last week’s edition · Factor Dynamics', 'Every Friday: the week’s biggest superinvestor buys and sells from SEC filings. Free. Here is last week’s edition.')
-page('why/', 'Why you cancelled · Factor Dynamics', 'Tell us why you cancelled Copybook.', '\n    <meta name="robots" content="noindex" />')
+page('why/', 'Why you cancelled · Factor Dynamics', 'Tell us why you cancelled Factor Dynamics.', '\n    <meta name="robots" content="noindex" />')
 {
   // The season tracker's share card (scripts/cards.mjs), with its cache-busting URL.
   let season = null
@@ -164,20 +164,20 @@ page('why/', 'Why you cancelled · Factor Dynamics', 'Tell us why you cancelled 
         `<p>${link(`season/${sd.quarter.toLowerCase()}/`, `${sq} 13F recap`)} · ${link('flow/', 'Smart money flow')} · ${link('investors/', 'All investors')}</p>`,
       )
     : ''
-  page('season/', title, desc, `\n    <link rel="alternate" type="application/atom+xml" title="Copybook: ${qLabel(FEED_Q)} 13F filings" href="${SITE}season/feed.xml" />` + ld({ '@type': 'Article', headline: title, description: desc, image: season?.url, url: `${SITE}season/`, dateModified: built, publisher: ORG, author: ORG, isBasedOn: EDGAR, mainEntityOfPage: `${SITE}season/` }), season?.url, body)
+  page('season/', title, desc, `\n    <link rel="alternate" type="application/atom+xml" title="Factor Dynamics: ${qLabel(FEED_Q)} 13F filings" href="${SITE}season/feed.xml" />` + ld({ '@type': 'Article', headline: title, description: desc, image: season?.url, url: `${SITE}season/`, dateModified: built, publisher: ORG, author: ORG, isBasedOn: EDGAR, mainEntityOfPage: `${SITE}season/` }), season?.url, body)
 }
-page('for-funds/', 'Copybook for investment teams: My book, peer overlap and 13F alerts · Fund', 'See who owns what you own across every 13F filer, compare your book with your peers, and get filings in Slack, checked on EDGAR every minute. Ten seats, invoiced annually.')
-page('for-quants/', 'Copybook API for quants: 13F, Form 4 and 13D/G as JSON · Pro', 'Every 13F filer’s latest holdings as JSON, with the EDGAR accession and acceptance time of every filing; holders by stock, Form 4 and 13D/G events and bulk CSV files. From $39/month.')
+page('for-funds/', 'Factor Dynamics for investment teams: My book, peer overlap and 13F alerts · Fund', 'See who owns what you own across every 13F filer, compare your book with your peers, and get filings in Slack, checked on EDGAR every minute. Ten seats, invoiced annually.')
+page('for-quants/', 'Factor Dynamics API for quants: 13F, Form 4 and 13D/G as JSON · Pro', 'Every 13F filer’s latest holdings as JSON, with the EDGAR accession and acceptance time of every filing; holders by stock, Form 4 and 13D/G events and bulk CSV files. From $39/month.')
 page('my-book/', 'My book · Factor Dynamics', 'Your stocks through the eyes of every 13F filer: who holds them, who bought and sold this season, and every Form 4 and 13D.')
-page('methodology/', 'Methodology · Factor Dynamics', 'How Copybook reads SEC 13F, Form 4 and Schedule 13D/G filings: amendments, unit fixes, options, tickers, refresh cadence, and a changelog of every data correction.')
+page('methodology/', 'Methodology · Factor Dynamics', 'How Factor Dynamics reads SEC 13F, Form 4 and Schedule 13D/G filings: amendments, unit fixes, options, tickers, refresh cadence, and a changelog of every data correction.')
 page('winter-2025-26/', 'Last winter between 13F seasons: the filings · Factor Dynamics', 'The 19 Schedule 13D/G filings by superinvestors and 14 insider buys of $100K or more in their top stocks, Dec 1, 2025 to Jan 31, 2026, each linked to SEC EDGAR.')
-page('api/', 'API · Factor Dynamics', 'The Copybook API: 13F, Form 4 and Schedule 13D/G data from SEC EDGAR as JSON, for Pro and Fund.')
+page('api/', 'API · Factor Dynamics', 'The Factor Dynamics API: 13F, Form 4 and Schedule 13D/G data from SEC EDGAR as JSON, for Pro and Fund.')
 page('contact/', 'Contact · Factor Dynamics', 'Request Fund access for your team, ask a question, or ask us to delete your data.')
-page('terms/', 'Terms of use · Factor Dynamics', 'The terms for using Copybook, its paid plans and its API.')
-page('privacy/', 'Privacy · Factor Dynamics', 'What Copybook stores about you, why, and how to have it deleted. We never sell your data.')
-page('security/', 'Security · Factor Dynamics', 'Where Copybook keeps data and how it is protected.')
-page('security/questionnaire/', 'Security questionnaire · Factor Dynamics', 'A vendor security questionnaire for Copybook, filled in: data held, access, encryption, backups, failover, subprocessors and what we don’t have.')
-page('about/', 'About · Factor Dynamics', 'Portfolios, as filed. How Copybook reads SEC 13F filings, and what it won’t do.')
+page('terms/', 'Terms of use · Factor Dynamics', 'The terms for using Factor Dynamics, its paid plans and its API.')
+page('privacy/', 'Privacy · Factor Dynamics', 'What Factor Dynamics stores about you, why, and how to have it deleted. We never sell your data.')
+page('security/', 'Security · Factor Dynamics', 'Where Factor Dynamics keeps data and how it is protected.')
+page('security/questionnaire/', 'Security questionnaire · Factor Dynamics', 'A vendor security questionnaire for Factor Dynamics, filled in: data held, access, encryption, backups, failover, subprocessors and what we don’t have.')
+page('about/', 'About · Factor Dynamics', 'Portfolios, as filed. How Factor Dynamics reads SEC 13F filings, and what it won’t do.')
 let n = 0
 mkdirSync(join(dist, 'managers'), { recursive: true })
 // Each tracked fund's book (from the data host), for the position counts in titles.
@@ -386,7 +386,7 @@ try {
         table(['Filer', '13F', 'Value'], (h?.rows ?? []).slice(0, 10).map(([slug, name, quarter, , value]) => [link(`investors/${slug}/`, tc(name)), ht(qLabel(quarter)), usd(value)])),
         `<p>${link(`season/${(seasonData?.quarter ?? '').toLowerCase()}/`, `${seasonQ} 13F recap`)} · ${link('season/', 'This 13F season')} · ${link('consensus/', 'Consensus')}</p>`,
       ),
-      card && `Who owns ${s.t}? ${s.n} on Copybook`
+      card && `Who owns ${s.t}? ${s.n} on Factor Dynamics`
     )
     st++
   }
@@ -410,7 +410,7 @@ writeFileSync(
   shell.replace('<div id="root"></div>', () =>
     `<div id="root"><div id="pre">${pre(
       'See what the world’s best investors own, straight from the filing.',
-      'Copybook turns SEC 13F filings into clear portfolios: top positions, sector mix and conviction, for the managers worth following.',
+      'Factor Dynamics turns SEC 13F filings into clear portfolios: top positions, sector mix and conviction, for the managers worth following.',
       `<p>${link('season/', 'This 13F season')} · ${link('flow/', 'Smart money flow')} · ${link('investors/', 'Investors')} · ${link('consensus/', 'Consensus')} · ${link('pricing/', 'Pricing')}</p>`,
     )}</div></div>`,
   ),
@@ -448,12 +448,12 @@ console.log(`wrote ${n} investor pages`)
   const xml = `<?xml version="1.0" encoding="utf-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
   <id>${SITE}season/feed.xml</id>
-  <title>${x(`Copybook: ${qLabel(FEED_Q)} 13F filings by the funds we track`)}</title>
+  <title>${x(`Factor Dynamics: ${qLabel(FEED_Q)} 13F filings by the funds we track`)}</title>
   <subtitle>Each tracked fund's 13F as it is filed with the SEC, from EDGAR.</subtitle>
   <updated>${x(feed.length ? when(feed[0].m) : built)}</updated>
   <link rel="self" type="application/atom+xml" href="${SITE}season/feed.xml"/>
   <link rel="alternate" type="text/html" href="${SITE}season/"/>
-  <author><name>Copybook</name><uri>${SITE}</uri></author>
+  <author><name>Factor Dynamics</name><uri>${SITE}</uri></author>
 ${entries.join('\n')}
 </feed>
 `

@@ -694,7 +694,7 @@ export function SignedOut({ error, eyebrow = 'Account' }: { error?: string; eyeb
     <>
       <header>
         <p className="text-[13px] font-medium text-accent">{eyebrow}</p>
-        <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em]">{moved ? 'Please sign in again.' : 'Sign in to Copybook.'}</h1>
+        <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em]">{moved ? 'Please sign in again.' : 'Sign in to Factor Dynamics.'}</h1>
         <p className="mt-3 text-[17px] text-ink-2">No password. We’ll email you a sign-in link.</p>
       </header>
       {note && <p className="mt-6 rounded-xl bg-[#f6ead2] px-4 py-3 text-[14px] text-[#7a5410]">{note}</p>}
@@ -706,7 +706,7 @@ export function SignedOut({ error, eyebrow = 'Account' }: { error?: string; eyeb
       <section className="mt-8 max-w-lg rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
         {sent ? (
           <p role="status" className="text-[15px]">
-            Check your inbox: if that address has a Copybook account, a sign-in link is on its way.
+            Check your inbox: if that address has a Factor Dynamics account, a sign-in link is on its way.
           </p>
         ) : (
           <form

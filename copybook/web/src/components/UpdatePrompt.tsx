@@ -41,7 +41,7 @@ export function UpdatePrompt() {
   return (
     <div role="status" className="fixed inset-x-0 bottom-4 z-50 flex justify-center px-4">
       <div className="flex items-center gap-3 rounded-full bg-night py-2 pl-4 pr-2 text-[13.5px] text-white shadow-[0_12px_40px_-12px_rgb(12_14_19/0.5)]">
-        <span>A new version of Copybook is out.</span>
+        <span>A new version of Factor Dynamics is out.</span>
         <button type="button" onClick={() => location.reload()} className="rounded-full bg-white px-3 py-1 font-medium text-ink hover:bg-white/90">
           Reload
         </button>
