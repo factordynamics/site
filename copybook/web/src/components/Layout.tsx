@@ -83,6 +83,9 @@ export function Layout() {
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-3 focus:z-[60] focus:rounded-full focus:bg-ink focus:px-4 focus:py-2 focus:text-white">
         Skip to content
       </a>
+      {/* Phones: the open menu overlays the page over a 40% scrim (a tap on it closes the menu), never pushing it down. Outside
+          the header: its backdrop blur would make a fixed child's box the header's own. */}
+      {menu && <div className="fixed inset-0 z-30 bg-black/40 lg:hidden" aria-hidden="true" onClick={() => setMenu(false)} />}
       <header className={`sticky top-0 z-40 transition-[background,box-shadow] ${scrolled || menu ? 'bg-paper/85 shadow-[0_1px_0_var(--color-line)] backdrop-blur-xl' : 'bg-transparent'}`}>
         <div className="container-x flex h-16 items-center gap-6">
           <Link to="/" aria-label="Factor Dynamics home" className="shrink-0">
@@ -125,8 +128,6 @@ export function Layout() {
             </button>
           </div>
         </div>
-        {/* Phones: the open menu overlays the page over a 40% scrim (a tap on the scrim closes it), never pushing it down. */}
-        {menu && <div className="fixed inset-x-0 bottom-0 top-16 bg-black/40 lg:hidden" aria-hidden="true" onClick={() => setMenu(false)} />}
         {menu && (
           <div className="container-x absolute inset-x-0 top-full max-h-[calc(100dvh-4rem)] overflow-y-auto border-t border-line bg-paper pb-5 pt-3 shadow-[0_12px_24px_rgba(12,14,19,0.12)] lg:hidden">
             <SearchBox />
