@@ -1,6 +1,6 @@
 import type { Alert13F, AlertEvent } from './alerts';
 import { FOOTER, sendMail, type Mail } from './email';
-import { isActive, isPaused, WORKER_URL, pauseScheduled, testAddress, type Env, type Member } from './env';
+import { isActive, isPaused, planName, WORKER_URL, pauseScheduled, testAddress, type Env, type Member } from './env';
 import { unsubscribeUrl } from './free';
 import { customerHasCard, getFollows, getMember, listMembers, LOGIN_TTL, putMember, syncSubscription } from './members';
 import { SEAT_LIMIT } from './seats';
@@ -16,9 +16,9 @@ import { signToken, verifyToken } from './tokens';
  */
 
 const PRICES: Record<string, { name: string; month: number; year: number }> = {
-  copy: { name: 'Copy', month: 9, year: 79 },
-  pro: { name: 'Copy Pro', month: 39, year: 390 },
-  fund: { name: 'Copy Fund', month: 199, year: 1990 },
+  copy: { get name() { return planName('copy'); }, month: 9, year: 79 },
+  pro: { get name() { return planName('pro'); }, month: 39, year: 390 },
+  fund: { get name() { return planName('fund'); }, month: 199, year: 1990 },
 };
 
 /** Counted in revenue, funnel and ops metrics. Test members (gate runs) are not. */
@@ -169,12 +169,12 @@ const esc = (v: string) => v.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
  * invoices carry them in the footer (Stripe's customer default), and a net-30 invoice also in its memo.
  */
 export const fundTerms = (env: Env) =>
-  `Order terms: Copy Fund, up to ${SEAT_LIMIT} seats (manage them at ${env.SITE_URL}account/). Price $1,990 a year for up to ${SEAT_LIMIT} seats, whatever number are used. ` +
+  `Order terms: ${planName('fund')}, up to ${SEAT_LIMIT} seats (manage them at ${env.SITE_URL}account/). Price $1,990 a year for up to ${SEAT_LIMIT} seats, whatever number are used. ` +
   `The service period is shown on the line item. Renews each year at that price until cancelled. Cancel any time from Manage billing; access runs to the end of the paid year, and partial years aren't refunded. If we discontinue the plan during a prepaid period, we refund the unused part pro rata. ` +
   `Invoices are payable within 30 days. Terms in force on the invoice date: ${env.SITE_URL}terms/`;
 
 /** A net-30 Fund invoice's memo (Stripe allows 500 characters; the full order terms are in the footer). */
-export const fundMemo = (env: Env) => `Copy Fund, up to ${SEAT_LIMIT} seats, $1,990 a year, payable within 30 days. Full order terms below and at ${env.SITE_URL}terms/`;
+export const fundMemo = (env: Env) => `${planName('fund')}, up to ${SEAT_LIMIT} seats, $1,990 a year, payable within 30 days. Full order terms below and at ${env.SITE_URL}terms/`;
 /** Every Copybook invoice's footer ends with this (Stripe Tax is off). */
 export const TAX_LINE = 'Prices exclude applicable taxes. Copybook does not currently collect sales tax.';
 /**
@@ -348,7 +348,7 @@ export async function apCopy(env: Env, inv: { id?: string; customer?: string; nu
     to: ap,
     replyTo: env.CONTACT_EMAIL,
     subject: `Invoice ${inv.number ?? ''} from Factor Dynamics (Copybook): ${amount} due ${due}`.replace('  ', ' '),
-    text: `A copy for your accounts payable team of the Copy Fund invoice sent to ${m.email}.\n\nInvoice: ${inv.number ?? inv.id}\nAmount due: ${amount} (USD)\nDue: ${due} (Net 30)${m.invoice_terms?.po ? `\nPO: ${m.invoice_terms.po}` : ''}\n\nPay online (card or US bank account): ${inv.hosted_invoice_url ?? `${env.SITE_URL}account/`}\nPDF: ${inv.invoice_pdf ?? 'on the payment page'}\n\nQuestions about this invoice: reply to this email.${FOOTER}`,
+    text: `A copy for your accounts payable team of the ${planName('fund')} invoice sent to ${m.email}.\n\nInvoice: ${inv.number ?? inv.id}\nAmount due: ${amount} (USD)\nDue: ${due} (Net 30)${m.invoice_terms?.po ? `\nPO: ${m.invoice_terms.po}` : ''}\n\nPay online (card or US bank account): ${inv.hosted_invoice_url ?? `${env.SITE_URL}account/`}\nPDF: ${inv.invoice_pdf ?? 'on the payment page'}\n\nQuestions about this invoice: reply to this email.${FOOTER}`,
   }]);
   await env.DB.put(`apcopy:${inv.id}`, new Date().toISOString(), { expirationTtl: 400 * 86400 });
   return `sent ${status}`;
@@ -369,8 +369,8 @@ export async function markOverdue(env: Env, customer: string, invoice: { id?: st
   const status = await sendMail(env, [
     {
       to: m.email,
-      subject: `Copy Fund is paused: invoice ${invoice.number ?? ''} is past due`.replace('  ', ' '),
-      text: `Your Copy Fund invoice ${invoice.number ?? ''} for ${amount} was due on ${due} and hasn't been paid, so Copybook access for you and your team's seats is paused.\n\nPay it online (card or ACH) and access comes back within minutes, with your follows, seats and API keys as they were:\n${url}\n\nIf it's already in your payables run, reply to this email and we'll keep you open meanwhile.\n\nYour account: ${env.SITE_URL}account/${FOOTER}`,
+      subject: `${planName('fund')} is paused: invoice ${invoice.number ?? ''} is past due`.replace('  ', ' '),
+      text: `Your ${planName('fund')} invoice ${invoice.number ?? ''} for ${amount} was due on ${due} and hasn't been paid, so Copybook access for you and your team's seats is paused.\n\nPay it online (card or ACH) and access comes back within minutes, with your follows, seats and API keys as they were:\n${url}\n\nIf it's already in your payables run, reply to this email and we'll keep you open meanwhile.\n\nYour account: ${env.SITE_URL}account/${FOOTER}`,
     },
   ]);
   return `paused, mail ${status}`;
@@ -402,9 +402,9 @@ export async function sweepInvoiceTrials(env: Env, now = Date.now()): Promise<{ 
 
 /** A Fund owner on a card trial (yearly) switches to paying by invoice (Net 30) from /account/, with nobody to email. */
 export async function switchToInvoice(env: Env, m: Member, f: { company?: string | null; po?: string | null; ap_email?: string | null } = {}): Promise<{ ok: true; collection: 'send_invoice' } | { ok: false; code: string; error: string }> {
-  if (m.seat_of || m.plan !== 'fund') return { ok: false, code: 'fund_owner_only', error: 'Only a Copy Fund owner can switch to invoice billing.' };
-  if (m.interval !== 'yearly') return { ok: false, code: 'monthly_card_only', error: 'Copy Fund monthly is paid by card. Switch to yearly to pay by invoice.' };
-  if (!isActive(m)) return { ok: false, code: 'subscription_inactive', error: 'No active Copy Fund subscription.' };
+  if (m.seat_of || m.plan !== 'fund') return { ok: false, code: 'fund_owner_only', error: `Only a ${planName('fund')} owner can switch to invoice billing.` };
+  if (m.interval !== 'yearly') return { ok: false, code: 'monthly_card_only', error: `${planName('fund')} monthly is paid by card. Switch to yearly to pay by invoice.` };
+  if (!isActive(m)) return { ok: false, code: 'subscription_inactive', error: `No active ${planName('fund')} subscription.` };
   const sub = await stripe(env, 'POST', `subscriptions/${m.subscription}`, { collection_method: 'send_invoice', days_until_due: 30, 'metadata[invoice]': 'true', ...(f.po !== undefined ? { 'metadata[po]': f.po ?? '' } : {}), ...(f.ap_email !== undefined ? { 'metadata[ap_email]': f.ap_email ?? '' } : {}), 'payment_settings[payment_method_types][0]': 'card', 'payment_settings[payment_method_types][1]': 'us_bank_account' });
   await ensureInvoiceTerms(env, sub, 'fund', f);
   await syncSubscription(env, sub);
@@ -438,13 +438,13 @@ export function day12Mail(env: Env, m: Member, unsub: string, now = Date.now(), 
   // A cardless trialist is a subscriber: the founding price is what they keep or lose (marketing's rev 82).
   // Monthly: the pause line with its link (plan, Dec 1), else the rule in words.
   const pl = keepUrl ? pauseLine(m, keepUrl, now) : null;
-  const keep = `Keep Copy. ${COPY_YEARLY}. Monthly? Pause once a year, up to 3 months. Add a card before ${day(m.trial_end!)} to keep the founding price, $9/month or $79/year, for as long as you stay. If the trial ends and you rejoin from Feb 1, it's $12/month or $99/year.`;
+  const keep = `Keep ${planName('copy')}. ${COPY_YEARLY}. Monthly? Pause once a year, up to 3 months. Add a card before ${day(m.trial_end!)} to keep the founding price, $9/month or $79/year, for as long as you stay. If the trial ends and you rejoin from Feb 1, it's $12/month or $99/year.`;
   const stay = 'The free pages and the free Friday email stay yours.';
   return {
     to: m.email,
-    subject: `Your Copy trial ends ${weekday}`,
-    text: `Your Copy trial ends ${weekday}, ${endAt(m.trial_end!)}. No card is on file, so it simply ends and nothing is charged.\n\nFrom now to February, Copy gives you:\n${gives.map((g) => `  - ${g}`).join('\n')}\n\n${WINTER_LINE}${mine ? `\n${mine}` : ''}\n\n${keep}\nAdd a card: ${add}\n${pl ? `\n${pl}\n` : ''}\n${stay}\n\nUnsubscribe from Copybook emails: ${unsub}${FOOTER}`,
-    html: `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:560px"><p>Your Copy trial ends <b>${esc(weekday)}, ${esc(endAt(m.trial_end!))}</b>. No card is on file, so it simply ends and nothing is charged.</p><p style="margin-bottom:4px"><b>From now to February, Copy gives you</b></p><ul style="margin-top:0;padding-left:20px">${gives.map((g) => `<li>${esc(g)}</li>`).join('')}</ul><p>${esc(WINTER_LINE)} <a href="https://pub-c691ec38c5cd4db6acb8e6bfef337500.r2.dev/winter-2025-26.json" style="color:#1d4ed8">The filings</a></p>${mine ? `<p>${esc(mine)}</p>` : ''}<p>${esc(keep)}</p><p><a href="${add}" style="color:#1d4ed8"><b>Add a card</b></a></p>${pl ? `<p style="font-size:14px">${esc(pl.slice(0, pl.lastIndexOf(' ')))} <a href="${pl.slice(pl.lastIndexOf(' ') + 1)}" style="color:#1d4ed8">Pause instead</a></p>` : ''}<p>${esc(stay)}</p><p style="font-size:12px;color:#6b7280"><a href="${unsub}" style="color:#6b7280">Unsubscribe</a></p></div>`,
+    subject: `Your ${planName('copy')} trial ends ${weekday}`,
+    text: `Your ${planName('copy')} trial ends ${weekday}, ${endAt(m.trial_end!)}. No card is on file, so it simply ends and nothing is charged.\n\nFrom now to February, ${planName('copy')} gives you:\n${gives.map((g) => `  - ${g}`).join('\n')}\n\n${WINTER_LINE}${mine ? `\n${mine}` : ''}\n\n${keep}\nAdd a card: ${add}\n${pl ? `\n${pl}\n` : ''}\n${stay}\n\nUnsubscribe from Copybook emails: ${unsub}${FOOTER}`,
+    html: `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:560px"><p>Your ${planName('copy')} trial ends <b>${esc(weekday)}, ${esc(endAt(m.trial_end!))}</b>. No card is on file, so it simply ends and nothing is charged.</p><p style="margin-bottom:4px"><b>From now to February, ${planName('copy')} gives you</b></p><ul style="margin-top:0;padding-left:20px">${gives.map((g) => `<li>${esc(g)}</li>`).join('')}</ul><p>${esc(WINTER_LINE)} <a href="https://pub-c691ec38c5cd4db6acb8e6bfef337500.r2.dev/winter-2025-26.json" style="color:#1d4ed8">The filings</a></p>${mine ? `<p>${esc(mine)}</p>` : ''}<p>${esc(keep)}</p><p><a href="${add}" style="color:#1d4ed8"><b>Add a card</b></a></p>${pl ? `<p style="font-size:14px">${esc(pl.slice(0, pl.lastIndexOf(' ')))} <a href="${pl.slice(pl.lastIndexOf(' ') + 1)}" style="color:#1d4ed8">Pause instead</a></p>` : ''}<p>${esc(stay)}</p><p style="font-size:12px;color:#6b7280"><a href="${unsub}" style="color:#6b7280">Unsubscribe</a></p></div>`,
     unsubscribe: unsub,
   };
 }
@@ -533,7 +533,7 @@ export async function yearlyPeakLine(env: Env, m: Member, filings: { slug: strin
   // switch to yearly included (planPrice). "$99 for new members" is for prospects only, never in a member's line.
   // A trial with no card would just end: its link opens the add-a-card form with yearly preselected (/keep routes it).
   if (m.plan === 'copy' && m.status === 'trialing' && m.has_payment_method === false && m.trial_end) {
-    return `Keep Copy at the founding price: add a card before ${day(m.trial_end)}. Yearly ${money(p.year)} or ${money(p.month)}/month. Add card: ${keep}`;
+    return `Keep ${planName('copy')} at the founding price: add a card before ${day(m.trial_end)}. Yearly ${money(p.year)} or ${money(p.month)}/month. Add card: ${keep}`;
   }
   return m.plan === 'copy'
     ? `Switch to yearly at your founding price: ${money(p.year)}/yr, locked, with history back to 2013 (from Dec 31). Switch now: ${keep}`
@@ -833,7 +833,7 @@ export async function runRevenue(env: Env, now: number): Promise<Record<string, 
       // Billed by invoice: no card to add and nothing to keep; the notice says when the invoice comes and how to stop it.
       if (m.collection === 'send_invoice') {
         const ends = new Date((m.trial_end ?? 0) * 1000).toISOString().slice(0, 10);
-        mails.push({ to: m.email, subject: `Your Copy Fund invoice comes on ${ends}`, text: `Your Copy Fund trial ends on ${ends}. That day Stripe emails your invoice for ${money(PRICES.fund.year)} (a year), payable within 30 days by card, ACH or bank transfer. Access continues meanwhile.
+        mails.push({ to: m.email, subject: `Your ${planName('fund')} invoice comes on ${ends}`, text: `Your ${planName('fund')} trial ends on ${ends}. That day Stripe emails your invoice for ${money(PRICES.fund.year)} (a year), payable within 30 days by card, ACH or bank transfer. Access continues meanwhile.
 
 Not going ahead? Cancel before ${ends} in your account and nothing is owed:
 ${env.SITE_URL}account/
@@ -1006,7 +1006,7 @@ export async function pauseMember(env: Env, m: Member, reason: string | null, no
   const offer = pauseOffer(m, now);
   const nextAt = pausable(m) ? pauseNextAt(m, now) : null;
   if (!offer && nextAt && !isPaused(m, now) && !pauseScheduled(m, now)) return { status: 409, body: { ok: false, error: `Monthly plans can pause once a year; your next pause is available from ${isoDay(Math.floor(nextAt / 1000))}`, code: 'pause_used', next_pause: isoDay(Math.floor(nextAt / 1000)) } };
-  if (!offer && m.status === 'trialing' && m.has_payment_method === false) return { status: 409, body: { ok: false, error: 'Add a card to keep Copy; a trial without one just ends, so there is nothing to pause', code: 'no_card' } };
+  if (!offer && m.status === 'trialing' && m.has_payment_method === false) return { status: 409, body: { ok: false, error: `Add a card to keep ${planName('copy')}; a trial without one just ends, so there is nothing to pause`, code: 'no_card' } };
   if (!offer) return { status: 409, body: { ok: false, error: isPaused(m, now) ? 'Already paused' : m.status === 'trialing' ? 'Monthly plans can pause after the trial; cancel in Manage billing instead' : 'Monthly plans can pause; yearly, seat and Holdterm plans cancel in Manage billing instead', code: 'pause_unavailable' } };
   if (reason && !(await noteReason(env, m.customer, reason, 'pause', note))) return { status: 400, body: { ok: false, error: `reason: ${Object.keys(WHY).join(', ')}`, code: 'bad_request' } };
   const start = pauseStart(m, now);
@@ -1130,7 +1130,7 @@ export function preseasonMail(env: Env, m: Member, deadline: string, quarter: st
   const last = highlights.length ? `Last season in your names:\n${highlights.map((h) => `  - ${h}`).join('\n')}\n\n` : '';
   const ask = isPaused(m)
     ? `Your pause ends on ${day(m.paused_until!)}, so alerts start again before the deadline; nothing to do.`
-    : `${p?.name ?? 'Copy'} is ${p ? money(p.month) : '$9'} a month, cancel any time, with your follows as you left them. Start again: ${resume}`;
+    : `${p?.name ?? planName('copy')} is ${p ? money(p.month) : '$9'} a month, cancel any time, with your follows as you left them. Start again: ${resume}`;
   return {
     to: m.email,
     subject: `${q} 13Fs are due ${due}: get each one minutes after it's filed`,

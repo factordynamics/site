@@ -1,7 +1,7 @@
 import type { Alert13F, AlertEvent } from './alerts';
 import { siteFirm, siteName } from './names';
 import { cleanItem4, countedMoves, exchangeLine, filingId, FILER_VALUE, holdCusipPairs, posKey, UNUSUAL, type MoveRow, type Moves } from './edgar';
-import { testAddress, WORKER_URL, type Env, type Member } from './env';
+import { planName, testAddress, WORKER_URL, type Env, type Member } from './env';
 import type { Follows } from './members';
 import { firmName, publicSlug } from '../../../holdterm/src/names';
 import { htEmail, htLoginEmail, type HtEvent, type HtFiling } from '../../../holdterm/src/alert-render';
@@ -453,7 +453,7 @@ export function leadAckMail(env: Env, l: { topic: unknown; name: string | null; 
       ? 'We received your request to delete your Copybook data. We will confirm by email once it is done, within 30 days.'
       : l.topic === 'support'
         ? 'We received your message and will reply to this address, usually within one business day.'
-        : `Thanks for your interest in Copy Fund${l.fund ? ` for ${l.fund}` : ''}. We will reply to this address within one business day${l.invoice ? ' with an annual invoice quote' : ' with how to get started'}.`;
+        : `Thanks for your interest in ${planName('fund')}${l.fund ? ` for ${l.fund}` : ''}. We will reply to this address within one business day${l.invoice ? ' with an annual invoice quote' : ' with how to get started'}.`;
   const got = [
     l.fund && `Fund: ${l.fund}`,
     l.seats && `Seats: ${l.seats}`,
@@ -463,14 +463,14 @@ export function leadAckMail(env: Env, l: { topic: unknown; name: string | null; 
   ].filter(Boolean);
   return {
     to: l.email,
-    subject: l.topic === 'delete' ? 'Your Copybook data deletion request' : l.topic === 'support' ? 'We got your message' : 'Your Copy Fund request',
+    subject: l.topic === 'delete' ? 'Your Copybook data deletion request' : l.topic === 'support' ? 'We got your message' : `Your ${planName('fund')} request`,
     text: `${hi}\n\n${what}${got.length ? `\n\nWhat you sent:\n${got.join('\n')}` : ''}\n\nCopybook: ${env.SITE_URL}${FOOTER}`,
   };
 }
 
 /** The copy of a site request that goes to our inbox (CONTACT_EMAIL); replying answers the requester. */
 export function leadNoticeMail(env: Env, l: Record<string, unknown> & { topic: unknown; email: string }, id: string): Mail {
-  const kind = l.topic === 'delete' ? 'Data deletion request' : l.topic === 'support' ? 'Support message' : 'Copy Fund request';
+  const kind = l.topic === 'delete' ? 'Data deletion request' : l.topic === 'support' ? 'Support message' : `${planName('fund')} request`;
   const rows = ['name', 'email', 'fund', 'seats', 'invoice', 'plan_interval', 'page', 'received_at']
     .filter((k) => l[k] !== null && l[k] !== undefined)
     .map((k) => `${k}: ${String(l[k])}`);
@@ -488,7 +488,7 @@ export function teamDuplicateMail(env: Env, to: string, labels: string[]): Mail 
   return {
     to,
     subject: `Your ${what} alerts now come from your team's channel`,
-    text: `You had connected the same ${what} destination your Copy Fund team's owner connected for the team. To deliver each alert there once, we removed your copy; team alerts keep arriving there from the team's channel${labels.includes('webhook') ? ", signed with the team's webhook secret (shown read-only in your account)" : ''}.\n\nYou can still connect personal channels of your own at ${env.SITE_URL}account/.${FOOTER}`,
+    text: `You had connected the same ${what} destination your ${planName('fund')} team's owner connected for the team. To deliver each alert there once, we removed your copy; team alerts keep arriving there from the team's channel${labels.includes('webhook') ? ", signed with the team's webhook secret (shown read-only in your account)" : ''}.\n\nYou can still connect personal channels of your own at ${env.SITE_URL}account/.${FOOTER}`,
   };
 }
 
@@ -504,7 +504,7 @@ export function channelFailMail(env: Env, to: string, label: string, reason: str
 /** A repeat checkout by an address already welcomed: the sign-in link and what carried over, not a second welcome. */
 export function backMail(env: Env, to: string, token: string, m: Member): Mail {
   const link = `${env.SITE_URL}account/?login=${encodeURIComponent(token)}`;
-  const name = m.plan === 'pro' ? 'Copy Pro' : m.plan === 'fund' ? 'Copy Fund' : 'Copy';
+  const name = planName(m.plan === 'pro' || m.plan === 'fund' ? m.plan : 'copy');
   const trial = m.trial_end ? ` Your trial runs until ${new Date(m.trial_end * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/New_York' })}.` : '';
   const text = `You're signed back in to ${name}.${trial} Your follows, alert channels and settings are as you left them.\n\nSign in on any device (this link works once, for 7 days):\n${link}\n\nManage or cancel billing any time from ${env.SITE_URL}account/.${FOOTER}`;
   return { to, subject: `You're signed back in to ${name}`, text };
@@ -531,7 +531,7 @@ export function loginMail(env: Env, to: string, token: string, welcome: boolean,
   if (!welcome) {
     return { to, subject: 'Your Copybook sign-in link', text: `Here is your Copybook sign-in link.\n\nSign in (this link works once, for 15 minutes):\n${link}\n\nManage or cancel billing any time from ${env.SITE_URL}account/.${FOOTER}` };
   }
-  const name = m?.plan === 'pro' ? 'Copy Pro' : m?.plan === 'fund' ? 'Copy Fund' : 'Copy';
+  const name = planName(m?.plan === 'pro' || m?.plan === 'fund' ? m.plan : 'copy');
   const trial = m?.trial_end ? ` Your free trial runs until ${new Date(m.trial_end * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/New_York' })}, ${new Date(m.trial_end * 1000).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }).replace(' AM', ' am').replace(' PM', ' pm')} ET; ${m.has_payment_method === false ? "no card is on file, so it simply ends then unless you add one in your account. Nothing is charged." : "cancel before then from your account and you're not charged."}` : '';
   // A Fund trial billed by invoice (no card): the invoice's dates, amount, PO and recipients, and the team's first steps.
   const inv = m?.collection === 'send_invoice' && m.plan === 'fund' && m.trial_end ? m : null;
@@ -564,8 +564,8 @@ export function seatInviteMail(env: Env, to: string, owner: string, token: strin
   const link = `${env.SITE_URL}account/?login=${encodeURIComponent(token)}`;
   return {
     to,
-    subject: 'You have a Copy Fund seat on Copybook',
-    text: `${owner} added you to their team's Copy Fund plan on Copybook. Your seat shares the team's followed funds, watchlist, book and peer list, and has its own alert settings, delivery channels and API keys.\n\nSign in (this link works once, for 7 days; later, request a new link with this address at ${env.SITE_URL}account/):\n${link}${FOOTER}`,
+    subject: `You have a ${planName('fund')} seat on Copybook`,
+    text: `${owner} added you to their team's ${planName('fund')} plan on Copybook. Your seat shares the team's followed funds, watchlist, book and peer list, and has its own alert settings, delivery channels and API keys.\n\nSign in (this link works once, for 7 days; later, request a new link with this address at ${env.SITE_URL}account/):\n${link}${FOOTER}`,
   };
 }
 

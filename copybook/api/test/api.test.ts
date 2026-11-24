@@ -4108,6 +4108,30 @@ describe('copybook api', () => {
     expect([back.at(-2)!.includes('Welcome back'), back.at(-1)!.includes('custom_text[submit][message]=Welcome back. Your trial was used, so billing starts today at the founding price.'), back.at(-1)!.includes('trial_period_days')]).toEqual([false, true, false]);
     expect([(await gt('enforce-trial')).status, (await gt(await signToken(env.SESSION_SECRET, 'keep', 'enforce-trial', 60))).status]).toEqual([400, 400]);
     expect((await call('/checkout', { body: { plan: 'gold', interval: 'monthly' } })).status).toBe(400);
+    // S1b: Holdterm $3 is closed to new members, pointing at Plus; no Checkout Session is created for it.
+    calls.length = 0;
+    const ht = await call('/checkout', { body: { plan: 'holdterm', interval: 'monthly', email: 'ht@example.com' } });
+    expect([ht.status, await ht.json(), calls.filter((c) => c.path === 'checkout/sessions').length]).toEqual([
+      410,
+      { ok: false, code: 'plan_closed', error: `Holdterm Alerts is closed to new members. Its alerts are part of Copy: ${env.SITE_URL}pricing/`, url: `${env.SITE_URL}pricing/` },
+      0,
+    ]);
+    // The plan names members read flip at the site's go-live (operator only); plan ids and the price looked up don't.
+    const { backMail } = await import('../src/email');
+    const names = (plus: boolean, auth = true) => handleRequest(new Request('https://api.test/ops/plan-names', { method: 'POST', body: JSON.stringify({ plus }), headers: auth ? { authorization: `Bearer ${env.HEALTH_TOKEN}` } : {} }), env);
+    expect((await names(true, false)).status).toBe(404);
+    expect(backMail(env, 'x@example.com', 't', { plan: 'pro' } as never).subject).toBe("You're signed back in to Copy Pro");
+    expect(await (await names(true)).json()).toEqual({ ok: true, plus: true, names: { copy: 'Plus', pro: 'Pro', fund: 'Fund' } });
+    try {
+      expect([backMail(env, 'x@example.com', 't', { plan: 'pro' } as never).subject, backMail(env, 'x@example.com', 't', { plan: 'copy' } as never).subject]).toEqual(["You're signed back in to Pro", "You're signed back in to Plus"]);
+      calls.length = 0;
+      const plusCo = await call('/checkout', { body: { plan: 'copy', interval: 'monthly', email: 'plus@example.com' } });
+      expect(plusCo.status).toBe(200);
+      expect(calls.filter((c) => c.path === 'checkout/sessions').map((c) => /line_items\[0\]\[price\]=(\w+)/.exec(c.body)?.[1])).toEqual(['price_copy_monthly']);
+      expect((await (await call('/checkout', { body: { plan: 'holdterm', interval: 'yearly' } })).json()).error).toBe(`Holdterm Alerts is closed to new members. Its alerts are part of Plus: ${env.SITE_URL}pricing/`);
+    } finally {
+      expect((await (await names(false)).json()).plus).toBe(false);
+    }
     // The visitor's first touch and landing page ride on the session; our own checks are tagged test (the lead).
     calls.length = 0;
     await call('/checkout', { body: { plan: 'copy', interval: 'monthly', utm_source: 'x', utm_content: 'seed-season', landing: '/season/' } });

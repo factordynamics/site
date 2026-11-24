@@ -3112,6 +3112,7 @@ interface Job {
 }
 
 export async function runScheduled(env: Env, scheduledTime: number): Promise<Record<string, unknown>> {
+  await (await import('./env')).loadPlanNames(env);
   // Two hosts (Cloudflare polls, gene serves members): state synced both ways, one poller at a time (failover.ts).
   const fo = await import('./failover');
   if (fo.syncOn(env)) return fo.syncedMinute(env, scheduledTime, (e) => runMinute(e, scheduledTime));

@@ -1,4 +1,4 @@
-import { isActive, isPro, type Env, type Member } from './env';
+import { isActive, isPro, planName, proTiers, type Env, type Member } from './env';
 import { getMember } from './members';
 
 /**
@@ -73,8 +73,8 @@ export async function authKey(env: Env, header: string | null): Promise<KeyAuth>
   const member = await getMember(env, key.customer);
   // Its member is gone (a removed seat, a deleted account): the key is dead, not unpaid.
   if (!member) return { ok: false, status: 401, code: 'invalid_key', message: 'Unknown or revoked API key.' };
-  if (!isActive(member)) return { ok: false, status: 402, code: 'subscription_inactive', message: `The ${(member as Member).plan === 'fund' ? 'Copy Fund' : (member as Member).plan === 'pro' ? 'Copy Pro' : 'Copy'} subscription for this key is not active.` };
-  if (!isPro(member)) return { ok: false, status: 403, code: 'pro_required', message: 'API access is part of Copy Pro and Copy Fund.' };
+  if (!isActive(member)) return { ok: false, status: 402, code: 'subscription_inactive', message: `The ${planName((member as Member).plan)} subscription for this key is not active.` };
+  if (!isPro(member)) return { ok: false, status: 403, code: 'pro_required', message: `API access is part of ${proTiers()}.` };
   return { ok: true, key, member };
 }
 

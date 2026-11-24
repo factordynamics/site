@@ -1,6 +1,6 @@
 import type { Alert13F, AlertEvent } from './alerts';
 import { channelFailMail, chatText, feedItems, sendMail, teamDuplicateMail, type FeedItem } from './email';
-import { isPro, type Env, type Member } from './env';
+import { isPro, planName, type Env, type Member } from './env';
 import { PER_CLASS, perClassNotice, SCHEMA_VERSION, SUMMED_PIN } from './v1';
 import { PUBLIC_V1_BASE } from './env';
 import { getMember, type Follows } from './members';
@@ -209,7 +209,7 @@ export async function updateChannels(env: Env, m: Member, b: Record<string, unkn
   }
   if (b.webhook !== undefined) {
     if (b.webhook === null || b.webhook === '') delete c.webhook;
-    else if (!isPro(m)) return { ok: false, error: 'Signed webhooks are part of Copy Pro', code: 'pro_required' };
+    else if (!isPro(m)) return { ok: false, error: `Signed webhooks are part of ${planName('pro')}`, code: 'pro_required' };
     else if (typeof b.webhook === 'string' && httpsPublic(b.webhook.trim())) {
       const url = b.webhook.trim();
       // A new URL keeps the secret; ask for a new one with rotate_secret.

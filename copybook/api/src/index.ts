@@ -8,7 +8,7 @@ import { handleV1, v1error } from './v1';
 
 export { KeyMeter } from './keys';
 import { holdtermLoginMail, leadAckMail, leadNoticeMail, loginMail, previewInbox, sendMail } from './email';
-import { ACTIVE, followCounts, stableBase, logAccess, isActive, isCopy, isPaused, isPro, linkBase, testAddress, type Env, type Member } from './env';
+import { ACTIVE, followCounts, loadPlanNames, planName, proTiers, stableBase, logAccess, isActive, isCopy, isPaused, isPro, linkBase, testAddress, type Env, type Member } from './env';
 import { changeFollows, type FollowList, type FollowOp, type Follows, followsWaiting, getFollows, getMember, isOurInvoice, isOurSubscription, listMembers, planOf, LOGIN_REQUEST_TTL, MAX_FOLLOWS, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
 export { MemberFollows } from './members';
 import { importBook } from './book';
@@ -522,6 +522,7 @@ async function csvResponse(env: Env, slug: string, h: Record<string, string>, da
 }
 
 export async function handleRequest(req: Request, env: Env): Promise<Response> {
+  await loadPlanNames(env);
   const url = new URL(req.url);
   const path = url.pathname.replace(/\/+$/, '') || '/';
   const origin = allowedOrigin(req.headers.get('origin'), env);
@@ -1210,6 +1211,15 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
 
   // Operator: a gate token for x-copybook-gate (enforce-trial), valid `days` (1-14, default 7). Its only power is to apply
   // the one-trial rule to copybook-test- addresses on POST /checkout, so it can be handed to the gate's testers.
+  // S1b: the plan names members read (Copy -> Plus, Copy Pro -> Pro, Copy Fund -> Fund), on at the site's go-live.
+  if (req.method === 'POST' && path === '/ops/plan-names') {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    const b = await body(req);
+    if (typeof b.plus !== 'boolean') return json({ ok: false, error: 'plus: true or false', code: 'bad_request' }, 400, h);
+    await env.DB.put('flag:plus', b.plus ? 'on' : 'off');
+    const plus = await loadPlanNames(env, true);
+    return json({ ok: true, plus, names: { copy: planName('copy'), pro: planName('pro'), fund: planName('fund') } }, 200, h);
+  }
   if (req.method === 'POST' && path === '/ops/gate-token') {
     if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
     // {hours: 1-336} for a same-day token (the Sunday gate), else {days: 1-14}, default 7.
@@ -1312,7 +1322,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       const inbox = testAddress(email) ? { test_inbox: `${env.PUBLIC_URL ?? ''}${await (await import('./email')).sinkKey(env, email)}` } : {};
       if (r.state === 'started') return json({ ok: true, id, trial: 'started', trial_end: r.trial_end, invoice_on: r.invoice_on, due_on: r.due_on, sign_in_email: r.sign_in_email, po: str(b.po, 140), ap_email: str(b.ap_email, 200)?.toLowerCase() ?? null, ...inbox }, 200, h);
       if (r.state === 'already_member') return json({ ok: false, id, code: 'already_member', error: 'This address already has a Copybook subscription. Sign in, or switch to invoice billing in your account.' }, 409, h);
-      if (r.state === 'domain_used') return json({ ok: false, id, code: 'trial_used', error: 'Your company has already had a Copy Fund trial. We have your request and will email you to set up an invoice.' }, 409, h);
+      if (r.state === 'domain_used') return json({ ok: false, id, code: 'trial_used', error: `Your company has already had a ${planName('fund')} trial. We have your request and will email you to set up an invoice.` }, 409, h);
       return json({ ok: false, id, code: 'freemail', error: 'Use your work email: an invoice trial goes to a company address.' }, 400, h);
     }
     const mail = await sendMail(env, [leadAckMail(env, lead)]);
@@ -1454,7 +1464,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       const existed = before(freeRec) || before(prior) || !!prior?.merged_from;
       const sub = await stripe(env, 'GET', `subscriptions/${cs.subscription}`);
       // A second free trial for this email: cancelled ($0), no member; /account/ offers plain checkout and a sign-in.
-      if (await (await import('./referrals')).blockRepeatTrial(env, sub, cs.customer_details?.email)) return json({ ok: true, code: 'trial_used', sign_in: 'email', member: null, error: "You've already used your free trial. Subscribe to keep Copy: $9/mo or $79/yr (founding price)." }, 200, h);
+      if (await (await import('./referrals')).blockRepeatTrial(env, sub, cs.customer_details?.email)) return json({ ok: true, code: 'trial_used', sign_in: 'email', member: null, error: `You've already used your free trial. Subscribe to keep ${planName('copy')}: $9/mo or $79/yr (founding price).` }, 200, h);
       const m = await syncSubscription(env, sub, cs.customer_details?.email);
       if (existed) return json({ ok: true, code: 'existing_account', sign_in: 'email', member: null }, 200, h);
       // A new subscriber: signed in on this device, provisionally (the address isn't proven yet), like the signup form.
@@ -1476,7 +1486,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     if (!p || !unused) return json({ ok: false, error: 'download link expired or already used' }, 401, h);
     await env.DB.delete(`dl:${p.n}`);
     const owner = await getMember(env, p.c);
-    if (!isCopy(owner)) return json({ ok: false, error: 'Copy subscription required' }, 402, h);
+    if (!isCopy(owner)) return json({ ok: false, error: `${planName('copy')} subscription required` }, 402, h);
     const res = await csvResponse(env, dlSlug, h);
     // On the Funnel name a CSV over 1 MB goes to presigned R2 (served here if R2 can't take it).
     const fwd = await import('./download');
@@ -1563,7 +1573,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   // Seasonal pause instead of cancelling: POST /pause {reason?} pauses billing and alerts until 14 days before the
   // next 13F deadline; DELETE /pause ends it now. POST /cancel-reason {reason, note?} stores the one cancellation question.
   if (path === '/pause' && (req.method === 'POST' || req.method === 'DELETE')) {
-    if (m.seat_of) return json({ ok: false, error: "Billing is managed by your team's Copy Fund owner", code: 'seat' }, 403, h);
+    if (m.seat_of) return json({ ok: false, error: `Billing is managed by your team's ${planName('fund')} owner`, code: 'seat' }, 403, h);
     const { pauseMember, unpauseMember } = await import('./revenue');
     const b = req.method === 'POST' ? await body(req) : {};
     const r = req.method === 'POST' ? await pauseMember(env, m, typeof b.reason === 'string' ? b.reason : null, Date.now(), typeof b.note === 'string' && b.note.trim() ? b.note.trim() : undefined) : await unpauseMember(env, m);
@@ -1589,7 +1599,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
 
   // "Add a card" (a trial without one, /account/ and the welcome page): the portal's payment-method form, back to /account/.
   if (req.method === 'POST' && path === '/portal/card') {
-    if (m.seat_of) return json({ ok: false, error: "Billing is managed by your team's Copy Fund owner", code: 'seat' }, 403, h);
+    if (m.seat_of) return json({ ok: false, error: `Billing is managed by your team's ${planName('fund')} owner`, code: 'seat' }, 403, h);
     if (!m.customer.startsWith('cus_')) return json({ ok: false, error: 'no subscription', code: 'no_subscription' }, 409, h);
     // { plan: 'monthly' | 'yearly' } (retail, Nov 11): a trial moves to that price first (the trial and its end stay), so
     // the card form follows a choice the member saw with its amount and date.
@@ -1618,14 +1628,14 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
 
   // "Switch to yearly" (the welcome page, /account/): the portal's confirm page for the same subscription at the yearly price.
   if (req.method === 'POST' && path === '/yearly') {
-    if (m.seat_of) return json({ ok: false, error: "Billing is managed by your team's Copy Fund owner", code: 'seat' }, 403, h);
+    if (m.seat_of) return json({ ok: false, error: `Billing is managed by your team's ${planName('fund')} owner`, code: 'seat' }, 403, h);
     const { yearlyPortalUrl } = await import('./revenue');
     const u = await yearlyPortalUrl(env, m);
     return u ? json({ ok: true, url: u }, 200, h) : json({ ok: false, error: m.interval === 'yearly' ? 'Already yearly' : 'Nothing to switch', code: m.interval === 'yearly' ? 'already_yearly' : 'no_subscription' }, 409, h);
   }
 
   if (req.method === 'POST' && path === '/portal') {
-    if (m.seat_of) return json({ ok: false, error: "Billing is managed by your team's Copy Fund owner", code: 'seat' }, 403, h);
+    if (m.seat_of) return json({ ok: false, error: `Billing is managed by your team's ${planName('fund')} owner`, code: 'seat' }, 403, h);
     const ht = m.plan === 'holdterm';
     const s = await stripe(env, 'POST', 'billing_portal/sessions', {
       customer: m.customer,
@@ -1653,7 +1663,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       const had = (await getFollows(env, m))[list].includes(value);
       const r = await changeFollows(env, m, req.method === 'POST' ? { add: { list, value, max: FREE_INVESTORS } } : { remove: { list, value } });
       // At the cap: 402 with code and follow cap_reached (site bundles, cached ones included, show the cap message on it).
-      if (!r.ok && r.error.startsWith('limit:')) return json({ ok: false, follow: 'cap_reached', error: `Free accounts follow up to ${FREE_INVESTORS} investors. Remove one, or start Copy for unlimited follows.`, code: 'cap_reached', limit: FREE_INVESTORS }, 402, h);
+      if (!r.ok && r.error.startsWith('limit:')) return json({ ok: false, follow: 'cap_reached', error: `Free accounts follow up to ${FREE_INVESTORS} investors. Remove one, or start ${planName('copy')} for unlimited follows.`, code: 'cap_reached', limit: FREE_INVESTORS }, 402, h);
       const follow = req.method === 'POST' ? (had ? 'already' : 'added') : had ? 'removed' : 'not_following';
       return r.ok ? json({ ok: true, follow, follows: r.follows, limit: FREE_INVESTORS }, 200, h) : json({ ok: false, error: r.error }, 400, h);
     }
@@ -1662,14 +1672,14 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       const value = decodeURIComponent(own[1]).toUpperCase().replace('-', '.');
       if (!TICKER.test(value)) return json({ ok: false, error: 'not a ticker like BRK.B', code: 'bad_request' }, 400, h);
       const r = await changeFollows(env, m, req.method === 'POST' ? { add: { list: 'owned', value, max: FREE_NAMES } } : { remove: { list: 'owned', value } });
-      if (!r.ok && r.error.startsWith('limit:')) return json({ ok: false, error: `Free accounts can save up to ${FREE_NAMES} names. Copy has no limit.`, code: 'free_limit', limit: FREE_NAMES }, 402, h);
+      if (!r.ok && r.error.startsWith('limit:')) return json({ ok: false, error: `Free accounts can save up to ${FREE_NAMES} names. ${planName('copy')} has no limit.`, code: 'free_limit', limit: FREE_NAMES }, 402, h);
       return r.ok ? json({ ok: true, follows: r.follows, limit: FREE_NAMES }, 200, h) : json({ ok: false, error: r.error }, 400, h);
     }
   }
 
   // A paused member keeps read-only access to their names and channels (writes and alerts wait for the resume).
   const pausedRead = isPaused(m) && ACTIVE.has(m.status) && req.method === 'GET' && (path === '/follows' || path === '/channels');
-  if (!isActive(m) && !pausedRead) return json({ ok: false, error: 'Copy subscription required', member: publicView(m) }, 402, h);
+  if (!isActive(m) && !pausedRead) return json({ ok: false, error: `${planName('copy')} subscription required`, member: publicView(m) }, 402, h);
   // Holdterm Alerts: alert settings only. History, CSV, keys and everything else are Copy features.
   if (m.plan === 'holdterm' && path !== '/alerts' && path !== '/follows' && !path.startsWith('/follows/')) {
     return json({ ok: false, error: 'Not part of Holdterm Alerts', code: 'holdterm_plan' }, 402, h);
@@ -1703,11 +1713,11 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   // Copy -> Pro/Fund (or Pro -> Fund): a portal page that confirms swapping the one subscription item to the
   // higher plan's price at the same interval, prorated. A new checkout would start a second subscription.
   if (req.method === 'POST' && path === '/upgrade') {
-    if (m.seat_of) return json({ ok: false, error: "Billing is managed by your team's Copy Fund owner", code: 'seat' }, 403, h);
+    if (m.seat_of) return json({ ok: false, error: `Billing is managed by your team's ${planName('fund')} owner`, code: 'seat' }, 403, h);
     const plan = String((await body(req)).plan ?? '');
     const rank: Record<string, number> = { copy: 1, pro: 2, fund: 3 };
     if (plan !== 'pro' && plan !== 'fund') return json({ ok: false, error: 'plan must be "pro" or "fund"', code: 'bad_request' }, 400, h);
-    if (rank[m.plan] >= rank[plan]) return json({ ok: false, error: `Already on ${m.plan === 'fund' ? 'Copy Fund' : 'Copy Pro'}`, code: 'already_on_plan' }, 409, h);
+    if (rank[m.plan] >= rank[plan]) return json({ ok: false, error: `Already on ${planName(m.plan === 'fund' ? 'fund' : 'pro')}`, code: 'already_on_plan' }, 409, h);
     const sub = await stripe(env, 'GET', `subscriptions/${m.subscription}`);
     const item = sub.items?.data?.[0];
     const interval = item?.price?.recurring?.interval === 'year' ? 'yearly' : 'monthly';
@@ -1736,8 +1746,8 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
 
   // Copy Fund seats: the owner invites teammates by email; each gets their own sign-in link.
   if (path === '/seats' || path.startsWith('/seats/')) {
-    if (m.seat_of) return json({ ok: false, error: "Seats are managed by your team's Copy Fund owner", code: 'seat' }, 403, h);
-    if (m.plan !== 'fund') return json({ ok: false, error: 'Seats are part of Copy Fund', code: 'fund_required' }, 403, h);
+    if (m.seat_of) return json({ ok: false, error: `Seats are managed by your team's ${planName('fund')} owner`, code: 'seat' }, 403, h);
+    if (m.plan !== 'fund') return json({ ok: false, error: `Seats are part of ${planName('fund')}`, code: 'fund_required' }, 403, h);
     if (req.method === 'GET' && path === '/seats') return json({ ok: true, ...seatsView(m, await listSeats(env, m.customer)) }, 200, h);
     if (req.method === 'POST' && path === '/seats') {
       const email = String((await body(req)).email ?? '').trim().toLowerCase();
@@ -1854,14 +1864,14 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const b = await body(req);
     // Linking a 13F filer's book is Pro and Fund; a pasted list or CSV is open to every Copy member.
     if (b.cik !== undefined && b.cik !== null && PROVISIONAL.has(m)) return json({ ok: false, error: 'Open the sign-in link we emailed you to do this.', code: 'verify_email', delivery: 'pending_email_confirmation' }, 403, h);
-    if (b.cik !== undefined && b.cik !== null && !isPro(m)) return json({ ok: false, error: 'Linking a 13F as your book is part of Copy Pro and Copy Fund', code: 'pro_required' }, 403, h);
+    if (b.cik !== undefined && b.cik !== null && !isPro(m)) return json({ ok: false, error: `Linking a 13F as your book is part of ${proTiers()}`, code: 'pro_required' }, 403, h);
     const r = await importBook(env, m, b);
     return r.ok ? json(r, 200, h) : json(r, r.status, h);
   }
 
   // Copy Pro API keys, managed from the account page. The secret is returned once, at creation.
   if (path === '/keys' || path.startsWith('/keys/')) {
-    if (!isPro(m)) return json({ ok: false, error: 'API keys are part of Copy Pro', code: 'pro_required' }, 403, h);
+    if (!isPro(m)) return json({ ok: false, error: `API keys are part of ${planName('pro')}`, code: 'pro_required' }, 403, h);
     if (req.method === 'GET' && path === '/keys') {
       const keys = await listKeys(env, m.customer);
       const out = [];
@@ -1912,7 +1922,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   // ?type=hedge_fund,active&cohort=all|curated&limit=&offset=.
   const holdersJson = path.match(/^\/stocks\/([A-Za-z0-9.-]{1,10})\/holders$/);
   if (req.method === 'GET' && holdersJson) {
-    if (!isPro(m)) return json({ ok: false, error: 'Every holder of a stock is part of Copy Pro and Copy Fund', code: 'pro_required' }, 403, h);
+    if (!isPro(m)) return json({ ok: false, error: `Every holder of a stock is part of ${proTiers()}`, code: 'pro_required' }, 403, h);
     const { holdersOf, holderFilter, issuerCode, splitHolders } = await import('./v1data');
     const keep = holderFilter(url.searchParams);
     const limit = Number(url.searchParams.get('limit') ?? 200);

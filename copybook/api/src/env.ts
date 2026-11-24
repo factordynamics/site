@@ -241,6 +241,27 @@ export const followCounts = (f: any) => Object.fromEntries(['investors', 'stocks
 
 export const ACTIVE = new Set(['active', 'trialing', 'past_due']);
 
+/**
+ * Plan names members read (checkout text, emails, errors). From the site's S1 go-live the Copy tier is Plus, Copy Pro
+ * is Pro and Copy Fund is Fund; plan ids (copy, pro, fund), prices and Stripe ids don't change. The operator turns
+ * KV flag:plus on at go-live (POST /ops/plan-names), so checkout and the site never disagree; each isolate re-reads it
+ * at most once a minute (requests and the cron call loadPlanNames).
+ */
+let plus = false;
+let plusReadAt = 0;
+export async function loadPlanNames(env: Env, force = false): Promise<boolean> {
+  if (force || Date.now() - plusReadAt > 60_000) {
+    plusReadAt = Date.now();
+    plus = (await env.DB.get('flag:plus').catch(() => null)) === 'on';
+  }
+  return plus;
+}
+const NAMES = { old: { copy: 'Copy', pro: 'Copy Pro', fund: 'Copy Fund' }, plus: { copy: 'Plus', pro: 'Pro', fund: 'Fund' } } as Record<string, Record<string, string>>;
+/** The name members read for a plan id (copy, pro, fund); others (holdterm, free) as they are. */
+export const planName = (plan: string | null | undefined): string => NAMES[plus ? 'plus' : 'old'][plan ?? ''] ?? String(plan ?? '');
+/** "Pro and Fund" (or "Copy Pro and Copy Fund"): the paid API tiers, as members read them. */
+export const proTiers = () => `${planName('pro')} and ${planName('fund')}`;
+
 /** Copy Pro and Copy Fund: API keys, /v1, webhooks, bulk export. */
 export function isPro(m: Member | null): boolean {
   return isActive(m) && (m.plan === 'pro' || m.plan === 'fund');

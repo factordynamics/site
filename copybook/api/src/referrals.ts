@@ -7,7 +7,7 @@
  */
 import { FOOTER, sendMail } from './email';
 import { checkoutNote } from './revenue';
-import { isActive, testAddress, type Env, type Member } from './env';
+import { isActive, planName, testAddress, type Env, type Member } from './env';
 import { claim, FOUNDING_PRICE_UNTIL, getMember, memberByEmail } from './members';
 import { stripe } from './stripe';
 
@@ -28,7 +28,6 @@ export const CHECKOUT_BUYER = (plan: string): Record<string, string> => ({
 });
 
 const MONTH: Record<string, number> = { copy: 900, pro: 3900, fund: 19900 };
-const NAME: Record<string, string> = { copy: 'Copy', pro: 'Copy Pro', fund: 'Copy Fund' };
 const TRIAL_DAYS = 14;
 /** Copy's Checkout line by the button: \"$0 due today. No card needed: if you don't add one, the trial just ends on November 25.\" */
 export const copySubmit = (now: number) =>
@@ -78,7 +77,7 @@ async function couponFor(env: Env, plan: string): Promise<string> {
   try {
     await stripe(env, 'GET', `coupons/${id}`);
   } catch {
-    await stripe(env, 'POST', 'coupons', { id, amount_off: MONTH[plan], currency: 'usd', duration: 'once', name: `Referral: ${NAME[plan]} 1 month off ($${MONTH[plan] / 100})`, 'metadata[copybook]': 'referral' }).catch(() => null);
+    await stripe(env, 'POST', 'coupons', { id, amount_off: MONTH[plan], currency: 'usd', duration: 'once', name: `Referral: ${planName(plan)} 1 month off ($${MONTH[plan] / 100})`, 'metadata[copybook]': 'referral' }).catch(() => null);
   }
   return id;
 }
@@ -144,6 +143,9 @@ async function hadSubscription(env: Env, email: string, existing: Member | null)
 export async function createCheckout(env: Env, b: Record<string, unknown>, client?: 'bot' | 'browser' | 'unknown', enforceTrial = false): Promise<Reply> {
   const plan = String(b.plan ?? '');
   const interval = String(b.interval ?? '');
+  // Holdterm Alerts ($3) is closed to new members (S1b, the lead): its alerts are part of Plus. Existing subscribers
+  // keep their plan; its Payment Links are deactivated with the same message.
+  if (plan === 'holdterm') return { status: 410, body: { ok: false, code: 'plan_closed', error: `Holdterm Alerts is closed to new members. Its alerts are part of ${planName('copy')}: ${env.SITE_URL}pricing/`, url: `${env.SITE_URL}pricing/` } };
   if (!MONTH[plan] || (interval !== 'monthly' && interval !== 'yearly')) return { status: 400, body: { ok: false, error: 'plan: copy, pro or fund; interval: monthly or yearly', code: 'bad_request' } };
   const email = typeof b.email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(b.email.trim()) ? b.email.trim().toLowerCase() : null;
   const code = typeof b.ref === 'string' ? b.ref.trim().toLowerCase().slice(0, 20) : '';
@@ -232,7 +234,7 @@ export async function rewardReferrer(env: Env, inv: any): Promise<string> {
   if (!(await claim(env, referrer, `ref:${customer}`, true))) return 'already credited';
   try {
     // A month of the referrer's own plan, off their next invoice.
-    await stripe(env, 'POST', `customers/${referrer}/balance_transactions`, { amount: -MONTH[owner.plan], currency: 'usd', description: `Referral: a month of ${NAME[owner.plan]} for referring a new member`, 'metadata[copybook]': 'referral', 'metadata[referred]': customer });
+    await stripe(env, 'POST', `customers/${referrer}/balance_transactions`, { amount: -MONTH[owner.plan], currency: 'usd', description: `Referral: a month of ${planName(owner.plan)} for referring a new member`, 'metadata[copybook]': 'referral', 'metadata[referred]': customer });
   } catch (e) {
     await claim(env, referrer, `ref:${customer}`, false);
     throw e;
@@ -240,7 +242,7 @@ export async function rewardReferrer(env: Env, inv: any): Promise<string> {
   r.credited_at = new Date().toISOString();
   await env.DB.put(`refs:${referrer}`, JSON.stringify(list));
   if (owner.email) {
-    await sendMail(env, [{ to: owner.email, subject: `You earned a free month of ${NAME[owner.plan]}`, text: `Someone you referred just paid for their first month of Copybook, so your next invoice is ${(MONTH[owner.plan] / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' })} lower: the credit is on your account and applies automatically.\n\nYour referral link, for the next one: ${env.SITE_URL}pricing/?ref=${m.referred_by}${FOOTER}` }]);
+    await sendMail(env, [{ to: owner.email, subject: `You earned a free month of ${planName(owner.plan)}`, text: `Someone you referred just paid for their first month of Copybook, so your next invoice is ${(MONTH[owner.plan] / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' })} lower: the credit is on your account and applies automatically.\n\nYour referral link, for the next one: ${env.SITE_URL}pricing/?ref=${m.referred_by}${FOOTER}` }]);
   }
   return 'credited';
 }

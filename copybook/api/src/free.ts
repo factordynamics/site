@@ -9,7 +9,7 @@ import { siteFirm, siteName } from './names';
 import { FOOTER, followFiling, previewInbox, sendMail, type Mail } from './email';
 import { deadlineLabel, nextDeadline } from './seasons';
 import { firmName } from '../../../holdterm/src/names';
-import { followCounts, testAddress, WORKER_URL, type Env, type Member } from './env';
+import { followCounts, planName, testAddress, WORKER_URL, type Env, type Member } from './env';
 import { checkMove, countedMoves, displayCase, type MoveRow, netRenamed, reissuedTicker, UNUSUAL } from './edgar';
 import { changeFollows, type Follows, getFollows, getMember, listMembers, LOGIN_TTL, memberByEmail, putMember } from './members';
 import { bump } from './revenue';
@@ -214,7 +214,7 @@ async function freeWelcomeMail(env: Env, m: Member, first: boolean, followSaved 
   return {
     to: m.email,
     subject: first ? "You're on the Copybook weekly" : followSaved ? 'Follow saved. Your Copybook sign-in link' : 'Your Copybook sign-in link',
-    text: `${following}${first ? "You're signed up for the Copybook weekly: every Friday evening, the week's biggest superinvestor buys and sells from their SEC filings, with a link to each filing." : "Here is your sign-in link. You're on the free Copybook weekly, every Friday evening."}\n\nSign in (link works for 7 days): ${link}\n\nWant each 13F from the funds you follow as it's filed, with 8 quarters of history (from 2024Q3) for the managers we track closely, and CSV? Copy · 14 days free · no card needed: ${env.SITE_URL}pricing/?utm_source=welcome&utm_medium=email&utm_campaign=13f-q3-2026&utm_content=welcome-paid\n\nUnsubscribe: ${unsub}${FOOTER}`,
+    text: `${following}${first ? "You're signed up for the Copybook weekly: every Friday evening, the week's biggest superinvestor buys and sells from their SEC filings, with a link to each filing." : "Here is your sign-in link. You're on the free Copybook weekly, every Friday evening."}\n\nSign in (link works for 7 days): ${link}\n\nWant each 13F from the funds you follow as it's filed, with 8 quarters of history (from 2024Q3) for the managers we track closely, and CSV? ${planName('copy')} · 14 days free · no card needed: ${env.SITE_URL}pricing/?utm_source=welcome&utm_medium=email&utm_campaign=13f-q3-2026&utm_content=welcome-paid\n\nUnsubscribe: ${unsub}${FOOTER}`,
     unsubscribe: unsub,
   };
 }
@@ -677,17 +677,17 @@ export function weeklyMail(env: Env, to: string, moves: { buys: WeeklyMove[]; se
   // The Copy ask (marketing, Nov 11): the sanctioned speed and history lines, last winter's counts, and the prospect's
   // founding line. runWeekly sends only to free members; a paid member would need the member line, never "goes to $99".
   const COPY_TEXT = [
-    `This email comes once a week. Copy emails each 13F from the funds you follow as it's filed. Median alert under 2 minutes after the SEC publishes the filing; every alert is timed on the speed page, slow ones included: ${speed}. History: 8 quarters (from 2024Q3) for the managers we track closely, back to 2013Q2 by Dec 31, and CSV.`,
-    `Between seasons Copy keeps going. Last winter (Dec 2025–Jan 2026): 19 Schedule 13D/G filings by the superinvestors we follow (4 new stakes, 15 amendments), and 14 open-market buys of $100K or more by directors and officers in the 100 stocks they hold most by value: ${winter}`,
+    `This email comes once a week. ${planName('copy')} emails each 13F from the funds you follow as it's filed. Median alert under 2 minutes after the SEC publishes the filing; every alert is timed on the speed page, slow ones included: ${speed}. History: 8 quarters (from 2024Q3) for the managers we track closely, back to 2013Q2 by Dec 31, and CSV.`,
+    `Between seasons ${planName('copy')} keeps going. Last winter (Dec 2025–Jan 2026): 19 Schedule 13D/G filings by the superinvestors we follow (4 new stakes, 15 amendments), and 14 open-market buys of $100K or more by directors and officers in the 100 stocks they hold most by value: ${winter}`,
     `Founding price $79/yr, locked. Goes to $99 for new members Feb 1. 14 days free, no card needed. One free trial per person: ${pricing}`,
   ].join('\n\n');
   const a = (href: string, t: string) => `<a href="${href}" style="color:#1d4ed8">${t}</a>`;
-  const COPY_HTML = `<p style="margin-top:20px">This email comes once a week. ${a(pricing, '<b>Copy</b>')} emails each 13F from the funds you follow as it's filed. Median alert under 2 minutes after the SEC publishes the filing; every alert is timed on ${a(speed, 'the speed page')}, slow ones included. History: 8 quarters (from 2024Q3) for the managers we track closely, back to 2013Q2 by Dec 31, and CSV.</p><p>Between seasons Copy keeps going. Last winter (Dec 2025–Jan 2026): 19 Schedule 13D/G filings by the superinvestors we follow (4 new stakes, 15 amendments), and ${a(winter, '14 open-market buys of $100K or more by directors and officers in the 100 stocks they hold most by value')}.</p><p>Founding price $79/yr, locked. Goes to $99 for new members Feb 1. ${a(pricing, '14 days free, no card needed')}. One free trial per person.</p>`;
+  const COPY_HTML = `<p style="margin-top:20px">This email comes once a week. ${a(pricing, `<b>${planName('copy')}</b>`)} emails each 13F from the funds you follow as it's filed. Median alert under 2 minutes after the SEC publishes the filing; every alert is timed on ${a(speed, 'the speed page')}, slow ones included. History: 8 quarters (from 2024Q3) for the managers we track closely, back to 2013Q2 by Dec 31, and CSV.</p><p>Between seasons ${planName('copy')} keeps going. Last winter (Dec 2025–Jan 2026): 19 Schedule 13D/G filings by the superinvestors we follow (4 new stakes, 15 amendments), and ${a(winter, '14 open-market buys of $100K or more by directors and officers in the 100 stocks they hold most by value')}.</p><p>Founding price $79/yr, locked. Goes to $99 for new members Feb 1. ${a(pricing, '14 days free, no card needed')}. One free trial per person.</p>`;
   const book = `${env.SITE_URL}my-book/`;
   // My book is part of Copy: its line is a Copy ask, so it goes only with the Copy paragraph (a postal address set).
   const n = (k: number, w: string) => `${k} ${w}${k === 1 ? '' : 's'}`;
-  const locked = yours?.hook && postal ? `${yours.hook}, with Copy${yours.more ? ` (+${yours.more} more in your names)` : ''}` : null;
-  const trial = 'Try Copy · 14 days free · no card needed';
+  const locked = yours?.hook && postal ? `${yours.hook}, with ${planName('copy')}${yours.more ? ` (+${yours.more} more in your names)` : ''}` : null;
+  const trial = `Try ${planName('copy')} · 14 days free · no card needed`;
   // Leads the email: what moved in the names they saved, then what Copy adds. No names yet: how to add them.
   // Investors they follow (from a filer page's signup): those funds' moves this week, largest first.
   const followedText = followed.length ? `${follows ? 'Also this week from your follows' : 'From investors you follow'}:\n${followed.map((x) => `  ${line(x)}\n    ${x.url}`).join('\n')}\n\n` : '';
@@ -695,12 +695,12 @@ export function weeklyMail(env: Env, to: string, moves: { buys: WeeklyMove[]; se
   const yoursText = !yours
     ? ''
     : !yours.names
-      ? postal ? `With Copy, save up to ${FREE_NAMES} names you own in My book and this email leads with them: ${book}\n\n` : ''
+      ? postal ? `With ${planName('copy')}, save up to ${FREE_NAMES} names you own in My book and this email leads with them: ${book}\n\n` : ''
       : `In your names:\n${yours.facts.map((f) => `  ${f.text}.\n    ${f.url}`).join('\n') || `  None of your ${n(yours.names, 'name')} moved in superinvestor filings this week.`}\n${locked ? `  ${locked}: ${pricing}\n` : ''}\n`;
   const yoursHtml = !yours
     ? ''
     : !yours.names
-      ? postal ? `<p style="background:#f3f4f6;border-radius:10px;padding:12px 14px">With Copy, save up to ${FREE_NAMES} names you own in <a href="${book}" style="color:#1d4ed8">My book</a> and this email leads with them.</p>` : ''
+      ? postal ? `<p style="background:#f3f4f6;border-radius:10px;padding:12px 14px">With ${planName('copy')}, save up to ${FREE_NAMES} names you own in <a href="${book}" style="color:#1d4ed8">My book</a> and this email leads with them.</p>` : ''
       : `<div style="background:#f3f4f6;border-radius:10px;padding:12px 14px"><h3 style="font-size:15px;margin:0 0 6px">In your names</h3>${yours.facts.map((f) => `<p style="margin:4px 0"><a href="${f.url}" style="color:#111;text-decoration:none">${esc(f.text)}.</a></p>`).join('') || `<p style="margin:4px 0">None of your ${n(yours.names, 'name')} moved in superinvestor filings this week.</p>`}${locked ? `<p style="margin:8px 0 4px;color:#6b7280">🔒 ${esc(locked)}</p><p style="margin:8px 0 0"><a href="${pricing}" style="display:inline-block;background:#111;color:#fff;padding:8px 16px;border-radius:999px;text-decoration:none;font-weight:600;font-size:14px">${trial}</a></p>` : ''}</div>`;
   const lead = yours?.facts[0];
   const row = (x: WeeklyMove) =>
@@ -800,11 +800,11 @@ export function email2Mail(env: Env, to: string, o: E2Input): Mail {
     const text = `${who}: expected by ${dayLabel(expected ?? dl.date)}`;
     return { text, html: `<p style="margin:6px 0"><b>${esc(who)}</b>${esc(text.slice(who.length))}</p>` };
   });
-  const CTA = "Get each 13F as it's filed, with Copy";
+  const CTA = `Get each 13F as it's filed, with ${planName('copy')}`;
   const names = o.yours && (o.yours.facts.length || o.yours.hook) ? o.yours : null;
   const moreNames = (n: number) => `+${n} more ${n === 1 ? 'item' : 'items'} in your names`;
-  const namesText = names ? `In your names:\n${names.facts.map((f) => `  ${f.text}.`).join('\n')}${names.hook ? `${names.facts.length ? '\n' : ''}  Copy alerts you when it's filed: ${names.hook}${names.more ? ` (${moreNames(names.more)})` : ''}.` : ''}` : '';
-  const namesHtml = names ? `<div style="background:#f3f4f6;border-radius:10px;padding:10px 14px;margin:12px 0"><h3 style="font-size:15px;margin:0 0 4px">In your names</h3>${names.facts.map((f) => `<p style="margin:4px 0">${esc(f.text)}.</p>`).join('')}${names.hook ? `<p style="margin:4px 0">Copy alerts you when it's filed: ${esc(names.hook)}${names.more ? ` (${moreNames(names.more)})` : ''}.</p>` : ''}</div>` : '';
+  const namesText = names ? `In your names:\n${names.facts.map((f) => `  ${f.text}.`).join('\n')}${names.hook ? `${names.facts.length ? '\n' : ''}  ${planName('copy')} alerts you when it's filed: ${names.hook}${names.more ? ` (${moreNames(names.more)})` : ''}.` : ''}` : '';
+  const namesHtml = names ? `<div style="background:#f3f4f6;border-radius:10px;padding:10px 14px;margin:12px 0"><h3 style="font-size:15px;margin:0 0 4px">In your names</h3>${names.facts.map((f) => `<p style="margin:4px 0">${esc(f.text)}.</p>`).join('')}${names.hook ? `<p style="margin:4px 0">${planName('copy')} alerts you when it's filed: ${esc(names.hook)}${names.more ? ` (${moreNames(names.more)})` : ''}.</p>` : ''}</div>` : '';
   const big = o.biggest.map((b) => `${b.who}: ${b.text}`);
   const bigTitle = deadlineNight ? "The day's biggest moves" : "Today's biggest moves";
   const recap = e2(env, `season/${(o.season || dl.quarter).toLowerCase()}/`, 'e2-recap');
