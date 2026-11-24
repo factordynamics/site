@@ -394,7 +394,8 @@ let reissuesAt = 0;
  * are swapped in only after the whole file is read; a missing, unreadable or malformed file leaves them as they were.
  */
 export async function loadReissues(env: { DATA_URL: string }, now = Date.now()): Promise<number> {
-  if (now < reissuesAt) return Object.keys(REISSUED).length;
+  // Held at most an hour: a hold further out means the clock moved back (tests set the date; a host clock can skew).
+  if (now < reissuesAt && reissuesAt - now <= 3600_000) return Object.keys(REISSUED).length;
   // A failed read retries in 5 minutes; a good one holds for the hour.
   reissuesAt = now + 300_000;
   try {

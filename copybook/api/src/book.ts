@@ -1,6 +1,6 @@
 import type { Env, Member } from './env';
 import { changeFollows, getFollows, manualOf, MAX_FOLLOWS, type Follows } from './members';
-import { filerBook, rowsOf } from './v1data';
+import { filerBook, NotOnThisHost, rowsOf } from './v1data';
 
 /**
  * Importing the stocks a member owns: a pasted list, a CSV export from a broker, or a 13F filer's
@@ -58,7 +58,8 @@ async function bookOfFiler(env: Env, cik: string): Promise<{ cik: string; name: 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const shard = (await res.json()) as any;
   if (!shard?.ok || !shard.quarter) return null;
-  const full = await filerBook(env, cik, shard.quarter);
+  // On the failover copy an older quarter's full book isn't kept: the shard (that same quarter, top 500) serves.
+  const full = await filerBook(env, cik, shard.quarter).catch((e) => (e instanceof NotOnThisHost ? null : Promise.reject(e)));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows: any[] = full?.holdings ?? (full?.columns ? rowsOf(full) : rowsOf(shard));
   const tickers = [...new Set(rows.filter((r) => r.ticker && !r.put_call).sort((a, b) => (b.value ?? 0) - (a.value ?? 0)).map((r) => String(r.ticker).toUpperCase()))].filter((t) => TICKER.test(t));

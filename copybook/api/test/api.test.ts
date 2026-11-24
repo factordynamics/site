@@ -1521,6 +1521,74 @@ describe('copybook api', () => {
     }
   });
 
+  it('per-class rows: the 2026-11-23 pin from Nov 25 and the default from Dec 2 (hlc/ book, else classes[]); ?group=issuer, the 2026-11-09 pin and the member route stay summed', async () => {
+    const BRKA = '084670108', BRKB = '084670702';
+    const cols = ['cik', 'name', 'slug', 'type', 'curated', 'period', 'shares', 'prev_shares', 'value', 'prev_value', 'change', 'weight', 'cusip', 'issuer_cusip6', 'classes'];
+    const cls = (cusip: string, ticker: string, value: number, prev: number, shares: number, prev_shares: number) => ({ cusip, ticker, put_call: null, prev_cusip: null, shares, prev_shares, value, prev_value: prev, change: shares > prev_shares ? 'added' : 'trimmed', value_delta: value - prev, value_delta_basis: 'trade', unreliable: null, price_outlier: false });
+    // E holds both classes (one summed row); F holds BRK.B only.
+    await hist.put('hl/084670.json', JSON.stringify({ schema: 6, issuer: '084670', tickers: ['BRK.A', 'BRK.B'], columns: cols, counts: { holders: 2 }, rows: [
+      ['0000000005', 'E', null, 'wealth', false, '2026Q3', null, null, 2000, 1900, 'mixed', 0.3, null, '084670', [cls(BRKA, 'BRK.A', 1500, 1500, 2, 3), cls(BRKB, 'BRK.B', 500, 400, 1000, 900)]],
+      ['0000000006', 'F', null, 'wealth', false, '2026Q3', 600, 500, 300, 250, 'added', 0.1, BRKB, '084670', null],
+    ] }));
+    // BRK.A's R2 book (ingest's hlc/): H is in it alone, so a row from H shows the book was read.
+    const hcols = ['cik', 'name', 'slug', 'type', 'curated', 'period', 'shares', 'prev_shares', 'value', 'prev_value', 'change', 'cusip', 'issuer_cusip6'];
+    await hist.put(`hlc/${BRKA}.json`, JSON.stringify({ cusip: BRKA, ticker: 'BRK.A', columns: hcols, rows_total: 2, rows: [['0000000005', 'E', null, 'wealth', false, '2026Q3', 2, 3, 1500, 1500, 'trimmed', BRKA, '084670'], ['0000000009', 'H', null, 'wealth', false, '2026Q3', 1, 1, 70, 70, 'unchanged', BRKA, '084670']] }));
+    hist.m.set('pre/stock-codes.json', new TextEncoder().encode('{"BRK.B":"084670"}'));
+    let schema = 6;
+    const orig = globalThis.fetch;
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => (String(u).startsWith(`${SITE}data/hl/index.json`) ? Response.json({ schema, tickers: { 'BRK.A': '084670', 'BRK.B': '084670' }, funds: {}, classes: { '084670': [{ cusip: BRKA, ticker: 'BRK.A' }, { cusip: BRKB, ticker: 'BRK.B' }] } }) : orig(u, init)));
+    const op = (b: unknown) => handleRequest(new Request('https://api.test/ops/test-key', { method: 'POST', body: JSON.stringify(b), headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), env).then((r) => r.json());
+    let key = '';
+    const get = async (path: string, pin?: string) => {
+      const r = await handleRequest(new Request(`https://api.test${path}`, { headers: { authorization: `Bearer ${key}`, ...(pin ? { 'copybook-schema-version': pin } : {}) } }), env);
+      return { status: r.status, schema: r.headers.get('copybook-schema-version'), body: await r.json() };
+    };
+    type Row = { filer: { cik: string }; cusip: string | null; value_usd: number; classes?: unknown[] };
+    const rows = (b: { data: { holders: Row[] } }) => b.data.holders.map((r) => [r.filer.cik.slice(-1), r.cusip, r.value_usd, (r.classes ?? []).length]).sort((x, y) => String(x).localeCompare(String(y)));
+    const summedE = ['5', null, 2000, 2];
+    try {
+      // Before Wed Nov 25 the preview pin is refused, and nobody gets per-class rows.
+      vi.useFakeTimers({ toFake: ['Date'], now: Date.parse('2026-11-24T23:00:00Z') });
+      key = (await op({ email: 'copybook-test-perclass1@fldubai.com' })).key;
+      const early = await get('/v1/stocks/BRK.B/holders', '2026-11-23');
+      expect([early.status, /preview available from Wed Nov 25/.test(early.body.error.message)]).toEqual([400, true]);
+      expect(rows((await get('/v1/stocks/BRK.B/holders')).body)).toEqual([summedE, ['6', BRKB, 300, 0]]);
+      // From Nov 25 the pin gets one row per CUSIP: BRK.B from the rows' classes[] (no hlc/ book), BRK.A from its book.
+      vi.setSystemTime(Date.parse('2026-11-25T12:00:00Z'));
+      const b = await get('/v1/stocks/BRK.B/holders', '2026-11-23');
+      expect([b.status, b.schema, rows(b.body), b.body.data.tickers, b.body.data.counts.class_cusip, b.body.data.counts.holders]).toEqual([200, '2026-11-23', [['5', BRKB, 500, 0], ['6', BRKB, 300, 0]], ['BRK.B'], BRKB, 2]);
+      expect(rows((await get('/v1/stocks/BRK.A/holders', '2026-11-23')).body)).toEqual([['5', BRKA, 1500, 0], ['9', BRKA, 70, 0]]);
+      // By the issuer code: every class split out. A CUSIP the index doesn't list: 404 naming the classes.
+      expect(rows((await get('/v1/stocks/084670/holders', '2026-11-23')).body)).toEqual([['5', BRKA, 1500, 0], ['5', BRKB, 500, 0], ['6', BRKB, 300, 0]]);
+      const miss = await get('/v1/stocks/084670999/holders', '2026-11-23');
+      expect([miss.status, miss.body.error.code, miss.body.error.did_you_mean.map((c: { ticker: string }) => c.ticker)]).toEqual([404, 'not_found', ['BRK.A', 'BRK.B']]);
+      // ?group=issuer, and /v1/changes?ticker= by class.
+      expect(rows((await get('/v1/stocks/BRK.B/holders?group=issuer', '2026-11-23')).body)).toEqual([summedE, ['6', BRKB, 300, 0]]);
+      const ch = (await get('/v1/changes/2026Q3?ticker=BRK.B', '2026-11-23')).body.data as Row[];
+      expect(ch.map((r) => [r.filer.cik.slice(-1), r.cusip]).sort()).toEqual([['5', BRKB], ['6', BRKB]]);
+      // Unpinned clients keep the summed rows until Dec 2.
+      expect(rows((await get('/v1/stocks/BRK.B/holders')).body)).toEqual([summedE, ['6', BRKB, 300, 0]]);
+      // From Dec 2 per class is the default; the 2026-11-09 pin keeps the summed rows; so does the member route (My
+      // book and the Holders CSV), until the front end ships class labels (the lead, Nov 20).
+      vi.setSystemTime(Date.parse('2026-12-03T00:00:00Z'));
+      const tk = await op({ email: 'copybook-test-perclass2@fldubai.com' });
+      key = tk.key;
+      expect(rows((await get('/v1/stocks/BRK.B/holders')).body)).toEqual([['5', BRKB, 500, 0], ['6', BRKB, 300, 0]]);
+      expect(rows((await get('/v1/stocks/BRK.B/holders', '2026-11-09')).body)).toEqual([summedE, ['6', BRKB, 300, 0]]);
+      const session = await signToken(env.SESSION_SECRET, 'session', tk.customer, 3600);
+      const mine = await (await handleRequest(new Request('https://api.test/stocks/BRK.B/holders', { headers: { authorization: `Bearer ${session}` } }), env)).json();
+      expect(mine.holders.map((r: { filer: { cik: string }; classes?: unknown[] }) => [r.filer.cik.slice(-1), (r.classes ?? []).length]).sort()).toEqual([['5', 2], ['6', 0]]);
+      // Without ingest's per-class index (schema under 6), rows stay summed: the guard against a missing index.
+      schema = 5;
+      vi.setSystemTime(Date.parse('2026-12-03T00:11:00Z'));
+      expect(rows((await get('/v1/stocks/BRK.B/holders')).body)).toEqual([summedE, ['6', BRKB, 300, 0]]);
+    } finally {
+      vi.useRealTimers();
+      vi.stubGlobal('fetch', orig);
+      for (const k of ['hl/084670.json', `hlc/${BRKA}.json`, 'pre/stock-codes.json']) hist.m.delete(k);
+    }
+  });
+
   it('/speed/: an after-hours filing is timed from EDGAR\'s 06:00 ET listing, keeps its acceptance gap, and p90 is shown with and without them', async () => {
     const { latencyReport } = await import('../src/index');
     const row = (accession: string, accepted: string, sent: string) => ({ slug: 'x', kind: 'form4', form: '4', accession, accepted, sent, seconds: Math.round((Date.parse(sent) - Date.parse(accepted)) / 1000) });
@@ -5470,8 +5538,6 @@ describe('copybook api', () => {
     const { SCHEMA_VERSION } = await import('../src/v1');
     const bad = await handleRequest(new Request('https://api.test/v1/filers', { headers: { authorization: `Bearer ${key}`, 'copybook-schema-version': '1999-01-01' } }), env);
     const sp = await handleRequest(new Request('https://api.test/v1/openapi.json'), env);
-    const pv = await handleRequest(new Request('https://api.test/v1/filers', { headers: { authorization: `Bearer ${key}`, 'copybook-schema-version': '2026-11-23' } }), env);
-    expect([pv.status, /preview available from Wed Nov 25, 2026/.test((await pv.json()).error.message)]).toEqual([400, true]);
     expect([echoed, bad.status, bad.headers.get('copybook-schema-version'), sp.headers.get('copybook-schema-version'), /copybook-schema-version/.test(bad.headers.get('access-control-expose-headers') ?? '')]).toEqual([['2026-11-09', SCHEMA_VERSION, '2026-11-09', SCHEMA_VERSION], 400, SCHEMA_VERSION, SCHEMA_VERSION, true]);
     // Public responses never name a machine or tunnel host (the lead, Nov 11), even when the request came in on gene's
     // Funnel: Link headers, bulk URLs and the spec's servers all use the one public base.
@@ -6406,6 +6472,27 @@ describe('copybook api', () => {
     expect((await v1('/v1/filers/warren-buffett/holdings/Q1')).body.error.code).toBe('bad_request');
     expect((await v1('/v1/filers/nobody/holdings/2025Q1')).status).toBe(404);
     for (const p of ['/v1/me', '/v1/filers', '/v1/filers/{filer}/holdings/{quarter}']) expect(spec.paths[p].get.responses['200'].content).toBeDefined();
+  });
+
+  it("Cloudflare's copy serves filer books only for the quarters gene pushes; older quarters are unavailable, never stale", async () => {
+    const { failoverQuarters, filerBook, NotOnThisHost } = await import('../src/v1data');
+    // Until the Q3 deadline closes (Mon Nov 16, 22:00 ET = Nov 17 03:00Z) both Q3 and Q2 are current, then Q3 alone.
+    expect(failoverQuarters(Date.UTC(2026, 10, 17, 2, 59))).toEqual(['2026Q3', '2026Q2']);
+    expect(failoverQuarters(Date.UTC(2026, 10, 17, 3, 1))).toEqual(['2026Q3']);
+    expect(failoverQuarters(Date.UTC(2027, 0, 2))).toEqual(['2026Q4', '2026Q3']);
+    const objs = new Map<string, string>([['fb/2026Q3/0001.json', '{"quarter":"2026Q3","holdings":[]}'], ['fb/2026Q1/0001.json', '{"quarter":"2026Q1","holdings":[]}']]);
+    const HIST = { get: async (k: string) => (objs.has(k) ? { body: new Response(objs.get(k)).body, customMetadata: {}, uploaded: new Date() } : null) };
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.UTC(2026, 10, 24, 3) });
+    try {
+      const cf = { ...env, HIST, MOVED_TO: 'https://gene.test/copybook/' } as unknown as Env;
+      const gene = { ...env, HIST } as unknown as Env;
+      expect((await filerBook(cf, '0001', '2026Q3')).quarter).toBe('2026Q3');
+      await expect(filerBook(cf, '0001', '2026Q1')).rejects.toBeInstanceOf(NotOnThisHost);
+      await expect(filerBook(cf, '0001', '2026Q2')).rejects.toBeInstanceOf(NotOnThisHost);
+      expect((await filerBook(gene, '0001', '2026Q1')).quarter).toBe('2026Q1');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('EDGAR Eastern timestamps convert to UTC on both sides of the DST switches', async () => {

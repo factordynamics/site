@@ -1,6 +1,6 @@
 import { type Alert13F, type AlertEvent, deliverTo, etDay, MOVES_FIX_AT, recentFeed, resolveFollowedFilers, runScheduled } from './alerts';
 import { fetchHistory, historyCsv, holdersCsv, shard, SHARD_KEY, SLUG } from './data';
-import { filers as curatedFilers, filerBook, filingMeta, resolveAny, rowsOf } from './v1data';
+import { filers as curatedFilers, filerBook, filingMeta, NotOnThisHost, resolveAny, rowsOf } from './v1data';
 import { verifyGithubOidc } from './oidc';
 import { type ChannelDelivery, channelScope, channelsView, failView, clearSeatDuplicates, getChannels, getFailures, rotateFeed, seedFeed, serveFeed, testChannels, updateChannels } from './channels';
 import { createKey, listKeys, MAX_KEYS, meter, revokeKey } from './keys';
@@ -2197,6 +2197,13 @@ export default {
 /** Every request this copy answers itself, within the read budget. */
 async function serve(req: Request, env: Env): Promise<Response> {
   const handled = handleRequest(req, env).catch((err) => {
+    if (err instanceof NotOnThisHost) {
+      const p = new URL(req.url).pathname;
+      const retry = { 'retry-after': '300', 'access-control-expose-headers': 'retry-after' };
+      return p === '/v1' || p.startsWith('/v1/')
+        ? v1error('busy', 503, 'Temporarily unavailable; retry after Retry-After seconds.', retry)
+        : json({ ok: false, code: 'unavailable', error: 'Temporarily unavailable. Try again in a few minutes.' }, 503, { ...cors(allowedOrigin(req.headers.get('origin'), env)), ...retry });
+    }
     console.log(String(err?.stack ?? err));
     return json({ ok: false, error: 'server error' }, 500, cors(allowedOrigin(req.headers.get('origin'), env)));
   });

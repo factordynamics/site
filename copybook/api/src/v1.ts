@@ -25,6 +25,12 @@ export const PER_CLASS = { at: Date.UTC(2026, 11, 2), deprecation: '@1796169600'
 /** The per-class row shape's version: an opt-in preview from Nov 25 (once ingest's schema-6 files are on gene), the default on Dec 2. The
  *  version string and the changelog id keep "2026-11-23": they are identifiers clients may have coded against. */
 export const PER_CLASS_PREVIEW = { version: '2026-11-23', from: Date.UTC(2026, 10, 25) };
+/** Whether a request gets per-class rows: the preview pin from Nov 25, every unpinned client from Dec 2, never the pin
+ *  to the summed rows. Serving also needs ingest's per-class index (hl/index.json schema 6); without it rows stay summed. */
+export function perClassServed(pin: string | null, now = Date.now()): boolean {
+  if (pin === PER_CLASS_PREVIEW.version) return now >= PER_CLASS_PREVIEW.from;
+  return pin !== SUMMED_PIN.version && now >= PER_CLASS.at;
+}
 export function perClassNotice(pinned: boolean, base: string, now = Date.now()): { deprecated_at: string; sunset: string; link: string; headers: Record<string, string> } | null {
   if (now >= (pinned ? SUMMED_PIN.until : PER_CLASS.at)) return null;
   const link = `${base}/v1/changelog?id=${SUMMED_PIN.changelog}`;
@@ -544,7 +550,7 @@ export const ROUTES: [string, RegExp, Handler][] = [
 export async function handleV1(req: Request, env: Env, url: URL, path: string): Promise<Response> {
   let res = await routeV1(req, env, url, path);
   const pin = req.headers.get('copybook-schema-version');
-  const served = pin && SCHEMA_VERSIONS.includes(pin) ? pin : SCHEMA_VERSION;
+  const served = perClassServed(pin) ? PER_CLASS_PREVIEW.version : pin && SCHEMA_VERSIONS.includes(pin) ? pin : SCHEMA_VERSION;
   try {
     res.headers.set('copybook-schema-version', served);
   } catch {
@@ -581,8 +587,8 @@ async function routeV1(req: Request, env: Env, url: URL, path: string): Promise<
   }
   const pin = req.headers.get('copybook-schema-version');
   // The per-class shape as an opt-in preview (the lead, Nov 11): served once the per-class files are built (Nov 25).
-  if (pin === PER_CLASS_PREVIEW.version) return v1error('bad_request', 400, `Copybook-Schema-Version ${pin} (per-class rows) is a preview available from Wed Nov 25, 2026, and the default from Wed Dec 2. Until then, omit the header for today's rows. See /v1/changelog?id=${SUMMED_PIN.changelog}.`);
-  if (pin && !SCHEMA_VERSIONS.includes(pin)) return v1error('bad_request', 400, `Unknown Copybook-Schema-Version ${pin}; served versions: ${SCHEMA_VERSIONS.join(', ')}.`);
+  if (pin === PER_CLASS_PREVIEW.version && !perClassServed(pin)) return v1error('bad_request', 400, `Copybook-Schema-Version ${pin} (per-class rows) is a preview available from Wed Nov 25, 2026, and the default from Wed Dec 2. Until then, omit the header for today's rows. See /v1/changelog?id=${SUMMED_PIN.changelog}.`);
+  if (pin && !SCHEMA_VERSIONS.includes(pin) && pin !== PER_CLASS_PREVIEW.version) return v1error('bad_request', 400, `Unknown Copybook-Schema-Version ${pin}; served versions: ${SCHEMA_VERSIONS.join(', ')}.`);
   // The cron sets a per-run SEC budget on this module; a request after it in the same isolate
   // must not inherit a spent one (filing lookups would fail).
   secBudget.left = Math.max(secBudget.left, 30);
