@@ -125,8 +125,10 @@ export function Layout() {
             </button>
           </div>
         </div>
+        {/* Phones: the open menu overlays the page over a 40% scrim (a tap on the scrim closes it), never pushing it down. */}
+        {menu && <div className="fixed inset-x-0 bottom-0 top-16 bg-black/40 lg:hidden" aria-hidden="true" onClick={() => setMenu(false)} />}
         {menu && (
-          <div className="container-x border-t border-line pb-5 pt-3 lg:hidden">
+          <div className="container-x absolute inset-x-0 top-full max-h-[calc(100dvh-4rem)] overflow-y-auto border-t border-line bg-paper pb-5 pt-3 shadow-[0_12px_24px_rgba(12,14,19,0.12)] lg:hidden">
             <SearchBox />
             <nav className="mt-3 grid" aria-label="Mobile">
               {nav.map((n) => (
@@ -206,7 +208,7 @@ function Footer() {
       </div>
       <div className="border-t border-night-line">
         <div className="container-x flex flex-col gap-2 py-6 text-[12.5px] text-white/60 md:flex-row md:items-center md:justify-between">
-          <p>© 2026 Factor Dynamics. Data from SEC EDGAR Form 13F-HR, as filed. <span className="num text-ink-3/70">build {import.meta.env.VITE_BUILD}</span></p>
+          <p>© 2026 Factor Dynamics. Data from SEC EDGAR Form 13F-HR, as filed. <span className="num text-white/60">build {import.meta.env.VITE_BUILD}</span></p>
           <p>Holdings are reported about 45 days after quarter end. Not investment advice.</p>
         </div>
       </div>

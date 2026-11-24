@@ -370,7 +370,7 @@ export function StockPage() {
               ['all', 'Funds we track', 'Tracked'],
             ] as const
           ).map(([k, l, short]) => (
-            <button key={k} role="tab" aria-selected={view === k} aria-label={l} onClick={() => setView(k)} className={`rounded-full px-3 py-1.5 ${view === k ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
+            <button key={k} role="tab" aria-selected={view === k} title={l} onClick={() => setView(k)} className={`rounded-full px-3 py-1.5 ${view === k ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
               <span className="sm:hidden">{short}</span>
               <span className="hidden sm:inline">{l}</span>
             </button>
