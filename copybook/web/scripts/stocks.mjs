@@ -71,7 +71,8 @@ for (let i = 0; i < current.length; i += 16) {
 // A holder's own share lines over several classes, kept off the written JSON (a symbol key isn't serialised).
 const CLASS_LINES = Symbol('class lines')
 const tc = (s) => (/[a-z]/.test(s) ? s : s.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()))
-const baseName = (n) => n.replace(/\s+(Class|Cl)\s+[A-Z]\b.*$/i, '').replace(/\s+(Ordinary Shares|Common Stock|Shs)$/i, '').trim()
+// An ADR reads "SK Hynix (ADR)", not the filing's "Sk Hynix American Deposit".
+const baseName = (n) => n.replace(/\s+American\s+Dep(osit(ary)?)?\b.*$/i, ' (ADR)').replace(/\s+(Class|Cl)\s+[A-Z]\b.*$/i, '').replace(/\s+(Ordinary Shares|Common Stock|Shs)$/i, '').trim()
 const r0 = (x) => Math.round(x)
 
 // One stock per issuer: share classes roll up only when the display name names a class

@@ -70,7 +70,7 @@ function Today() {
                   <Monogram name={m.manager} size={28} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[14px] font-medium">{m.manager}</span>
-                    <span className="block truncate text-[12.5px] text-ink-3">{m.filing_date ? `Filed ${dateLabel(m.filing_date)}` : 'Filed'}{m.changes ? ` · ${(m.changes.new ?? 0) + (m.changes.added ?? 0)} buys, ${(m.changes.trimmed ?? 0) + (m.changes.exited ?? 0)} sells` : ''}</span>
+                    <span className="block truncate text-[12.5px] text-ink-3">{m.filing_date ? `Filed ${dateLabel(m.filing_date)}` : 'Filed'}{m.changes ? ` · ${(m.changes.new ?? 0) + (m.changes.added ?? 0)} buys, ${(m.changes.trimmed ?? 0) + (m.changes.exited ?? 0)} sells` : ' · buys and sells at the next update'}</span>
                   </span>
                   {m.total_value != null && <span className="num text-[13px] font-medium">{money(m.total_value)}</span>}
                 </Link>

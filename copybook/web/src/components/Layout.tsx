@@ -99,7 +99,7 @@ export function Layout() {
           <div className="ml-auto flex items-center gap-2">
             {!home && (
               <div className={`hidden xl:block ${signedIn && !paying ? 'w-44 2xl:w-52' : 'w-56'}`}>
-                <SearchBox />
+                <SearchBox placeholder="Search" />
               </div>
             )}
             <NavLink to="/pricing/" className={({ isActive }) => `hidden h-8 items-center rounded-full px-3 text-[13px] font-medium lg:inline-flex ${isActive ? 'text-ink' : 'text-ink-2 hover:text-ink'}`}>

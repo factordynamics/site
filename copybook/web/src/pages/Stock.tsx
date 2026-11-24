@@ -324,7 +324,7 @@ export function StockPage() {
         <Stat
           label={scope === 'featured' ? 'Superinvestors holding it' : 'Funds holding it'}
           value={c ? c.holders : '—'}
-          sub={d ? (scope === 'featured' ? `${d.holders.length} of all funds we track hold it` : `${featuredCount} of them superinvestors`) : undefined}
+          sub={d ? (scope === 'featured' ? `${d.holders.length} funds we track hold it` : `${featuredCount} of them superinvestors`) : undefined}
         />
         <Stat
           label="Change in holders"
