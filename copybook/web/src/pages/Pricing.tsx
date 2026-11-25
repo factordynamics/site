@@ -5,6 +5,7 @@ import { Button, Check } from '../components/ui'
 import { attributed, checkRef, copyCheckout, referredCheckout, refCode, utmTags } from '../lib/attribution'
 import { gapLabel, loadLatency, useMember } from '../lib/account'
 import { thirteenFStats } from '../lib/latencyStats.mjs'
+import { useTrackVisit } from '../lib/track'
 import { displayName, money, useAsync, useTitle } from '../lib/data'
 import { HISTORY_EXACT, loadCoverage, loadStock, trackedPhrase } from '../lib/stocks'
 import { loadEvents, rollUp } from '../components/FundNotes'
@@ -146,6 +147,8 @@ const EMAIL_FROM: Record<string, string> = {
 }
 
 export function Pricing() {
+  // Visits from posts that link here (utm) count in payments' funnel; the plan buttons already send trial_click.
+  useTrackVisit()
   // The FAQ's timing line: the same 13F computation as the home hero and /speed/'s 13F row.
   const lat = useAsync(() => loadLatency().catch(() => null), [])
   const speed = lat.data ? thirteenFStats(lat.data) : null
