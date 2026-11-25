@@ -136,6 +136,19 @@ class PastQuarters(unittest.TestCase):
         (self.data / "hlf" / "037833.json").unlink()  # AAPL still has holders: hl/ lacking it is a real miss
         self.assertEqual(moves.write_quarters({}, {}, {}, "2026Q3"), {})
 
+    def test_a_filer_reported_by_another_manager_is_no_holder_and_no_exit(self):
+        # AEW 2026Q3: restated to a placeholder beside a 13F-NT; bulk writes its shard and fb/ book as reported_by_other.
+        # C held 5 MSFT in 2026Q2; neither hl/'s build nor hq/'s may show C as a holder or as 5 shares sold.
+        aew = {"ok": False, "cik": "0000000003", "status": "reported_by_other", "quarter": "2026Q3",
+               "accession": "0001104659-26-130039", "source": "SEC EDGAR"}
+        (self.data / "fb" / "2026Q3" / "0000000003.json").write_text(json.dumps(aew))
+        (self.data / "f" / "0000000003.json").write_text(json.dumps(aew))
+        fb(self.data, "2026Q3", "0000000002", (MSFT, "MSFT", 10, 340))
+        self.assertGreater(moves.quarter_holders("2026Q3", {}, {}, {}, self.data / "q3", {}), 0)
+        body = json.loads((self.data / "q3" / "594918.json").read_text())
+        self.assertEqual([r[0] for r in body["rows"]], ["0000000002"])
+        self.assertEqual(body["counts"].get("exited", 0), 0)
+
     def test_curated_funds_are_left_out_of_the_parity_check(self):
         self.hl_now()
         path = self.data / "hlf" / "037833.json"

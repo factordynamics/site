@@ -22,8 +22,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from ingest.build import WEB, load_period, quarter_label
-from ingest.edgar import fetch_submissions, get, list_13f, quarter_groups
+from ingest.build import WEB, amend_type, load_period, quarter_label
+from ingest.edgar import fetch_submissions, get, list_13f, list_notices, quarter_groups
 from ingest.universe import parse_index, slugify
 
 DATA = WEB / "data"
@@ -116,6 +116,25 @@ def has_full_book(rec: dict) -> bool:
     return True
 
 
+class NewestUnreadable(Exception):
+    """The newest period's filing could not be read (Findell's 2026Q3 13F-HR/A, read moments after acceptance on Nov
+    23, put its shard back on 2026Q2): the filer keeps its last book and the next run tries again."""
+
+
+def reported_by_other(cik: str, group: list, submissions: dict) -> dict | None:
+    """A period RESTATED to a placeholder table (no holdings) beside a 13F-NT for the same period: another manager
+    reports the holdings (AEW's 2026Q3, restated Nov 23 to one 000000000 $0 line after its Nov 9 13F-NT)."""
+    restated = [m for m in group if m.form != "13F-HR" and amend_type(cik, m) == "RESTATEMENT"]
+    notices = [m for m in list_notices(submissions) if m.report_date == group[0].report_date]
+    if not (restated and notices):
+        return None
+    m = max(restated, key=lambda m: (m.filing_date, m.accepted_at or "", m.accession))
+    return {"ok": False, "cik": cik, "name": submissions.get("name") or "", "status": "reported_by_other",
+            "quarter": quarter_label(group[0].report_date), "accession": m.accession, "filing_date": m.filing_date,
+            "accepted_at": m.accepted_at or None, "notice": max(notices, key=lambda n: n.filing_date).accession,
+            "error": "reported by another manager: restated to a placeholder table beside a 13F notice"}
+
+
 def ingest_one(cik: str) -> dict:
     submissions = fetch_submissions(cik)
     metas = list_13f(submissions)
@@ -123,10 +142,12 @@ def ingest_one(cik: str) -> dict:
         return {"ok": False, "cik": cik, "error": "no 13F-HR"}
     last_error = "no usable table"
     empty = None  # a newer 13F-HR that lists no holdings (Presima and Redwood 2026Q2: one "None", $0 line)
-    # Latest period whose original (or restated) book parses; falls back one quarter.
-    for group in quarter_groups(metas, 2):
+    # Latest period whose original (or restated) book parses; falls back one quarter only when that period is empty.
+    for i, group in enumerate(quarter_groups(metas, 2)):
         try:
             loaded = load_period(cik, group, {})
+            if loaded is None and i == 0 and (other := reported_by_other(cik, group, submissions)):
+                return other
             if loaded is None:
                 last_error = f"empty {group[0].report_date}"
                 empty = empty or {"quarter": quarter_label(group[0].report_date), "accession": group[0].accession,
@@ -135,6 +156,8 @@ def ingest_one(cik: str) -> dict:
             return {"ok": True, "cik": cik, "name": submissions.get("name") or "", **loaded,
                     **({"empty_latest": empty} if empty else {})}
         except Exception as exc:
+            if i == 0:  # never an older quarter in its place: the last book stands until this one reads
+                raise NewestUnreadable(f"{group[0].report_date} {group[0].accession}: {exc}") from exc
             last_error = str(exc)
     return {"ok": False, "cik": cik, "error": last_error}
 
@@ -207,6 +230,7 @@ def main() -> int:
     print(f"bulk: {len(filers)} filers, {len(todo)} to fetch", flush=True)
     start = time.monotonic()
     done = 0
+    unreadable: list[str] = []
 
     def checkpoint() -> None:
         oks = [f for f in filers if f.get("ok")]
@@ -234,6 +258,10 @@ def main() -> int:
         print(f"{done + 1}/{len(todo)} {cik} {f.get('name', '')[:40]}", flush=True)
         try:
             rec = ingest_one(cik)
+        except NewestUnreadable as exc:  # nothing written and not marked indexed: the next run tries again
+            unreadable.append(cik)
+            print(f"bulk: {cik} newest quarter unreadable ({exc}); keeping its last book", flush=True)
+            continue
         except Exception as exc:
             traceback.print_exc()
             rec = {"ok": False, "cik": cik, "error": str(exc)}
@@ -241,6 +269,9 @@ def main() -> int:
         if not transient:  # transient failures retry next run
             rec["indexed_date"] = f.get("filing_date") or ""
         write_shard(OUT / f"{cik}.json", rec)
+        if rec.get("status") == "reported_by_other":  # its full book of that period goes too: no holder, no exits
+            write_json(full_path(rec), {k: rec[k] for k in ("ok", "cik", "name", "status", "quarter", "accession",
+                                                            "notice") if k in rec} | {"source": "SEC EDGAR"})
         f["ok"] = bool(rec.get("ok"))
         f["position_count"] = rec.get("position_count")
         f["quarter"] = rec.get("quarter")
@@ -249,6 +280,8 @@ def main() -> int:
             checkpoint()
     checkpoint()
     print(f"bulk: fetched {done}; ok={catalog['holdings_ok']} fail={catalog['holdings_fail']}")
+    print(f"bulk: newest quarter unreadable for {len(unreadable)} filers, last book kept, retried next run: "
+          f"{unreadable[:20]}", flush=True)
     print(f"bulk: late filings backfilled: {backfill_late(order, time.monotonic())}", flush=True)
     return 0
 

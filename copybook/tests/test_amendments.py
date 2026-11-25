@@ -156,6 +156,61 @@ class UnitFieldsTest(unittest.TestCase):
         self.assertEqual((v1["value_as_filed"], v1["value_scale"], v1["value_adjusted"]), (2_000.0, 1.0, False))
 
 
+class NewestQuarterTest(unittest.TestCase):
+    """bulk.ingest_one picks a filer's shard: the newest period, never an older one in its place when it fails to read."""
+
+    def subs(self, *forms):
+        rows = [r for r in forms]
+        return {"cik": "1814465", "name": "FILER", "filings": {"recent": {
+            "form": [r[0] for r in rows], "accessionNumber": [r[1] for r in rows], "filingDate": [r[2] for r in rows],
+            "reportDate": [r[3] for r in rows], "primaryDocument": [""] * len(rows),
+            "acceptanceDateTime": [r[2] + "T20:00:00.000Z" for r in rows]}}}
+
+    def run_one(self, subs, load, types):
+        from ingest import bulk
+        with mock.patch.object(bulk, "fetch_submissions", return_value=subs), \
+                mock.patch.object(bulk, "load_period", side_effect=load), \
+                mock.patch.object(bulk, "amend_type", side_effect=lambda cik, m: types.get(m.accession, "")):
+            return bulk.ingest_one("0001814465")
+
+    def test_a_newest_quarter_that_fails_to_read_keeps_the_last_book(self):
+        # Findell 2026Q3: its RESTATEMENT 0000921895-26-003243, read moments after acceptance on Nov 23, failed to load;
+        # the shard fell back to the 2026Q2 book and was marked indexed, so hl/ lost its Q3 rows.
+        from ingest import bulk
+        subs = self.subs(("13F-HR/A", "0000921895-26-003243", "2026-11-23", "2026-09-30"),
+                         ("13F-HR", "0000921895-26-003181", "2026-11-16", "2026-09-30"),
+                         ("13F-HR", "0000921895-26-002185", "2026-08-14", "2026-06-30"))
+
+        def load(cik, group, cache):
+            if group[0].report_date == "2026-09-30":
+                raise FileNotFoundError("No 13F information table in 0001814465 0000921895-26-003243")
+            return {"quarter": "2026Q2", "accession": "0000921895-26-002185", "holdings": []}
+        with self.assertRaises(bulk.NewestUnreadable):
+            self.run_one(subs, load, {"0000921895-26-003243": "RESTATEMENT"})
+
+    def test_a_placeholder_restatement_beside_a_notice_is_reported_by_another_manager(self):
+        # AEW 2026Q3: 13F-HR (78 lines), 13F-NT on Nov 9, then a RESTATEMENT to one 000000000 $0 line on Nov 23.
+        subs = self.subs(("13F-HR/A", "0001104659-26-130039", "2026-11-19", "2026-09-30"),
+                         ("13F-NT", "0001104659-26-123435", "2026-11-05", "2026-09-30"),
+                         ("13F-HR", "0001104659-26-123428", "2026-11-05", "2026-09-30"),
+                         ("13F-HR", "0001047469-06-006815", "2006-05-15", "2006-03-31"))
+        loads = []
+
+        def load(cik, group, cache):
+            loads.append(group[0].report_date)
+            return None  # the restated table lists no holdings
+        rec = self.run_one(subs, load, {"0001104659-26-130039": "RESTATEMENT"})
+        self.assertEqual((rec["ok"], rec["status"], rec["quarter"], rec["accession"], rec["notice"]),
+                         (False, "reported_by_other", "2026Q3", "0001104659-26-130039", "0001104659-26-123435"))
+        self.assertEqual(loads, ["2026-09-30"])  # never the 2006 book in its place
+        # Without the notice it is an empty latest table, as before: the older book stands, flagged.
+        subs = self.subs(*[r for r in zip(*[subs["filings"]["recent"][k] for k in ("form", "accessionNumber",
+                                                                                   "filingDate", "reportDate")])
+                           if r[0] != "13F-NT"])
+        self.assertNotEqual(self.run_one(subs, load, {"0001104659-26-130039": "RESTATEMENT"}).get("status"),
+                            "reported_by_other")
+
+
 class CacheUpgradeTest(unittest.TestCase):
     def test_curated_runs_refetch_old_format_quarters_within_their_budget(self):
         # Egerton 2026Q3 cached in format 4 (no value_as_filed): a curated run refetches it instead of reusing it.
