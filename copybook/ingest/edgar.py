@@ -273,12 +273,41 @@ def table_value_total(primary_xml: str | None) -> float | None:
         return None
 
 
+def document_types(cik: str, accession: str) -> dict[str, str]:
+    """{file name: document type} from the filing's index page ("INFORMATION TABLE", "13F-HR"); {} when the page
+    can't be read or gives no types."""
+    url = f"{ARCHIVE_BASE}/Archives/edgar/data/{int(cik)}/{accession.replace('-', '')}/{accession}-index.htm"
+    try:
+        page = get(url).decode("utf-8", errors="replace")
+    except Exception:  # noqa: BLE001 - the file-name rule stands in, as before
+        return {}
+    out = {}
+    for row in re.findall(r"<tr[^>]*>(.*?)</tr>", page, re.S | re.I):
+        cells = [re.sub(r"<[^>]+>", "", c).strip() for c in re.findall(r"<td[^>]*>(.*?)</td>", row, re.S | re.I)]
+        if len(cells) >= 4 and cells[2] and cells[3] and cells[3] != "&nbsp;":
+            out[cells[2]] = cells[3].upper()
+    return out
+
+
 def fetch_info_table(cik: str, accession: str) -> str:
     cik_stripped = str(int(cik))
     acc = accession.replace("-", "")
     index = fetch_index(cik, accession)
     items = index.get("directory", {}).get("item", [])
     names = [item["name"] for item in items if item.get("name")]
+    # The table is the document the filing calls INFORMATION TABLE, whatever its name (Knighthead 2026Q3:
+    # knighthead_index.xml, which the name rule below skipped for "index"). Names decide only without types.
+    types = document_types(cik, accession)
+    if types:
+        names = [n for n in names if n.lower().endswith(".xml") and types.get(n) == "INFORMATION TABLE"]
+        for name in names:
+            try:
+                text = get(f"{ARCHIVE_BASE}/Archives/edgar/data/{cik_stripped}/{acc}/{name}").decode("utf-8", errors="replace")
+            except HTTPError:
+                continue
+            if "infoTable" in text or "informationTable" in text:
+                return text
+        raise FileNotFoundError(f"No 13F information table in {cik} {accession}")
 
     preferred = []
     fallback = []
