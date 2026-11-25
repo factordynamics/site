@@ -402,7 +402,7 @@ def reseed_diff(q: str, books: dict[str, dict]) -> dict:
         else:
             same += 1
     changed.sort(key=lambda c: -c["dollars"])
-    return {"quarter": q, "added": len(added), "unchanged": same, "changed": changed}
+    return {"quarter": q, "added": len(added), "added_ciks": added, "unchanged": same, "changed": changed}
 
 
 def reseed(q: str) -> int:
@@ -421,6 +421,7 @@ def reseed(q: str) -> int:
     head = (f"datasets: re-seed {q} from {len(urls)} data sets: {d['added']} books added, {d['unchanged']} unchanged, "
             f"{len(d['changed'])} existing books would change")
     print(head + "".join("\n" + x for x in lines[:20]), flush=True)
+    print(f"datasets: re-seed {q} added books: {' '.join(d['added_ciks'])}", flush=True)  # each late filer, by CIK
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
             f.write(f"### Re-seed {q}\n\n{head}\n\n" + "".join(x + "\n" for x in lines[:200]) + "\n")
