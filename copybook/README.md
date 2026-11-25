@@ -37,6 +37,21 @@ Env: `COPYBOOK_WEB_DIR` (public tree, data in `$COPYBOOK_WEB_DIR/data`),
 
 SEC User-Agent: `Copybook factordynamics.com copybook@factordynamics.com`, under 10 req/s.
 
+## Landing changes
+
+The scheduled runs pick up `main` of this repository at the start of each run, so a merge to `main` is a
+deploy of the data.
+
+- One data change per full run. A change that alters what the runs write (ingest logic, a cache path or
+  key, a shard's fields, a forced refetch) merges alone, and the next change waits until a full run with it
+  is green.
+- Code that switches itself on once its gate passes (hq/ builds and uploads once its parity gate passes) is
+  landed the moment it merges to `main`. Merge it only in its landing slot, never ahead of it to wait. On
+  Nov 25, hq/ 2026Q1, merged the night before and held by its gate, landed in the next fix run as soon as
+  that run made the gate pass.
+- Measure a change before it merges with the read-only dry run (`refcell/gust` →
+  `copybook-hq-dryrun.yml`, `site_ref` = the branch). It uploads nothing.
+
 ## Public data (`data/`)
 
 - `index.json`: curated funds that filed. `managers[]` has `slug, cik, name, manager, featured, quarter,
