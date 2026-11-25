@@ -278,6 +278,24 @@ export async function filerBook(env: Env, cik: string, quarter: string): Promise
   return { quarter, report_date: b.report_date, accession: b.accession, holdings: b.holdings, truncated: b.holdings.length >= 500, form: '13F-HR' };
 }
 
+/**
+ * Why a filer has no book for a quarter it filed: ingest's ok: false fb/ book (reported_by_other, confidential_treatment,
+ * no_holdings, ...), with the accession and any notice. Null when there's no such marker (no filing on record).
+ */
+export async function noBook(env: Env, cik: string, quarter: string): Promise<{ reason: string; accession: string | null; notice: string | null } | null> {
+  const obj = await env.HIST.get(`fb/${quarter}/${cik}.json`);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fb: any = obj ? await new Response(obj.body).json().catch(() => null) : null;
+  return fb?.ok === false ? { reason: String(fb.status ?? 'no_holdings'), accession: fb.accession ?? null, notice: fb.notice ?? null } : null;
+}
+/** The 404 for a quarter without a book: says why when the filer filed one we can't show. */
+async function noBookError(env: Env, f: Filer, quarter: string, message: string): Promise<Response> {
+  const nb = await noBook(env, f.row.cik, quarter);
+  if (!nb) return v1error('not_found', 404, message);
+  const why = nb.reason === 'reported_by_other' ? 'its holdings are reported in another manager\'s 13F' : nb.reason === 'confidential_treatment' ? 'it withholds its holdings table under confidential treatment' : nb.reason === 'no_holdings' ? 'it filed an empty holdings table' : `ingest marks it ${nb.reason}`;
+  return v1json({ error: { code: 'not_found', message: `${f.row.slug} filed for ${quarter}, but there is no book to show: ${why}.`, reason: nb.reason, quarter, accession: nb.accession, notice: nb.notice } }, 404);
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function amendmentsOf(env: Env, cik: string, list: any[]) {
   const out = [];
@@ -1224,7 +1242,7 @@ ROUTES.push(
     if (!f) return v1error('not_found', 404, 'No such filer (use a slug from /v1/filers or a CIK).');
     const quarter = qp === 'latest' ? latestOf(f) : qp;
     const book = quarter ? await bookFor(env, f, quarter) : null;
-    if (!book) return v1error('not_found', 404, `No ${qp} 13F for ${f.row.slug}; latest is ${latestOf(f) ?? 'none'}.`);
+    if (!book) return quarter ? noBookError(env, f, quarter, `No ${qp} 13F for ${f.row.slug}; latest is ${latestOf(f) ?? 'none'}.`) : v1error('not_found', 404, `No ${qp} 13F for ${f.row.slug}; latest is ${latestOf(f) ?? 'none'}.`);
     const version = url.searchParams.get('version');
     if (version && version !== 'original' && !/^\d{10}-\d{2}-\d{6}$/.test(version)) return v1error('bad_request', 400, 'version is original or an accession like 0001104659-26-097200.');
     return version ? versionBook(env, book, version, quarter!) : served(env, [{ store: 'filer_view', stamp: STAMP.get(book), quarter }], { ...(STAMP.get(book) ?? {}), data: book });
@@ -1240,23 +1258,24 @@ ROUTES.push(
     const last = quarters[quarters.length - 1];
     const data = [];
     const missing = [];
+    const no_book: Record<string, { reason: string; accession: string | null; notice: string | null }> = {};
     const reads: Read[] = [];
     for (const q of quarters) {
-      if (f.curated && !f.row.history_quarters.includes(q) && q !== f.row.latest_quarter) {
-        missing.push(q);
-        continue;
-      }
-      const b = await bookFor(env, f, q);
+      const b = f.curated && !f.row.history_quarters.includes(q) && q !== f.row.latest_quarter ? null : await bookFor(env, f, q);
       if (b) {
         data.push(b);
         reads.push({ store: 'filer_view', stamp: STAMP.get(b), quarter: q });
       }
-      else missing.push(q);
+      else {
+        missing.push(q);
+        const nb = await noBook(env, f.row.cik, q);
+        if (nb) no_book[q] = nb;
+      }
     }
     // At most 8 quarters per call; `next_from` continues the range.
     // Books read from different builds: the response names the oldest (each changes when its source is re-uploaded).
     const stamps = data.map((b) => STAMP.get(b)).filter((x): x is Stamp => !!x).sort((a, b) => (a.data_built_at ?? '').localeCompare(b.data_built_at ?? ''));
-    return served(env, reads, { ...(stamps[0] ?? {}), data, missing, next_from: last < to ? nextQuarter(last) : null });
+    return served(env, reads, { ...(stamps[0] ?? {}), data, missing, no_book, next_from: last < to ? nextQuarter(last) : null });
   }],
   ['GET', /^\/v1\/stocks\/([^/]+)\/holders$/, async ({ env, req, url }, [id]) => {
     const p = url.searchParams;
@@ -1502,7 +1521,7 @@ ROUTES.push(
       const f = await resolveAny(env, filer);
       if (!f) return v1error('not_found', 404, 'No such filer (use a slug from /v1/filers or a CIK).');
       const book = await bookFor(env, f, quarter);
-      if (!book) return v1error('not_found', 404, `No ${quarter} 13F for ${f.row.slug}.`);
+      if (!book) return quarter ? noBookError(env, f, quarter, `No ${quarter} 13F for ${f.row.slug}.`) : v1error('not_found', 404, `No ${quarter} 13F for ${f.row.slug}.`);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const fl = book.filer as any;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

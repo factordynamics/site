@@ -451,7 +451,7 @@ export function openapi() {
             '200': {
               headers: HOLDINGS_HEADERS,
               description: 'One Holdings object per quarter on file, oldest first; quarters without a book are in `missing`. When the range is longer than 8 quarters, `next_from` continues it.',
-              content: json(envelope({ type: 'array', items: { $ref: '#/components/schemas/Holdings' } }, { missing: { type: 'array', items: { type: 'string' } }, next_from: { type: ['string', 'null'] } }), { ...BUILD, data: [], missing: ['2025Q4'], next_from: null }),
+              content: json(envelope({ type: 'array', items: { $ref: '#/components/schemas/Holdings' } }, { missing: { type: 'array', items: { type: 'string' } }, no_book: { type: 'object', description: 'Quarters in `missing` the filer filed for but with no book to show: {reason, accession, notice} per quarter.', additionalProperties: { type: 'object' } }, next_from: { type: ['string', 'null'] } }), { ...BUILD, data: [], missing: ['2025Q4'], next_from: null }),
             },
             '400': { description: 'bad_request', content: json({ $ref: '#/components/schemas/Error' }, { ...BUILD, error: { code: 'bad_request', message: 'from and to must be quarters like 2025Q1, from <= to.' } }) },
             ...errResponses,

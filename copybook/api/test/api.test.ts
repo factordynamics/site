@@ -6473,6 +6473,14 @@ describe('copybook api', () => {
     const entry = await (await handleRequest(new Request('https://api.test/v1/changelog?id=2026-11-09-weight-equity-only'), env)).json();
     expect(entry.data.map((c: { id: string }) => c.id)).toEqual(['2026-11-09-weight-equity-only']);
     for (const k of spec.components.schemas.Error.required) expect((await v1('/v1/filers/warren-buffett/holdings/2025Q9')).body).toHaveProperty(k);
+    // A quarter filed with nothing to show (ingest's ok: false book) says why; one with no filing on record doesn't.
+    hist.m.set('fb/2025Q4/0001067983.json', new TextEncoder().encode(JSON.stringify({ ok: false, status: 'confidential_treatment', quarter: '2025Q4', accession: '0000950123-26-001234' })));
+    const ct = await v1('/v1/filers/warren-buffett/holdings/2025Q4');
+    expect([ct.status, ct.body.error.code, ct.body.error.reason, ct.body.error.accession, ct.body.error.notice, ct.body.error.message]).toEqual([404, 'not_found', 'confidential_treatment', '0000950123-26-001234', null, 'warren-buffett filed for 2025Q4, but there is no book to show: it withholds its holdings table under confidential treatment.']);
+    expect((await v1('/v1/filers/warren-buffett/holdings/2025Q3')).body.error).toEqual({ code: 'not_found', message: expect.stringMatching(/^No 2025Q3 13F/) });
+    const range = (await v1('/v1/filers/warren-buffett/holdings?from=2025Q3&to=2025Q4')).body;
+    expect([range.missing, range.no_book]).toEqual([['2025Q3', '2025Q4'], { '2025Q4': { reason: 'confidential_treatment', accession: '0000950123-26-001234', notice: null } }]);
+    hist.m.delete('fb/2025Q4/0001067983.json');
     expect((await handleRequest(new Request('https://api.test/v1/changelog'), env)).status).toBe(200); // no key needed
     expect((await handleRequest(new Request('https://api.test/v1/filers', { headers: { authorization: `Bearer ${key}`, 'copybook-schema-version': '1999-01-01' } }), env)).status).toBe(400);
     for (const k of spec.components.schemas.Holdings.required) expect(d).toHaveProperty(k);

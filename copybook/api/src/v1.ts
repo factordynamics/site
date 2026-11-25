@@ -40,6 +40,16 @@ export function perClassNotice(pinned: boolean, base: string, now = Date.now()):
 /** Changes to /v1, newest first. Served at /v1/changelog and summarised in the spec. */
 export const CHANGELOG: { id: string; date: string; shipped_at?: string; schema_version: string; breaking: boolean; status: 'shipped' | 'announced'; changes: string[] }[] = [
   {
+    id: '2026-11-25-no-book-reason',
+    date: '2026-11-25',
+    schema_version: SCHEMA_VERSION,
+    breaking: false,
+    status: 'shipped',
+    changes: [
+      'A filer that filed for a quarter but has no book to show (its holdings reported in another manager\'s 13F, a table withheld under confidential treatment, an empty holdings table) still answers 404 `not_found` on /v1/filers/{filer}/holdings/{quarter} and /v1/stocks/{stock}/holders?filer=, now with `error.reason` (`reported_by_other`, `confidential_treatment`, `no_holdings`, ...), `error.quarter`, `error.accession` and `error.notice` (the 13F-NT, when there is one). A 404 without `reason` still means no filing on record. Range reads (/v1/filers/{filer}/holdings?from=&to=) list such quarters in `missing` as before and add `no_book: {quarter: {reason, accession, notice}}`.',
+    ],
+  },
+  {
     id: '2026-11-11-parquet-bulk',
     date: '2026-11-11',
     schema_version: SCHEMA_VERSION,
