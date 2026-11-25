@@ -39,7 +39,42 @@ class Reseed(unittest.TestCase):
                                              "0000000003": book("c-1", 650, 6, filing_date="2026-02-14")})
         self.assertEqual(d["unchanged"], 1)
         self.assertEqual(d["changed"], [{"cik": "0000000002", "name": "B", "accession": ["b-1", "b-1"],
-                                         "total_value": [500, 540], "positions": [5, 6], "dollars": 40}])
+                                         "total_value": [500, 540], "positions": [5, 6], "dollars": 40, "what": ""}])
+
+    def test_a_held_reseed_writes_nothing_and_names_the_changed_lines(self):
+        # B's book in the data set has one more line (CUSIP 037833100, $40): the run fails before any write.
+        cols = list(datasets.BOOK_COLUMNS)
+        row = lambda cusip, sh, v: [{"cusip": cusip, "shares": sh, "value": v}.get(c) for c in cols]
+        path = datasets.FB / "2025Q4" / "0000000002.json"
+        path.write_text(json.dumps(book("b-1", 500, 1) | {"columns": cols, "rows": [row("594918104", 10, 500)]}))
+        before = path.read_text()
+        late = book("b-1", 540, 2, name="B") | {"columns": cols, "rows": [row("594918104", 10, 500),
+                                                                           row("037833100", 2, 40)]}
+        from unittest import mock
+        with mock.patch.object(datasets, "sets_for", return_value=["set", "late"]), \
+                mock.patch.object(datasets, "fetch_set", return_value=None), \
+                mock.patch.object(datasets, "read_period", return_value={"0000000002": late,
+                                                                          "0000000009": book("i-1", 9, 1)}), \
+                mock.patch.object(datasets, "windows", return_value=[]):
+            self.assertEqual(datasets.reseed("2025Q4"), 1)
+        self.assertEqual(path.read_text(), before)
+        self.assertFalse((datasets.FB / "2025Q4" / "0000000009.json").exists())
+        self.assertFalse((datasets.FB / "2025Q4" / ".complete").exists())
+        self.assertEqual(datasets.lines_changed(json.loads(before), late), "037833100 added")
+
+    def test_a_filer_reported_by_another_manager_keeps_its_book(self):
+        # AEW 2026Q3: its fb/ book says another manager reports its holdings; the data set still has the 78 lines.
+        aew = {"ok": False, "cik": "0001042008", "status": "reported_by_other", "quarter": "2025Q4",
+               "accession": "0001104659-26-130039", "source": "SEC EDGAR"}
+        path = datasets.FB / "2025Q4" / "0001042008.json"
+        path.write_text(json.dumps(aew))
+        original = book("0001104659-26-123428", 1_559_274_998, 78) | {"rows": [], "columns": []}
+        d = datasets.reseed_diff("2025Q4", {"0001042008": original})
+        self.assertEqual((d["added"], d["unchanged"], d["changed"]), (0, 1, []))
+        from unittest import mock
+        with mock.patch.object(datasets, "attach_tickers"):
+            datasets.write_period("2025Q4", {"0001042008": original})
+        self.assertEqual(json.loads(path.read_text()), aew)
 
 
 if __name__ == "__main__":

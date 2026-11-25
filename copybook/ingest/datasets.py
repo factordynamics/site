@@ -309,6 +309,8 @@ def write_period(q: str, books: dict[str, dict]) -> None:
         if path.exists():
             try:  # a live EDGAR book for a newer filing of the same period wins
                 old = json.loads(path.read_text())
+                if old.get("status") == "reported_by_other":  # restated to a placeholder beside a 13F-NT (AEW 2026Q3)
+                    continue
                 if old.get("source") != b["source"] and old.get("filing_date", "") >= b["filing_date"]:
                     continue
             except ValueError:
@@ -343,6 +345,32 @@ def seed(periods: list[str]) -> int:
     return done
 
 
+def lines_changed(old: dict, new: dict) -> str:
+    """Which lines differ, as the refetch gate names them: 'CUSIP put_call fields' for the largest by value, then +n."""
+    def lines(b):
+        cols = b.get("columns") or []
+        if not all(c in cols for c in ("cusip", "put_call", "shares", "value")):
+            return {}
+        i = [cols.index(c) for c in ("cusip", "put_call", "shares", "value")]
+        out: dict = {}
+        for r in b.get("rows") or []:
+            k = (r[i[0]], r[i[1]] or "")
+            sh, v = out.get(k, (0, 0))
+            out[k] = (sh + (r[i[2]] or 0), v + round(r[i[3]] or 0))
+        return out
+    a, b = lines(old), lines(new)
+    diff = []
+    for k in set(a) | set(b):
+        x, y = a.get(k), b.get(k)
+        if x == y:
+            continue
+        what = "added" if x is None else "removed" if y is None else \
+            ",".join(f for f, p, q in (("shares", x[0], y[0]), ("value", x[1], y[1])) if p != q)
+        diff.append((abs((y or (0, 0))[1] - (x or (0, 0))[1]), f"{k[0]}{' ' + k[1] if k[1] else ''} {what}"))
+    diff.sort(key=lambda d: -d[0])
+    return "; ".join(w for _, w in diff[:3]) + (f"; +{len(diff) - 3} more" if len(diff) > 3 else "")
+
+
 def reseed_diff(q: str, books: dict[str, dict]) -> dict:
     """What re-reading q from SEC's data sets would change in fb/{q}: books a late filer adds, and existing books whose
     filing, total value or position count would change (a live EDGAR book write_period keeps is never changed)."""
@@ -356,6 +384,9 @@ def reseed_diff(q: str, books: dict[str, dict]) -> dict:
             old = json.loads(path.read_text()) if path.exists() else None
         except ValueError:
             old = None
+        if old and old.get("status") == "reported_by_other":
+            same += 1  # write_period keeps it: another manager reports this filer's holdings
+            continue
         if not old or not old.get("ok"):
             added.append(cik)
             continue
@@ -367,7 +398,7 @@ def reseed_diff(q: str, books: dict[str, dict]) -> dict:
         if before != after:
             changed.append({"cik": cik, "name": b["name"], "accession": [before[0], after[0]],
                             "total_value": [before[1], after[1]], "positions": [before[2], after[2]],
-                            "dollars": abs(after[1] - before[1])})
+                            "dollars": abs(after[1] - before[1]), "what": lines_changed(old, b)})
         else:
             same += 1
     changed.sort(key=lambda c: -c["dollars"])
@@ -384,9 +415,9 @@ def reseed(q: str) -> int:
         return 1
     books = read_period(q, [fetch_set(u) for u in urls])
     d = reseed_diff(q, books)
-    lines = [f"- {c['name']} {c['cik']}: accession {c['accession'][0]} -> {c['accession'][1]}, total "
+    lines = [f"- {c['name']} {c['cik']}: ${c['dollars']:,}: accession {c['accession'][0]} -> {c['accession'][1]}, total "
              f"${c['total_value'][0]:,} -> ${c['total_value'][1]:,}, positions {c['positions'][0]} -> {c['positions'][1]}"
-             for c in d["changed"]]
+             + (f"; {c['what']}" if c.get("what") else "") for c in d["changed"]]
     head = (f"datasets: re-seed {q} from {len(urls)} data sets: {d['added']} books added, {d['unchanged']} unchanged, "
             f"{len(d['changed'])} existing books would change")
     print(head + "".join("\n" + x for x in lines[:20]), flush=True)
