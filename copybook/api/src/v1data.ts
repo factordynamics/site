@@ -262,7 +262,11 @@ export async function filerBook(env: Env, cik: string, quarter: string): Promise
   if (isCloudflare(env) && !failoverQuarters(Date.now()).includes(quarter)) throw new NotOnThisHost(`fb/${quarter}`);
   const full = await env.HIST.get(`fb/${quarter}/${cik}.json`);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if (full) return { ...((await new Response(full.body).json()) as any), truncated: false, __stamp: stampOf(full) };
+  const fb = full ? ((await new Response(full.body).json()) as any) : null;
+  // A quarter ingest marks as no book (ok: false: reported by another filer, a notice): none, never an empty one, and
+  // never an older shard or follow-time snapshot in its place.
+  if (fb?.ok === false) return null;
+  if (fb) return { ...fb, truncated: false, __stamp: stampOf(full!) };
   const res = await fetch(`${env.DATA_URL}f/${cik}.json`, { cf: { cacheTtl: 900 } } as RequestInit);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const shard = res.ok ? ((await res.json()) as any) : null;

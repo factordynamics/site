@@ -6514,6 +6514,10 @@ describe('copybook api', () => {
       await expect(filerBook(cf, '0001', '2026Q1')).rejects.toBeInstanceOf(NotOnThisHost);
       await expect(filerBook(cf, '0001', '2026Q2')).rejects.toBeInstanceOf(NotOnThisHost);
       expect((await filerBook(gene, '0001', '2026Q1')).quarter).toBe('2026Q1');
+      // A quarter ingest marks as no book (AEW's 13F-NT, Nov 25) is none, not an empty book or an older snapshot.
+      objs.set('fb/2026Q3/0002.json', '{"ok":false,"status":"reported_by_other","quarter":"2026Q3","accession":"0001104659-26-130039","notice":"0001104659-26-123435"}');
+      objs.set('b/0002/2026-09-30.json', '{"report_date":"2026-09-30","accession":"x","holdings":[{"cusip":"037833100","value":1}]}');
+      expect(await filerBook(gene, '0002', '2026Q3')).toBeNull();
     } finally {
       vi.useRealTimers();
     }
