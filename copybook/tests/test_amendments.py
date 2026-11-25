@@ -203,6 +203,9 @@ class NewestQuarterTest(unittest.TestCase):
         self.assertEqual((rec["ok"], rec["status"], rec["quarter"], rec["accession"], rec["notice"]),
                          (False, "reported_by_other", "2026Q3", "0001104659-26-130039", "0001104659-26-123435"))
         self.assertEqual(loads, ["2026-09-30"])  # never the 2006 book in its place
+        from ingest.bulk import slim
+        self.assertEqual({k: slim(rec).get(k) for k in ("ok", "status", "notice")},  # the public f/ shard says why
+                         {"ok": False, "status": "reported_by_other", "notice": "0001104659-26-123435"})
         # Without the notice it is an empty latest table, as before: the older book stands, flagged.
         subs = self.subs(*[r for r in zip(*[subs["filings"]["recent"][k] for k in ("form", "accessionNumber",
                                                                                    "filingDate", "reportDate")])
