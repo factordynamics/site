@@ -49,6 +49,10 @@ deploy of the data.
   landed the moment it merges to `main`. Merge it only in its landing slot, never ahead of it to wait. On
   Nov 25, hq/ 2026Q1, merged the night before and held by its gate, landed in the next fix run as soon as
   that run made the gate pass.
+- A run's cache must match what it published; save only after the data commit is pushed. In
+  `refcell/gust` → `copybook-data.yml` the h/ and fb/ cache saves run after "Commit and deploy" and only
+  when it set `PUSHED=1` after a successful `git push`, so a held, cancelled or superseded run, or one whose
+  push was rejected, saves nothing; a run that fails after its push keeps its caches.
 - Measure a change before it merges with the read-only dry run (`refcell/gust` →
   `copybook-hq-dryrun.yml`, `site_ref` = the branch). It uploads nothing.
 
