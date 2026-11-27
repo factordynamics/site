@@ -36,6 +36,7 @@ from ingest.parse import (
     AggregatedHolding,
     aggregate_holdings,
     looks_like_thousands,
+    priced_as_dollars,
     parse_info_table,
     scale_if_thousands,
     debt_cusip,
@@ -463,9 +464,10 @@ def fix_with_consensus(managers: list[dict]) -> int:
         if changed or q.pop("_rejudged", None):
             q["holdings"].sort(key=lambda h: h["value"], reverse=True)
             apply_weights(q)
-    for m in managers:
-        m["holdings"] = m["history"][0]["holdings"]
-        m["total_value"] = m["history"][0]["total_value"]
+    for m in managers:  # the page's totals follow its latest quarter's, not the book as loaded (Matrix 2026Q1's
+        latest = m["history"][0]  # equity_value stayed $46.3B after its one line was rescaled to $46.3M)
+        m["holdings"] = latest["holdings"]
+        m |= {k: latest[k] for k in ("total_value", "equity_value", "options_notional", "prn_value") if k in latest}
     return n
 
 
@@ -1488,9 +1490,10 @@ def load_filing(cik: str, meta) -> dict | None:
     as_filed = {id(h): h.value for h in holdings}  # the value column as filed, before any unit fix
     cover_total = table_value_total(fetch_primary_doc(cik, meta.accession))
     raw_total = sum(h.value for h in holdings)
-    thousands = looks_like_thousands(raw_total, cover_total)
-    scale_if_thousands(holdings, thousands)
     share_rows = lambda h: not h.put_call and h.shares_type != "PRN"
+    thousands = looks_like_thousands(raw_total, cover_total) and not priced_as_dollars(
+        [(h.cusip, h.value, h.shares) for h in holdings if share_rows(h)], meta.filing_date)
+    scale_if_thousands(holdings, thousands)
     factor = unit_fix([(h.value, h.shares) for h in holdings if share_rows(h)])
     for h in holdings:
         h.value *= factor

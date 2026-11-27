@@ -613,6 +613,21 @@ class MoveMathTest(unittest.TestCase):
         r = build.with_changes(m["history"][0] | {"holdings": [h]}, {"quarter": "2026Q2", "holdings": []})[0]
         self.assertEqual((r["change"], r["unreliable"], r["value_delta"], r["value_delta_basis"]), ("new", "both", 0, None))
 
+    def test_page_totals_follow_the_consensus_rescale(self):
+        # Matrix Capital 2026Q1 read as $46.3B (one line, AURA x1000): the consensus step rescales the line back to
+        # $46,314,000; the page's equity_value must follow, not keep the book as loaded.
+        q = build.apply_weights({"quarter": "2026Q1", "unit_fix": 1.0, "cover_total": 46_314_000_000, "holdings": [
+            self.row("05153U107", "AURA", 6922870, 46_314_000_000) | {"value_as_filed": 46_314_000}]})
+        m = {"slug": "matrix", **{k: v for k, v in q.items() if k != "holdings"}, "holdings": q["holdings"],
+             "history": [{k: v for k, v in q.items() if k != "holdings"} | {"holdings": q["holdings"]}]}
+        peers = [{"slug": f"p{i}", "history": [{"quarter": "2026Q1", "total_value": 669, "holdings": [
+            self.row("05153U107", "AURA", 100, 669)]}]} for i in range(3)]
+        build.fix_with_consensus([m] + peers)
+        self.assertEqual((m["holdings"][0]["value"], m["total_value"], m["equity_value"]),
+                         (46_314_000, 46_314_000, 46_314_000))
+        page = build.manager_json(m)
+        self.assertEqual((page["total_value"], page["equity_value"]), (46_314_000, 46_314_000))
+
     def test_filer_shard_follows_the_same_unit_rule(self):
         import tempfile
         from pathlib import Path

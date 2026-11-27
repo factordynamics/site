@@ -169,6 +169,20 @@ def looks_like_thousands(total_value: float, table_value_total: float | None) ->
     return 0 < total_value < 50_000_000
 
 
+DOLLARS_FROM = "2023-01-03"  # 13F values are whole dollars in filings from this date (before it, $000s)
+
+
+def priced_as_dollars(lines: list[tuple[str, float, float]], filing_date: str) -> bool:
+    """A filing from DOLLARS_FROM on that looks_like_thousands reads as thousands is in dollars when its share lines
+    (cusip, value, shares), x1000, would price above $2,500 a share at the median. unit_fix makes the same call from
+    5 priced lines; this one needs 1, so a small book that matches its cover isn't x1000 (Matrix Capital 2026Q1, one
+    line: Aura 6,922,870 sh, $46,314,000 = cover, read $46.3B at $6,690 a share)."""
+    if filing_date < DOLLARS_FROM:
+        return False
+    prices = sorted(v * 1000 / s for c, v, s in lines if v > 0 and s > 0 and c not in ABOVE_20K)
+    return bool(prices) and prices[len(prices) // 2] > 2_500
+
+
 def unit_fix(pairs: list[tuple[float, float]]) -> float:
     """Factor that puts values in dollars, judged by median implied price per share.
 

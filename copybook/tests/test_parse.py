@@ -148,3 +148,39 @@ class DebtCusipTest(unittest.TestCase):
         self.assertTrue(debt_cusip("09857LAW8") and not_common("Common", "09857LAV0"))
         self.assertFalse(debt_cusip("09857L108") or not_common("Common", "09857L108"))
         self.assertFalse(debt_cusip("G6476A102"))  # a foreign issuer's numeric issue number is a share class
+
+
+class SmallDollarBooksTest(unittest.TestCase):
+    """Three small 13F-HRs filed in dollars, each one share line equal to its cover total. The size rule read them as
+    thousands (lines = cover, under $50M), so a refetch made them x1000 (format-6 refetch held, Nov 20)."""
+
+    def test_load_filing_reads_them_in_dollars(self):
+        import json
+        from unittest import mock
+        from ingest import build
+        from ingest.edgar import FilingMeta
+
+        fixtures = json.loads((Path(__file__).parent / "fixtures_x1000_2026.json").read_text())["filings"]
+        want = {"0001172661-26-001967": ("05153U107", 46_314_000), "0001172661-26-005407": ("G5279N105", 14_231_055),
+                "0000919574-26-008127": ("26142V105", 276_887)}
+        for f in fixtures:
+            meta = FilingMeta(cik=f["cik"], accession=f["accession"], form="13F-HR", filing_date=f["filing_date"],
+                              report_date=f["report_date"], primary_document="")
+            with mock.patch.object(build, "fetch_info_table", return_value=f["info_table"]), \
+                    mock.patch.object(build, "fetch_primary_doc", return_value=f["primary_doc"]):
+                q = build.load_filing(f["cik"], meta)
+            cusip, dollars = want[f["accession"]]
+            line = next(h for h in q["holdings"] if h["cusip"] == cusip)
+            self.assertEqual((f["name"], q["total_value"], line["value"], line["value_as_filed"], q["cover_total"],
+                              q["values_in_thousands"]), (f["name"], dollars, dollars, dollars, dollars, False))
+
+    def test_thousands_still_read_where_prices_say_so(self):
+        from ingest.parse import priced_as_dollars
+
+        aura = [("05153U107", 46_314_000, 6_922_870)]  # $6.69 a share as filed, $6,690 x1000
+        self.assertTrue(priced_as_dollars(aura, "2026-05-14"))
+        self.assertFalse(priced_as_dollars(aura, "2022-11-14"))  # before 2023 values were $000s: x1000 stands
+        # A 2023+ filer still in $000s (cover in $000s too): 10,000 sh at $150 filed as 1,500.
+        self.assertFalse(priced_as_dollars([("594918104", 1_500, 10_000)], "2026-11-14"))
+        self.assertFalse(priced_as_dollars([("084670108", 7_350, 10)], "2026-11-14"))  # BRK.A is not a price signal
+        self.assertFalse(priced_as_dollars([], "2026-11-14"))  # no priced share line: the size rule stands

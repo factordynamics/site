@@ -33,7 +33,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from ingest.edgar import ARCHIVE_BASE, get
-from ingest.parse import ABOVE_20K, unit_fix
+from ingest.parse import ABOVE_20K, DOLLARS_FROM, unit_fix
 from ingest.managers import clean_name
 
 WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
@@ -46,7 +46,6 @@ COLUMNS = ("ticker", "issuer", "title", "cusip", "put_call", "shares", "value", 
 FORMAT = "4"  # 2: shares_type (SH, or PRN where shares is a principal amount); 3: re-filed books not double-counted;
 # 4: per-row source_accession and unit fields (value_as_filed, value_scale, value_adjusted)
 BOOK_COLUMNS = COLUMNS + ("source_accession", "value_as_filed", "value_scale", "value_adjusted")
-DOLLARS_FROM = "2023-01-03"  # VALUE is in $000s for filings before this date (data set readme)
 MONTHS = {m: i + 1 for i, m in enumerate("JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC".split())}
 csv.field_size_limit(10_000_000)
 
