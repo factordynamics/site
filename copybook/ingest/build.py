@@ -69,6 +69,9 @@ CLOSED = {
 _AMEND: dict[str, str] | None = None
 LITE_HOLDERS = 8
 CACHE_FORMAT = 5  # bump when stored quarters lack fields the build now needs (forces a refetch)
+# Read-only dry runs only (refcell/gust copybook-hq-dryrun.yml): build as if the format were bumped, to see the refetch's
+# refetch_diff before it lands. The data workflow never sets it; the bump itself is the refetch and lands on its own.
+CACHE_FORMAT = int(os.environ.get("COPYBOOK_DRYRUN_CACHE_FORMAT") or CACHE_FORMAT)
 # Curated refreshes must stay quick, so they keep quarters back to format 3; full runs refetch older ones.
 MIN_CACHE_FORMAT = CACHE_FORMAT if os.environ.get("SCOPE") == "full" else 3
 # Curated runs also refetch up to this many quarters stored in an older format, the last few report periods
