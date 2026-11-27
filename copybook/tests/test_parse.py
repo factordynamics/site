@@ -184,3 +184,16 @@ class SmallDollarBooksTest(unittest.TestCase):
         self.assertFalse(priced_as_dollars([("594918104", 1_500, 10_000)], "2026-11-14"))
         self.assertFalse(priced_as_dollars([("084670108", 7_350, 10)], "2026-11-14"))  # BRK.A is not a price signal
         self.assertFalse(priced_as_dollars([], "2026-11-14"))  # no priced share line: the size rule stands
+
+
+class DryRunFormatTest(unittest.TestCase):
+    def test_cache_format_is_5_unless_a_dry_run_sets_it(self):
+        import os
+        import subprocess
+        code = "from ingest import build; print(build.CACHE_FORMAT)"
+        env = {k: v for k, v in os.environ.items() if k != "COPYBOOK_DRYRUN_CACHE_FORMAT"}
+        run = lambda e: subprocess.run([sys.executable, "-c", code], cwd=ROOT, env=e, capture_output=True, text=True,
+                                       check=True).stdout.strip()
+        self.assertEqual(run(env), "5")  # the data workflow never sets it: the refetch is a format bump of its own
+        self.assertEqual(run(env | {"COPYBOOK_DRYRUN_CACHE_FORMAT": ""}), "5")
+        self.assertEqual(run(env | {"COPYBOOK_DRYRUN_CACHE_FORMAT": "6"}), "6")  # read-only refetch dry run only
