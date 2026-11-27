@@ -613,6 +613,38 @@ class MoveMathTest(unittest.TestCase):
         r = build.with_changes(m["history"][0] | {"holdings": [h]}, {"quarter": "2026Q2", "holdings": []})[0]
         self.assertEqual((r["change"], r["unreliable"], r["value_delta"], r["value_delta_basis"]), ("new", "both", 0, None))
 
+    def test_options_priced_the_same_fresh_or_cached(self):
+        # A refetched book carries no suspect_units yet; its options must not be benchmarked on a line a cached book
+        # has flagged, nor on a debt issue filed as SH.
+        build.CONSENSUS.update({("2026Q2", "22788C105"): 763.14, ("2026Q2", "Q4982L109"): 45.73,
+                                ("2026Q2", "86800U302"): 29.33, ("2026Q2", "86800U500"): 51.5381})
+        try:
+            def opt(cusip, issuer, shares, value, pc):
+                return self.row(cusip, None, shares, value) | {"issuer": issuer, "put_call": pc}
+
+            def put_of(holdings):
+                c = build.classify_options({"quarter": "2026Q2", "holdings": holdings})
+                h = next(x for x in c["holdings"] if x.get("put_call"))
+                return h.get("option_held"), h["option_ratio"], h["option_benchmark"]
+            # Allianz 2026Q2 (0001193125-26-379716): CRWD common 58,741 sh at $190.79 (post-split) beside puts 47,300
+            # at $763.14 (the June price): the puts price at every filer's common, not 4x the filing's own line.
+            self.assertEqual(put_of([self.row("22788C105", None, 58741, 11206902) | {"issuer": "CROWDSTRIKE HLDGS INC"},
+                                     opt("22788C105", "CROWDSTRIKE HLDGS INC", 47300, 36096522, "Put")]),
+                             (None, 1.0, "filers_common"))
+            # Tudor 2026Q2 (0000902664-26-003485): an IREN convertible (46270CAB5) filed as SH, 35,803,000 at $2.89,
+            # under the issuer name of its IREN options: never their common line.
+            self.assertEqual(put_of([self.row("46270CAB5", None, 35803000, 103492152) | {"issuer": "IREN Ltd - US"},
+                                     opt("Q4982L109", "IREN Ltd - US", 725100, 33158823, "Put")]),
+                             (None, 1.0, "filers_common"))
+            # Tudor 2026Q2 SMCI: the convertible 86800UAB0 and the convertible preferred 86800U500 share the name; with
+            # the debt line out of the price, the name is still two classes, so the preferred doesn't price the puts.
+            self.assertEqual(put_of([self.row("86800UAB0", None, 65000000, 59549750) | {"issuer": "Super Micro Computer Inc - US"},
+                                     self.row("86800U500", None, 1000000, 51185000) | {"issuer": "Super Micro Computer Inc - US"},
+                                     opt("86800U302", "Super Micro Computer Inc - US", 100000, 2933000, "Put")]),
+                             (None, 1.0, "filers_common"))
+        finally:
+            build.CONSENSUS.clear()
+
     def test_page_totals_follow_the_consensus_rescale(self):
         # Matrix Capital 2026Q1 read as $46.3B (one line, AURA x1000): the consensus step rescales the line back to
         # $46,314,000; the page's equity_value must follow, not keep the book as loaded.

@@ -912,18 +912,29 @@ def classify_options(q: dict | None) -> dict | None:
         return q
     quarter = q.get("quarter")
     groups: dict[tuple, dict] = {}  # ("c"|"t"|"i", key) -> {cusips, value, shares}: the filing's common lines
+    # A line that can't price an option, judged here rather than from suspect_units, which only a book read back from
+    # the cache carries (a refetched book must classify its options as the cached one did): a debt issue filed as SH
+    # (Tudor's convertibles, principal as shares at ~$1: 2026Q2 IREN 46270CAB5, AKAM 00971TAL5, PANW 23248VAD7), or a
+    # line over OFF_MEDIAN off every filer's price (Allianz 2026Q2 CRWD common at $190.79 post-split against $763.14).
+    # It still counts as one of the group's CUSIPs, so a name it shares with another class stays ambiguous (Tudor
+    # 2026Q2 SMCI: convertible 86800UAB0 and preferred 86800U500 under one name), but it never prices the group.
+    off_peers = lambda h, c: (lambda m: bool(m) and not 1 / OFF_MEDIAN <= h["value"] / h["shares"] / m <= OFF_MEDIAN)(
+        consensus().get((quarter or "", c)))
     for h in q["holdings"]:
         c = h.get("cusip") or ""
         if h.get("put_call") or h.get("shares_type") == "PRN" or option_code(c) or not (h.get("shares") or 0) > 0 \
                 or not (h.get("value") or 0) > 0 or h.get("suspect_units"):
             continue
+        unpriced = debt_cusip(c) or off_peers(h, c)
         for key in (("c", c), ("t", h.get("ticker")), ("i", (h.get("issuer") or "").upper().strip())):
             if key[1]:
                 g = groups.setdefault(key, {"cusips": set(), "value": 0.0, "shares": 0.0})
                 g["cusips"].add(c)
-                g["value"] += h["value"]
-                g["shares"] += h["shares"]
-    own = lambda key: (lambda g: g["value"] / g["shares"] if g and len(g["cusips"]) == 1 else None)(groups.get(key))
+                if not unpriced:
+                    g["value"] += h["value"]
+                    g["shares"] += h["shares"]
+    own = lambda key: (lambda g: g["value"] / g["shares"] if g and len(g["cusips"]) == 1 and g["shares"] else None)(
+        groups.get(key))
     lines = []
     for h in q["holdings"]:
         if not h.get("put_call") or h.get("shares_type") == "PRN":
